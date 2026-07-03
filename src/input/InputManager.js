@@ -8,8 +8,6 @@ export const InputManager = {
         document.addEventListener('keydown', (e) => {
             const key = e.key.toLowerCase();
             if (key === 'r' && GameState.gameOver) {
-                // 重新开始由 main 暴露一个 restart 函数，这里通过事件触发
-                // 我们将在 main 中监听 restart 事件
                 window.dispatchEvent(new CustomEvent('restartGame'));
                 e.preventDefault();
                 return;
@@ -32,10 +30,14 @@ export const InputManager = {
             }
         });
 
+        // 鼠标移动：将坐标映射到逻辑像素
         canvas.addEventListener('mousemove', (e) => {
             const rect = canvas.getBoundingClientRect();
-            const scaleX = canvas.width / rect.width;
-            const scaleY = canvas.height / rect.height;
+            // 使用 canvas 的 CSS 像素尺寸（逻辑像素）
+            const logicalWidth = canvas.clientWidth;
+            const logicalHeight = canvas.clientHeight;
+            const scaleX = logicalWidth / rect.width;
+            const scaleY = logicalHeight / rect.height;
             GameState.mouse.x = (e.clientX - rect.left) * scaleX;
             GameState.mouse.y = (e.clientY - rect.top) * scaleY;
         });

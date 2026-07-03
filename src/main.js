@@ -48,19 +48,21 @@ const CONFIG = {
 
 // ---------- 游戏循环 ----------
 function gameLoop() {
-    // 更新摄像机（跟随玩家）
+    // 更新摄像机
     if (GameState.player && !GameState.gameOver) {
         const player = GameState.player;
         const world = GameState.config.world;
-        const canvas = document.getElementById('gameCanvas');
-        let targetX = player.x - canvas.width / 2;
-        let targetY = player.y - canvas.height / 2;
-        targetX = Math.max(0, Math.min(world.width - canvas.width, targetX));
-        targetY = Math.max(0, Math.min(world.height - canvas.height, targetY));
+        const canvasWidth = Renderer.width;
+        const canvasHeight = Renderer.height;
+        let targetX = player.x - canvasWidth / 2;
+        let targetY = player.y - canvasHeight / 2;
+        targetX = Math.max(0, Math.min(world.width - canvasWidth, targetX));
+        targetY = Math.max(0, Math.min(world.height - canvasHeight, targetY));
         GameState.camera.x = targetX;
         GameState.camera.y = targetY;
     }
 
+    // 更新逻辑
     if (!GameState.gameOver) {
         if (GameState.player) GameState.player.update();
         SpawnSystem.update();
@@ -69,6 +71,7 @@ function gameLoop() {
         CollisionSystem.checkAll();
         GameState.bullets = GameState.bullets.filter(b => b.alive);
     }
+
     Renderer.render();
     requestAnimationFrame(gameLoop);
 }
@@ -77,29 +80,35 @@ function gameLoop() {
 function resetGame() {
     GameState.reset();
     const config = GameState.config;
-    // 玩家出生在世界中心
     GameState.player = new Player(config.world.width / 2, config.world.height / 2, config.player);
-    // 初始敌人
     for (let i = 0; i < 3; i++) {
         GameState.enemies.push(SpawnSystem.spawnEnemy());
     }
     GameState.gameOver = false;
-    // 摄像机重置到玩家位置（在下一帧会跟随）
-    GameState.camera.x = config.world.width / 2 - 450; // 假设画布宽900的一半
-    GameState.camera.y = config.world.height / 2 - 300;
     UIManager.updateAll(GameState);
 }
 
 // ---------- 初始化 ----------
 function init() {
     GameState.config = CONFIG;
+
+    // 设置画布尺寸
+    Renderer.resize();
+
     InputManager.setup();
+
     resetGame();
 
     EventBus.on('player_kill', () => UIManager.updateAll(GameState));
     EventBus.on('player_rank_up', () => UIManager.updateAll(GameState));
     EventBus.on('game_over', () => UIManager.updateAll(GameState));
+
     window.addEventListener('restartGame', resetGame);
+
+    // 窗口尺寸变化时重新调整画布
+    window.addEventListener('resize', () => {
+        Renderer.resize();
+    });
 
     gameLoop();
 }
