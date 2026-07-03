@@ -137,7 +137,8 @@ export const CollisionSystem = {
                         if (!enemy.alive) {
                             // 立即移除
                             enemies.splice(j, 1);
-                            if (player && player.alive) {
+                            // 只有玩家子弹击杀才计分
+                            if (bullet.isPlayer && player && player.alive) {
                                 player.addKill();
                             }
                         }

@@ -97,7 +97,8 @@ export class Player extends Entity {
             Math.cos(angle) * speed,
             Math.sin(angle) * speed,
             false,
-            this.damage
+            this.damage,
+            true // isPlayer = true
         );
         GameState.bullets.push(bullet);
         this.shootCooldown = this.shootDelay;

@@ -3,7 +3,7 @@ import { Entity } from './Entity.js';
 import { GameState } from '../core/GameState.js';
 
 export class Bullet extends Entity {
-    constructor(x, y, vx, vy, isEnemy, damage) {
+    constructor(x, y, vx, vy, isEnemy, damage, isPlayer = false) {
         const config = GameState.config.bullet;
         super(x, y, {
             radius: config.radius,
@@ -13,6 +13,7 @@ export class Bullet extends Entity {
         this.vx = vx;
         this.vy = vy;
         this.isEnemy = isEnemy;
+        this.isPlayer = isPlayer; // 是否是玩家发射的
         this.damage = damage;
         this.life = config.life;
         this.alive = true;

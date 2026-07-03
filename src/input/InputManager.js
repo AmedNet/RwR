@@ -9,6 +9,11 @@ export const InputManager = {
             const key = e.key.toLowerCase();
             
             if (GameState.gameOver) {
+                // 死亡时关闭军械库界面
+                if (GameState.arsenalOpen) {
+                    GameState.arsenalOpen = false;
+                }
+
                 // 永久战败，不能复活
                 if (GameState.permanentDefeat) {
                     e.preventDefault();
@@ -30,6 +35,18 @@ export const InputManager = {
                     return;
                 }
                 return; // 死亡状态下不处理其他按键
+            }
+            
+            // E 键：打开/关闭军械库
+            if (key === 'e') {
+                const arsenal = GameState.arsenal;
+                const player = GameState.player;
+                if (arsenal && player && arsenal.contains(player)) {
+                    GameState.arsenalOpen = !GameState.arsenalOpen;
+                    console.log(GameState.arsenalOpen ? '🔫 打开军械库' : '🔫 关闭军械库');
+                }
+                e.preventDefault();
+                return;
             }
             
             if (key in GameState.keys) {

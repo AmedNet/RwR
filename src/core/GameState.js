@@ -5,6 +5,8 @@ export const GameState = {
     teammates: [],
     bullets: [],
     capturePoints: [],
+    arsenal: null, // 军械库实例
+    arsenalOpen: false, // 军械库界面是否打开
     map: null,
     keys: { w: false, a: false, s: false, d: false },
     mouse: { x: 0, y: 0 },

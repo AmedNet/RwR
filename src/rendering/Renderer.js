@@ -80,6 +80,11 @@ export const Renderer = {
             point.draw(this.ctx);
         }
 
+        // 绘制军械库
+        if (GameState.arsenal) {
+            GameState.arsenal.draw(this.ctx);
+        }
+
         // 绘制实体
         const { player, enemies, teammates, bullets } = GameState;
         for (const b of bullets) {
@@ -118,6 +123,79 @@ export const Renderer = {
         if (GameState.gameOver) {
             this.drawGameOver();
         }
+
+        // 绘制军械库购买界面
+        if (GameState.arsenalOpen) {
+            this.drawArsenalShop();
+        }
+    },
+
+    drawArsenalShop() {
+        const ctx = this.ctx;
+        ctx.save();
+
+        // 半透明背景
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+        ctx.fillRect(0, 0, this.width, this.height);
+
+        // 标题
+        ctx.fillStyle = '#FFD700';
+        ctx.font = 'bold 42px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('🔫 军械库', this.width / 2, 80);
+
+        // 商品列表（暂无商品）
+        const items = [];
+
+        const startY = 160;
+        const itemHeight = 90;
+
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            const y = startY + i * itemHeight;
+
+            // 商品背景
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+            ctx.fillRect(this.width / 2 - 200, y, 400, 70);
+            ctx.strokeStyle = '#FFD700';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(this.width / 2 - 200, y, 400, 70);
+
+            // 图标
+            ctx.font = '32px sans-serif';
+            ctx.fillText(item.icon, this.width / 2 - 160, y + 35);
+
+            // 名称
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 20px sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText(item.name, this.width / 2 - 110, y + 25);
+
+            // 描述
+            ctx.fillStyle = '#aaa';
+            ctx.font = '14px sans-serif';
+            ctx.fillText(item.desc, this.width / 2 - 110, y + 50);
+
+            // 价格
+            ctx.fillStyle = '#FFD700';
+            ctx.font = 'bold 18px sans-serif';
+            ctx.textAlign = 'right';
+            ctx.fillText(`$${item.price}`, this.width / 2 + 170, y + 25);
+
+            // 按键提示
+            ctx.fillStyle = '#4CAF50';
+            ctx.font = 'bold 16px sans-serif';
+            ctx.fillText(`[${item.key}]`, this.width / 2 + 170, y + 50);
+        }
+
+        // 底部提示
+        ctx.fillStyle = '#aaa';
+        ctx.font = '16px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('按数字键购买 | 按 E 关闭', this.width / 2, startY + items.length * itemHeight + 40);
+
+        ctx.restore();
     },
 
     drawGameOver() {

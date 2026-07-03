@@ -12,6 +12,7 @@ import { Map, Terrain } from './core/Map.js';
 import { CapturePoint } from './entities/CapturePoint.js';
 import { Minimap } from './rendering/Minimap.js';
 import { MapGenerator } from './utils/MapGenerator.js';
+import { Arsenal } from './entities/Arsenal.js';
 
 // ---------- 配置 ----------
 const CONFIG = {
@@ -162,6 +163,58 @@ function initCapturePoints() {
     }
     GameState.capturePoints = allPoints;
     console.log(`🚩 生成 ${allPoints.length} 个据点（玩家${playerPoints.length} / 敌人${enemyPoints.length}）`);
+    
+    // 生成军械库（在友方后方，即玩家据点的左侧）
+    initArsenal(playerPoints);
+}
+
+// ---------- 初始化军械库 ----------
+function initArsenal(playerPoints) {
+    const map = GameState.map;
+    const worldW = CONFIG.world.width;
+    const worldH = CONFIG.world.height;
+    
+    // 找到最左侧的玩家据点作为参考
+    let leftMostPoint = null;
+    let minX = Infinity;
+    
+    for (const p of playerPoints) {
+        if (p.x < minX) {
+            minX = p.x;
+            leftMostPoint = p;
+        }
+    }
+    
+    let arsenalX, arsenalY;
+    
+    if (leftMostPoint) {
+        // 在最左侧玩家据点的左后方生成
+        arsenalX = Math.max(150, leftMostPoint.x - 200);
+        arsenalY = leftMostPoint.y;
+    } else {
+        // 如果没有玩家据点，在地图左侧中间生成
+        arsenalX = 200;
+        arsenalY = worldH / 2;
+    }
+    
+    // 确保位置可通行
+    if (map && !map.isWalkable(arsenalX, arsenalY, 60)) {
+        // 尝试附近位置
+        for (let i = 0; i < 20; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 50 + Math.random() * 100;
+            const testX = arsenalX + Math.cos(angle) * dist;
+            const testY = arsenalY + Math.sin(angle) * dist;
+            if (map.isWalkable(testX, testY, 60)) {
+                arsenalX = testX;
+                arsenalY = testY;
+                break;
+            }
+        }
+    }
+    
+    GameState.arsenal = new Arsenal(arsenalX, arsenalY);
+    console.log(`🔫 军械库生成于 (${Math.round(arsenalX)}, ${Math.round(arsenalY)})`);
 }
 
 // ---------- 生成队友 ----------
