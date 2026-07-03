@@ -33,9 +33,10 @@ export class Enemy extends Entity {
             this.y += (dy / dist) * this.speed;
         }
 
-        const canvas = document.getElementById('gameCanvas');
-        this.x = Math.max(this.radius, Math.min(canvas.width - this.radius, this.x));
-        this.y = Math.max(this.radius, Math.min(canvas.height - this.radius, this.y));
+        // 世界边界限制
+        const world = GameState.config.world;
+        this.x = Math.max(this.radius, Math.min(world.width - this.radius, this.x));
+        this.y = Math.max(this.radius, Math.min(world.height - this.radius, this.y));
 
         if (this.shootCooldown > 0) {
             this.shootCooldown--;
@@ -58,7 +59,7 @@ export class Enemy extends Entity {
     draw(ctx) {
         ctx.save();
         ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
         ctx.fillStyle = this.color;
         ctx.fill();
         ctx.strokeStyle = '#4a0000';
@@ -67,15 +68,15 @@ export class Enemy extends Entity {
 
         const hpPercent = this.health / this.maxHealth;
         ctx.fillStyle = '#333';
-        ctx.fillRect(this.x - 20, this.y - 25, 40, 5);
+        ctx.fillRect(-20, -25, 40, 5);
         ctx.fillStyle = hpPercent > 0.6 ? '#4CAF50' : (hpPercent > 0.3 ? '#FFC107' : '#f44336');
-        ctx.fillRect(this.x - 20, this.y - 25, 40 * hpPercent, 5);
+        ctx.fillRect(-20, -25, 40 * hpPercent, 5);
 
         ctx.fillStyle = '#fff';
         ctx.font = '12px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('✧', this.x, this.y);
+        ctx.fillText('✧', 0, 0);
         ctx.restore();
     }
 }

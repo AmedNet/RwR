@@ -8,7 +8,7 @@ import { InputManager } from './input/InputManager.js';
 import { SpawnSystem } from './systems/SpawnSystem.js';
 import { CollisionSystem } from './systems/CollisionSystem.js';
 
-// ---------- 配置直接写在这里（无需外部 JSON） ----------
+// ---------- 配置 ----------
 const CONFIG = {
     player: {
         health: 100,
@@ -39,18 +39,34 @@ const CONFIG = {
         playerStroke: "#1B5E20",
         enemyHueMin: 340,
         enemyHueMax: 360
+    },
+    world: {
+        width: 2000,
+        height: 2000
     }
 };
 
 // ---------- 游戏循环 ----------
 function gameLoop() {
+    // 更新摄像机（跟随玩家）
+    if (GameState.player && !GameState.gameOver) {
+        const player = GameState.player;
+        const world = GameState.config.world;
+        const canvas = document.getElementById('gameCanvas');
+        let targetX = player.x - canvas.width / 2;
+        let targetY = player.y - canvas.height / 2;
+        targetX = Math.max(0, Math.min(world.width - canvas.width, targetX));
+        targetY = Math.max(0, Math.min(world.height - canvas.height, targetY));
+        GameState.camera.x = targetX;
+        GameState.camera.y = targetY;
+    }
+
     if (!GameState.gameOver) {
         if (GameState.player) GameState.player.update();
         SpawnSystem.update();
         for (const enemy of GameState.enemies) enemy.update();
         for (const bullet of GameState.bullets) bullet.update();
         CollisionSystem.checkAll();
-        // 清理死亡子弹
         GameState.bullets = GameState.bullets.filter(b => b.alive);
     }
     Renderer.render();
@@ -60,37 +76,31 @@ function gameLoop() {
 // ---------- 重置游戏 ----------
 function resetGame() {
     GameState.reset();
-    // 重新创建玩家（使用配置）
     const config = GameState.config;
-    GameState.player = new Player(450, 300, config.player);
-    // 初始生成几个敌人
+    // 玩家出生在世界中心
+    GameState.player = new Player(config.world.width / 2, config.world.height / 2, config.player);
+    // 初始敌人
     for (let i = 0; i < 3; i++) {
         GameState.enemies.push(SpawnSystem.spawnEnemy());
     }
     GameState.gameOver = false;
+    // 摄像机重置到玩家位置（在下一帧会跟随）
+    GameState.camera.x = config.world.width / 2 - 450; // 假设画布宽900的一半
+    GameState.camera.y = config.world.height / 2 - 300;
     UIManager.updateAll(GameState);
 }
 
-// ---------- 初始化（同步执行） ----------
+// ---------- 初始化 ----------
 function init() {
-    // 直接使用内嵌配置
     GameState.config = CONFIG;
-
-    // 设置输入
     InputManager.setup();
-
-    // 重置游戏（创建玩家等）
     resetGame();
 
-    // 监听事件更新UI
     EventBus.on('player_kill', () => UIManager.updateAll(GameState));
     EventBus.on('player_rank_up', () => UIManager.updateAll(GameState));
     EventBus.on('game_over', () => UIManager.updateAll(GameState));
-
-    // 监听重启事件（自定义事件）
     window.addEventListener('restartGame', resetGame);
 
-    // 启动循环
     gameLoop();
 }
 

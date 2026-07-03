@@ -38,7 +38,6 @@ export class Player extends Entity {
         if (GameState.kills % GameState.config.rankUpKills === 0) {
             this.addRank();
         }
-        // UI更新由事件驱动
     }
 
     update() {
@@ -58,19 +57,21 @@ export class Player extends Entity {
             this.y += dy;
         }
 
-        const canvas = document.getElementById('gameCanvas');
-        this.x = Math.max(this.radius, Math.min(canvas.width - this.radius, this.x));
-        this.y = Math.max(this.radius, Math.min(canvas.height - this.radius, this.y));
+        // 世界边界限制
+        const world = GameState.config.world;
+        this.x = Math.max(this.radius, Math.min(world.width - this.radius, this.x));
+        this.y = Math.max(this.radius, Math.min(world.height - this.radius, this.y));
 
         if (this.shootCooldown > 0) this.shootCooldown--;
     }
 
     shoot() {
-        if (GameState.gameOver) return;
-        if (this.shootCooldown > 0) return;
-
+        if (GameState.gameOver || this.shootCooldown > 0) return;
         const mouse = GameState.mouse;
-        const angle = Math.atan2(mouse.y - this.y, mouse.x - this.x);
+        // 计算玩家屏幕坐标
+        const screenX = this.x - GameState.camera.x;
+        const screenY = this.y - GameState.camera.y;
+        const angle = Math.atan2(mouse.y - screenY, mouse.x - screenX);
         const speed = this.bulletSpeed;
         const bullet = new Bullet(
             this.x + Math.cos(angle) * this.radius,
@@ -85,28 +86,34 @@ export class Player extends Entity {
     }
 
     draw(ctx) {
+        // ctx 已平移至 (this.x, this.y) 的屏幕位置，所有绘制相对 (0,0)
         ctx.save();
+        // 身体
         ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
         ctx.fillStyle = GameState.config.colors.player;
         ctx.fill();
         ctx.strokeStyle = GameState.config.colors.playerStroke;
         ctx.lineWidth = 3;
         ctx.stroke();
 
-        const angle = Math.atan2(GameState.mouse.y - this.y, GameState.mouse.x - this.x);
+        // 枪管方向：使用屏幕坐标计算角度
+        const screenX = this.x - GameState.camera.x;
+        const screenY = this.y - GameState.camera.y;
+        const angle = Math.atan2(GameState.mouse.y - screenY, GameState.mouse.x - screenX);
         ctx.beginPath();
-        ctx.moveTo(this.x, this.y);
-        ctx.lineTo(this.x + Math.cos(angle) * 30, this.y + Math.sin(angle) * 30);
+        ctx.moveTo(0, 0);
+        ctx.lineTo(Math.cos(angle) * 30, Math.sin(angle) * 30);
         ctx.strokeStyle = '#333';
         ctx.lineWidth = 6;
         ctx.stroke();
 
+        // 军衔星
         ctx.fillStyle = '#FFD700';
         ctx.font = '16px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('★'.repeat(Math.min(this.rank + 1, 4)), this.x, this.y - 28);
+        ctx.fillText('★'.repeat(Math.min(this.rank + 1, 4)), 0, -28);
         ctx.restore();
     }
 }

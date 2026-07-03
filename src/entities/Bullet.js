@@ -22,9 +22,9 @@ export class Bullet extends Entity {
         this.x += this.vx;
         this.y += this.vy;
         this.life--;
-        const canvas = document.getElementById('gameCanvas');
-        if (this.life <= 0 || this.x < -20 || this.x > canvas.width + 20 ||
-            this.y < -20 || this.y > canvas.height + 20) {
+        const world = GameState.config.world;
+        if (this.life <= 0 || this.x < -20 || this.x > world.width + 20 ||
+            this.y < -20 || this.y > world.height + 20) {
             this.alive = false;
         }
     }
@@ -32,7 +32,7 @@ export class Bullet extends Entity {
     draw(ctx) {
         ctx.save();
         ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
         ctx.fillStyle = this.isEnemy ? '#ff5252' : '#FFD740';
         ctx.shadowColor = this.isEnemy ? '#ff1744' : '#ffab00';
         ctx.shadowBlur = 15;

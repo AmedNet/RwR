@@ -10,6 +10,7 @@ export const GameState = {
     spawnTimer: 0,
     // 配置引用（在main中注入）
     config: null,
+    camera: { x: 0, y: 0 },   // 摄像机位置（世界坐标）
 
     reset() {
         this.enemies = [];

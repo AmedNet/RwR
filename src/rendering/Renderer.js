@@ -5,33 +5,73 @@ export const Renderer = {
     canvas: document.getElementById('gameCanvas'),
     ctx: document.getElementById('gameCanvas').getContext('2d'),
 
+    get camera() {
+        return GameState.camera;
+    },
+
+    toScreen(wx, wy) {
+        return {
+            x: wx - this.camera.x,
+            y: wy - this.camera.y
+        };
+    },
+
     clear() {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     },
 
     drawGrid() {
         const ctx = this.ctx;
+        const world = GameState.config.world;
+        const step = 50;
+        // 只绘制视口范围内的网格
+        const startX = Math.floor(this.camera.x / step) * step;
+        const startY = Math.floor(this.camera.y / step) * step;
+        const endX = this.camera.x + this.canvas.width;
+        const endY = this.camera.y + this.canvas.height;
+
         ctx.strokeStyle = 'rgba(255,255,255,0.05)';
         ctx.lineWidth = 1;
-        for (let i = 0; i < this.canvas.width; i += 50) {
+        for (let x = startX; x <= endX; x += step) {
+            const screenX = x - this.camera.x;
             ctx.beginPath();
-            ctx.moveTo(i, 0);
-            ctx.lineTo(i, this.canvas.height);
+            ctx.moveTo(screenX, 0);
+            ctx.lineTo(screenX, this.canvas.height);
             ctx.stroke();
         }
-        for (let i = 0; i < this.canvas.height; i += 50) {
+        for (let y = startY; y <= endY; y += step) {
+            const screenY = y - this.camera.y;
             ctx.beginPath();
-            ctx.moveTo(0, i);
-            ctx.lineTo(this.canvas.width, i);
+            ctx.moveTo(0, screenY);
+            ctx.lineTo(this.canvas.width, screenY);
             ctx.stroke();
         }
     },
 
     drawEntities() {
+        const ctx = this.ctx;
         const { player, enemies, bullets } = GameState;
-        for (const b of bullets) b.draw(this.ctx);
-        for (const e of enemies) e.draw(this.ctx);
-        if (player) player.draw(this.ctx);
+        for (const b of bullets) {
+            const pos = this.toScreen(b.x, b.y);
+            ctx.save();
+            ctx.translate(pos.x, pos.y);
+            b.draw(ctx);
+            ctx.restore();
+        }
+        for (const e of enemies) {
+            const pos = this.toScreen(e.x, e.y);
+            ctx.save();
+            ctx.translate(pos.x, pos.y);
+            e.draw(ctx);
+            ctx.restore();
+        }
+        if (player) {
+            const pos = this.toScreen(player.x, player.y);
+            ctx.save();
+            ctx.translate(pos.x, pos.y);
+            player.draw(ctx);
+            ctx.restore();
+        }
     },
 
     drawGameOver() {
