@@ -13,6 +13,7 @@ import { CapturePoint } from './entities/CapturePoint.js';
 import { Minimap } from './rendering/Minimap.js';
 import { MapGenerator } from './utils/MapGenerator.js';
 import { Arsenal } from './entities/Arsenal.js';
+import { EffectsManager } from './utils/EffectsManager.js';
 
 // ---------- 配置 ----------
 const CONFIG = {
@@ -304,6 +305,9 @@ function resetGame() {
 
 // ---------- 游戏循环 ----------
 function gameLoop() {
+    // 更新特效（粒子、伤害数字等）
+    EffectsManager.update();
+
     // 更新摄像机
     if (GameState.player && !GameState.gameOver) {
         const player = GameState.player;

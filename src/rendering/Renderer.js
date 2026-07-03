@@ -1,5 +1,6 @@
 // src/rendering/Renderer.js
 import { GameState } from '../core/GameState.js';
+import { EffectsManager } from '../utils/EffectsManager.js';
 
 export const Renderer = {
     canvas: null,
@@ -62,22 +63,25 @@ export const Renderer = {
         }
         this.clear();
 
-        // 检查是否打开了菜单（背包/军械库）
-        const menuOpen = GameState.inventoryOpen || GameState.arsenalOpen;
-        
         // 控制HUD显示
+        const menuOpen = GameState.inventoryOpen || GameState.arsenalOpen;
         const hud = document.getElementById('hud');
         if (hud) {
             hud.style.display = menuOpen ? 'none' : 'flex';
         }
 
-        // 如果菜单打开，跳过游戏世界渲染
-        if (menuOpen) {
-            // 只绘制半透明背景
+        // Game Over 优先级最高
+        if (GameState.gameOver) {
             this.ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
             this.ctx.fillRect(0, 0, this.width, this.height);
-            
-            // 绘制对应的菜单
+            this.drawGameOver();
+            return;
+        }
+
+        // 如果菜单打开，跳过游戏世界渲染
+        if (menuOpen) {
+            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+            this.ctx.fillRect(0, 0, this.width, this.height);
             if (GameState.arsenalOpen) {
                 this.drawArsenalShop();
             } else if (GameState.inventoryOpen) {
@@ -151,20 +155,8 @@ for (const b of bullets) {
             this.ctx.restore();
         }
 
-        // Game Over
-        if (GameState.gameOver) {
-            this.drawGameOver();
-        }
-
-        // 绘制军械库购买界面
-        if (GameState.arsenalOpen) {
-            this.drawArsenalShop();
-        }
-
-        // 绘制背包界面
-        if (GameState.inventoryOpen) {
-            this.drawInventory();
-        }
+        // 绘制特效（粒子、伤害数字）
+        EffectsManager.draw(this.ctx, GameState.camera);
     },
 
     drawInventory() {
@@ -356,7 +348,7 @@ for (const b of bullets) {
         ctx.font = 'bold 56px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('💀 阵亡', this.width/2, this.height/2 - 120);
+        ctx.fillText('阵亡', this.width/2, this.height/2 - 120);
         ctx.fillStyle = '#fff';
         ctx.font = '24px sans-serif';
         const rank = GameState.player ? GameState.player.getRankName() : '列兵';

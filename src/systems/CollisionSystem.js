@@ -2,6 +2,7 @@
 import { GameState } from '../core/GameState.js';
 import { EventBus } from '../core/EventBus.js';
 import { Terrain } from '../core/Map.js';
+import { EffectsManager, ParticleType } from '../utils/EffectsManager.js';
 
 export const CollisionSystem = {
     // 圆与矩形碰撞解决（用于地图房屋）
@@ -96,6 +97,10 @@ export const CollisionSystem = {
                 if (dx*dx + dy*dy < (bullet.radius + player.radius) ** 2) {
                     player.takeDamage(bullet.damage);
                     bulletUsed = true;
+                    // 特效：玩家受伤
+                    EffectsManager.spawnParticles(bullet.x, bullet.y, ParticleType.HIT, 6);
+                    EffectsManager.addDamageNumber(bullet.x, bullet.y, bullet.damage, true);
+                    EffectsManager.triggerShake(6, 8);
                     // 触发玩家受伤事件
                     EventBus.emit('player_hurt', { health: player.health });
                     if (!player.alive) {
@@ -134,9 +139,13 @@ export const CollisionSystem = {
                     if (dx*dx + dy*dy < (bullet.radius + enemy.radius) ** 2) {
                         enemy.takeDamage(bullet.damage);
                         bulletUsed = true;
+                        // 特效：子弹击中敌人
+                        EffectsManager.spawnParticles(bullet.x, bullet.y, ParticleType.SPARK, 6);
+                        EffectsManager.addDamageNumber(enemy.x, enemy.y, bullet.damage, false);
                         if (!enemy.alive) {
-                            // 立即移除
-                            enemies.splice(j, 1);
+                            // 特效：敌人死亡爆炸
+                            EffectsManager.spawnParticles(enemy.x, enemy.y, ParticleType.EXPLOSION, 15);
+                            EffectsManager.triggerShake(5, 6);
                             // 只有玩家子弹击杀才计分
                             if (bullet.isPlayer && player && player.alive) {
                                 player.addKill();
@@ -144,6 +153,8 @@ export const CollisionSystem = {
                                 GameState.rp += 10;
                                 console.log(`💰 击杀敌人！+10 RP (当前: ${GameState.rp})`);
                             }
+                            // 立即移除（最后移除，确保特效用到了 enemy 坐标）
+                            enemies.splice(j, 1);
                         }
                         break;
                     }

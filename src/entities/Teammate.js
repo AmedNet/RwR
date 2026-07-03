@@ -2,7 +2,7 @@
 import { Entity } from './Entity.js';
 import { GameState } from '../core/GameState.js';
 import { Bullet } from './Bullet.js';
-import { PathFinder } from '../utils/PathFinder.js';
+import { MovementSystem } from '../utils/MovementSystem.js';
 
 export class Teammate extends Entity {
     constructor(x, y, config) {
@@ -28,11 +28,13 @@ export class Teammate extends Entity {
         // 游走目标（进攻组/游走组用）
         this.wanderTarget = null;
         this.wanderTimer = 0;
-        // 寻路缓存
-        this.currentPath = null;
-        this.pathIndex = 0;
-        this.pathTarget = null;
-        this.pathCheckTimer = 0; // 降低寻路频率
+        // 卡住状态
+        this.stuckState = {
+            timer: 0,
+            lastX: x,
+            lastY: y,
+            fallbackPoints: null
+        };
     }
 
     assignHomeBase() {
@@ -91,19 +93,24 @@ export class Teammate extends Entity {
         const { target: enemy, distance: enemyDist } = this.getClosestEnemy();
         const { target: captureTarget, distance: captureDist } = this.getClosestEnemyPoint();
 
-        let moveX = 0, moveY = 0;
         let targetX = null, targetY = null;
+        let hasEnemyTarget = false;
 
         const hasNearbyEnemy = enemy && enemyDist < 400;
 
         if (hasNearbyEnemy) {
             // 附近有敌人 -> 战斗
+            // 不直接冲向敌人，而是保持距离环绕
+            hasEnemyTarget = true;
             const angleToEnemy = Math.atan2(enemy.y - this.y, enemy.x - this.x);
-            moveX = -Math.sin(angleToEnemy) * 0.6;
-            moveY = Math.cos(angleToEnemy) * 0.6;
+            // 在敌人周围保持 150-200 距离游走
+            const orbitAngle = angleToEnemy + (Math.sin(this.patrolTimer * 0.02) > 0 ? Math.PI / 2 : -Math.PI / 2);
+            targetX = enemy.x + Math.cos(orbitAngle) * 180;
+            targetY = enemy.y + Math.sin(orbitAngle) * 180;
         } else if (this.role === 0) {
             // 防守组：在己方据点周围巡逻
             if (this.homeBase) {
+                this.stuckState.fallbackPoints = [this.homeBase];
                 const dx = this.homeBase.x - this.x;
                 const dy = this.homeBase.y - this.y;
                 const dist = Math.hypot(dx, dy);
@@ -130,7 +137,6 @@ export class Teammate extends Entity {
                 targetX = captureTarget.x;
                 targetY = captureTarget.y;
             } else {
-                // 所有据点已占领，游走
                 this.wanderTimer++;
                 if (this.wanderTimer > 300 || !this.wanderTarget) {
                     this.wanderTarget = this.pickWanderTarget();
@@ -143,7 +149,6 @@ export class Teammate extends Entity {
             // 游走组：自由探索地图
             this.wanderTimer++;
             if (this.wanderTimer > 200 || !this.wanderTarget) {
-                // 有敌方据点就去，否则随机游走
                 if (captureTarget && Math.random() < 0.4) {
                     this.wanderTarget = { x: captureTarget.x, y: captureTarget.y };
                 } else {
@@ -155,112 +160,15 @@ export class Teammate extends Entity {
             targetY = this.wanderTarget.y;
         }
 
-        // 使用 A* 寻路移动
+        // 移动
         if (targetX !== null && targetY !== null) {
-            const dx = targetX - this.x;
-            const dy = targetY - this.y;
-            const dist = Math.hypot(dx, dy);
-            
-            // 短距离直接移动，不寻路
-            if (dist < 200) {
-                this.currentPath = null; // 清除路径
-                const normX = dx / dist;
-                const normY = dy / dist;
-                const speedFactor = GameState.map ? GameState.map.getSpeedFactor(this.x, this.y) : 1;
-                const finalSpeed = this.speed * speedFactor;
-                let newX = this.x + normX * finalSpeed;
-                let newY = this.y + normY * finalSpeed;
-                if (GameState.map && !GameState.map.isWalkable(newX, newY, this.radius)) {
-                    if (GameState.map.isWalkable(newX, this.y, this.radius)) {
-                        this.x = newX;
-                    } else if (GameState.map.isWalkable(this.x, newY, this.radius)) {
-                        this.y = newY;
-                    }
-                } else {
-                    this.x = newX;
-                    this.y = newY;
-                }
-            } else {
-                // 降低寻路频率：每 30 帧检查一次
-                this.pathCheckTimer++;
-                const needNewPath = !this.currentPath || 
-                    !this.pathTarget || 
-                    Math.hypot(this.pathTarget.x - targetX, this.pathTarget.y - targetY) > 100 ||
-                    this.pathIndex >= this.currentPath.length;
-
-                if (needNewPath && this.pathCheckTimer >= 30 && GameState.map) {
-                    // 计算新路径
-                    this.currentPath = PathFinder.findPath(GameState.map, this.x, this.y, targetX, targetY);
-                    this.pathIndex = 0;
-                    this.pathTarget = { x: targetX, y: targetY };
-                    this.pathCheckTimer = 0;
-                }
-
-                // 沿路径移动
-                if (this.currentPath && this.pathIndex < this.currentPath.length) {
-                    const waypoint = this.currentPath[this.pathIndex];
-                    const wdx = waypoint.x - this.x;
-                    const wdy = waypoint.y - this.y;
-                    const wdist = Math.hypot(wdx, wdy);
-                    
-                    if (wdist < 10) {
-                        // 到达当前路径点，前往下一个
-                        this.pathIndex++;
-                    } else if (wdist > 2) {
-                        // 向路径点移动
-                        const normX = wdx / wdist;
-                        const normY = wdy / wdist;
-                        const speedFactor = GameState.map ? GameState.map.getSpeedFactor(this.x, this.y) : 1;
-                        const finalSpeed = this.speed * speedFactor;
-                        let newX = this.x + normX * finalSpeed;
-                        let newY = this.y + normY * finalSpeed;
-                        
-                        // 地图碰撞检测
-                        if (GameState.map && !GameState.map.isWalkable(newX, newY, this.radius)) {
-                            if (GameState.map.isWalkable(newX, this.y, this.radius)) {
-                                this.x = newX;
-                            } else if (GameState.map.isWalkable(this.x, newY, this.radius)) {
-                                this.y = newY;
-                            } else {
-                                // 无法移动，放弃当前路径
-                                this.currentPath = null;
-                            }
-                        } else {
-                            this.x = newX;
-                            this.y = newY;
-                        }
-                    }
-                } else if (dist > 10) {
-                    // 没有路径，直接朝目标移动（fallback）
-                    const normX = dx / dist;
-                    const normY = dy / dist;
-                    const speedFactor = GameState.map ? GameState.map.getSpeedFactor(this.x, this.y) : 1;
-                    const finalSpeed = this.speed * speedFactor;
-                    let newX = this.x + normX * finalSpeed;
-                    let newY = this.y + normY * finalSpeed;
-                    if (GameState.map && !GameState.map.isWalkable(newX, newY, this.radius)) {
-                        if (GameState.map.isWalkable(newX, this.y, this.radius)) {
-                            this.x = newX;
-                        } else if (GameState.map.isWalkable(this.x, newY, this.radius)) {
-                            this.y = newY;
-                        }
-                    } else {
-                        this.x = newX;
-                        this.y = newY;
-                    }
-                }
-            }
+            MovementSystem.moveToward(this, targetX, targetY, this.stuckState);
         }
-
-        // 世界边界
-        const world = GameState.config.world;
-        this.x = Math.max(this.radius, Math.min(world.width - this.radius, this.x));
-        this.y = Math.max(this.radius, Math.min(world.height - this.radius, this.y));
 
         // 射击
         if (this.shootCooldown > 0) {
             this.shootCooldown--;
-        } else if (enemy && enemyDist < 350) {
+        } else if (hasNearbyEnemy && enemy) {
             const angle = Math.atan2(enemy.y - this.y, enemy.x - this.x);
             const bullet = new Bullet(
                 this.x + Math.cos(angle) * this.radius,
