@@ -2,6 +2,7 @@
 import { Entity } from './Entity.js';
 import { GameState } from '../core/GameState.js';
 import { Bullet } from './Bullet.js';
+import { PathFinder } from '../utils/PathFinder.js';
 
 export class Enemy extends Entity {
     constructor(x, y, config) {
@@ -18,6 +19,15 @@ export class Enemy extends Entity {
         this.color = `hsl(${hue}, 70%, 50%)`;
         this.damage = config.damage;
         this.config = config;
+        // 寻路缓存
+        this.currentPath = null;
+        this.pathIndex = 0;
+        this.pathTarget = null; // {x, y} 当前路径的目标点
+        this.pathCheckTimer = 0; // 降低寻路频率
+        // 卡住检测
+        this.stuckTimer = 0;
+        this.lastX = x;
+        this.lastY = y;
     }
 
     getTargets() {
@@ -83,19 +93,21 @@ export class Enemy extends Entity {
             hasEnemyTarget = true;
         }
 
-        // 移动向目标
+        // 使用 A* 寻路移动
         if (targetX !== null && targetY !== null) {
             const dx = targetX - this.x;
             const dy = targetY - this.y;
             const dist = Math.hypot(dx, dy);
-            if (dist > 10) {
+            
+            // 短距离直接移动，不寻路
+            if (dist < 200) {
+                this.currentPath = null; // 清除路径
                 const normX = dx / dist;
                 const normY = dy / dist;
                 const speedFactor = GameState.map ? GameState.map.getSpeedFactor(this.x, this.y) : 1;
                 const finalSpeed = this.speed * speedFactor;
                 let newX = this.x + normX * finalSpeed;
                 let newY = this.y + normY * finalSpeed;
-                // 地图碰撞检测
                 if (GameState.map && !GameState.map.isWalkable(newX, newY, this.radius)) {
                     if (GameState.map.isWalkable(newX, this.y, this.radius)) {
                         this.x = newX;
@@ -106,6 +118,75 @@ export class Enemy extends Entity {
                     this.x = newX;
                     this.y = newY;
                 }
+            } else {
+                // 降低寻路频率：每 30 帧检查一次
+                this.pathCheckTimer++;
+                const needNewPath = !this.currentPath || 
+                    !this.pathTarget || 
+                    Math.hypot(this.pathTarget.x - targetX, this.pathTarget.y - targetY) > 100 ||
+                    this.pathIndex >= this.currentPath.length;
+
+                if (needNewPath && this.pathCheckTimer >= 30 && GameState.map) {
+                    // 计算新路径
+                    this.currentPath = PathFinder.findPath(GameState.map, this.x, this.y, targetX, targetY);
+                    this.pathIndex = 0;
+                    this.pathTarget = { x: targetX, y: targetY };
+                    this.pathCheckTimer = 0;
+                }
+
+                // 沿路径移动
+                if (this.currentPath && this.pathIndex < this.currentPath.length) {
+                    const waypoint = this.currentPath[this.pathIndex];
+                    const wdx = waypoint.x - this.x;
+                    const wdy = waypoint.y - this.y;
+                    const wdist = Math.hypot(wdx, wdy);
+                    
+                    if (wdist < 10) {
+                        // 到达当前路径点，前往下一个
+                        this.pathIndex++;
+                    } else if (wdist > 2) {
+                        // 向路径点移动
+                        const normX = wdx / wdist;
+                        const normY = wdy / wdist;
+                        const speedFactor = GameState.map ? GameState.map.getSpeedFactor(this.x, this.y) : 1;
+                        const finalSpeed = this.speed * speedFactor;
+                        let newX = this.x + normX * finalSpeed;
+                        let newY = this.y + normY * finalSpeed;
+                        
+                        // 地图碰撞检测
+                        if (GameState.map && !GameState.map.isWalkable(newX, newY, this.radius)) {
+                            if (GameState.map.isWalkable(newX, this.y, this.radius)) {
+                                this.x = newX;
+                            } else if (GameState.map.isWalkable(this.x, newY, this.radius)) {
+                                this.y = newY;
+                            } else {
+                                // 无法移动，放弃当前路径
+                                this.currentPath = null;
+                            }
+                        } else {
+                            this.x = newX;
+                            this.y = newY;
+                        }
+                    }
+                } else if (dist > 10) {
+                    // 没有路径，直接朝目标移动（fallback）
+                    const normX = dx / dist;
+                    const normY = dy / dist;
+                    const speedFactor = GameState.map ? GameState.map.getSpeedFactor(this.x, this.y) : 1;
+                    const finalSpeed = this.speed * speedFactor;
+                    let newX = this.x + normX * finalSpeed;
+                    let newY = this.y + normY * finalSpeed;
+                    if (GameState.map && !GameState.map.isWalkable(newX, newY, this.radius)) {
+                        if (GameState.map.isWalkable(newX, this.y, this.radius)) {
+                            this.x = newX;
+                        } else if (GameState.map.isWalkable(this.x, newY, this.radius)) {
+                            this.y = newY;
+                        }
+                    } else {
+                        this.x = newX;
+                        this.y = newY;
+                    }
+                }
             }
         }
 
@@ -113,6 +194,45 @@ export class Enemy extends Entity {
         const world = GameState.config.world;
         this.x = Math.max(this.radius, Math.min(world.width - this.radius, this.x));
         this.y = Math.max(this.radius, Math.min(world.height - this.radius, this.y));
+
+        // 卡住检测：如果连续3秒没移动，传送到最近的敌方据点
+        const moved = Math.abs(this.x - this.lastX) > 0.5 || Math.abs(this.y - this.lastY) > 0.5;
+        if (moved) {
+            this.stuckTimer = 0;
+            this.lastX = this.x;
+            this.lastY = this.y;
+        } else {
+            this.stuckTimer++;
+        }
+
+        if (this.stuckTimer > 180) { // 3秒（60fps * 3）
+            const enemyPoints = GameState.capturePoints.filter(p => p.owner === 'enemy');
+            if (enemyPoints.length > 0) {
+                // 找最近的敌方据点
+                let nearest = enemyPoints[0];
+                let minDist = Infinity;
+                for (const p of enemyPoints) {
+                    const d = Math.hypot(p.x - this.x, p.y - this.y);
+                    if (d < minDist) {
+                        minDist = d;
+                        nearest = p;
+                    }
+                }
+                // 传送到据点附近
+                const angle = Math.random() * Math.PI * 2;
+                const dist = 50 + Math.random() * 80;
+                this.x = nearest.x + Math.cos(angle) * dist;
+                this.y = nearest.y + Math.sin(angle) * dist;
+                this.stuckTimer = 0;
+                this.currentPath = null; // 清除路径
+            } else {
+                // 无敌方据点，传送到地图右侧中心
+                this.x = GameState.config.world.width * 0.75;
+                this.y = GameState.config.world.height / 2;
+                this.stuckTimer = 0;
+                this.currentPath = null;
+            }
+        }
 
         // 射击：只攻击敌人目标（不射击据点）
         if (this.shootCooldown > 0) {

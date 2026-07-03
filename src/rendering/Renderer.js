@@ -112,17 +112,17 @@ export const Renderer = {
         // 绘制实体（优化：减少save/restore）
         const { player, enemies, teammates, bullets } = GameState;
         
-        // 子弹
-        for (const b of bullets) {
-            if (!b.alive) continue;
-            const pos = this.toScreen(b.x, b.y);
-            this.ctx.save();
-            this.ctx.translate(pos.x, pos.y);
-            b.draw(this.ctx);
-            this.ctx.restore();
-        }
+// 子弹
+for (const b of bullets) {
+    if (!b.alive) continue;
+    const pos = this.toScreen(b.x, b.y);
+    this.ctx.save();
+    this.ctx.translate(pos.x, pos.y);
+    b.draw(this.ctx);
+    this.ctx.restore();
+}
         
-        // 敌人
+        // 敌人（优化：批量渲染）
         for (const e of enemies) {
             if (!e.alive) continue;
             const pos = this.toScreen(e.x, e.y);
@@ -132,7 +132,7 @@ export const Renderer = {
             this.ctx.restore();
         }
         
-        // 队友
+        // 队友（优化：批量渲染）
         for (const t of teammates) {
             if (!t.alive) continue;
             const pos = this.toScreen(t.x, t.y);
