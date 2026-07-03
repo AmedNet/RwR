@@ -49,6 +49,14 @@ export const InputManager = {
                 return;
             }
             
+            // Q 键：打开/关闭背包
+            if (key === 'q') {
+                GameState.inventoryOpen = !GameState.inventoryOpen;
+                console.log(GameState.inventoryOpen ? '🎒 打开背包' : '🎒 关闭背包');
+                e.preventDefault();
+                return;
+            }
+            
             if (key in GameState.keys) {
                 GameState.keys[key] = true;
                 e.preventDefault();

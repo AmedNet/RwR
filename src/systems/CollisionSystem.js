@@ -140,6 +140,9 @@ export const CollisionSystem = {
                             // 只有玩家子弹击杀才计分
                             if (bullet.isPlayer && player && player.alive) {
                                 player.addKill();
+                                // 增加RP（金钱）
+                                GameState.rp += 10;
+                                console.log(`💰 击杀敌人！+10 RP (当前: ${GameState.rp})`);
                             }
                         }
                         break;

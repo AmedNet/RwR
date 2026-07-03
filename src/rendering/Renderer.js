@@ -128,6 +128,104 @@ export const Renderer = {
         if (GameState.arsenalOpen) {
             this.drawArsenalShop();
         }
+
+        // 绘制背包界面
+        if (GameState.inventoryOpen) {
+            this.drawInventory();
+        }
+    },
+
+    drawInventory() {
+        const ctx = this.ctx;
+        ctx.save();
+
+        // 半透明背景
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+        ctx.fillRect(0, 0, this.width, this.height);
+
+        // 标题
+        ctx.fillStyle = '#4CAF50';
+        ctx.font = 'bold 42px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('🎒 背包', this.width / 2, 80);
+
+        // 玩家信息
+        const player = GameState.player;
+        if (player) {
+            ctx.fillStyle = '#fff';
+            ctx.font = '24px sans-serif';
+            ctx.fillText(`军衔: ${player.getRankName()}`, this.width / 2, 140);
+
+            // 血量条
+            const barWidth = 300;
+            const barHeight = 30;
+            const barX = this.width / 2 - barWidth / 2;
+            const barY = 170;
+
+            ctx.fillStyle = '#333';
+            ctx.fillRect(barX, barY, barWidth, barHeight);
+
+            const hpPercent = player.health / player.maxHealth;
+            ctx.fillStyle = hpPercent > 0.6 ? '#4CAF50' : (hpPercent > 0.3 ? '#FFC107' : '#f44336');
+            ctx.fillRect(barX, barY, barWidth * hpPercent, barHeight);
+
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(barX, barY, barWidth, barHeight);
+
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 18px sans-serif';
+            ctx.fillText(`${Math.floor(player.health)} / ${player.maxHealth}`, this.width / 2, barY + barHeight / 2);
+        }
+
+        // RP值
+        ctx.fillStyle = '#FFD700';
+        ctx.font = 'bold 28px sans-serif';
+        ctx.fillText(`💰 RP: ${GameState.rp}`, this.width / 2, 240);
+
+        // 背包格子
+        const slotSize = 80;
+        const slotGap = 20;
+        const slotsPerRow = 4;
+        const startX = this.width / 2 - (slotsPerRow * slotSize + (slotsPerRow - 1) * slotGap) / 2;
+        const startY = 300;
+
+        for (let i = 0; i < 4; i++) {
+            const row = Math.floor(i / slotsPerRow);
+            const col = i % slotsPerRow;
+            const x = startX + col * (slotSize + slotGap);
+            const y = startY + row * (slotSize + slotGap);
+
+            // 格子背景
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+            ctx.fillRect(x, y, slotSize, slotSize);
+            ctx.strokeStyle = '#666';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x, y, slotSize, slotSize);
+
+            // 物品
+            const item = GameState.inventory[i];
+            if (item) {
+                ctx.font = '36px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(item.icon || '📦', x + slotSize / 2, y + slotSize / 2);
+            } else {
+                // 空槽位编号
+                ctx.fillStyle = '#666';
+                ctx.font = '16px sans-serif';
+                ctx.fillText(`[${i + 1}]`, x + slotSize / 2, y + slotSize - 15);
+            }
+        }
+
+        // 底部提示
+        ctx.fillStyle = '#aaa';
+        ctx.font = '16px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('按 Q 关闭背包', this.width / 2, startY + 120);
+
+        ctx.restore();
     },
 
     drawArsenalShop() {

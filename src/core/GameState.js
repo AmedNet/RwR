@@ -7,6 +7,9 @@ export const GameState = {
     capturePoints: [],
     arsenal: null, // 军械库实例
     arsenalOpen: false, // 军械库界面是否打开
+    inventory: [null, null, null, null], // 背包，4个位置
+    inventoryOpen: false, // 背包是否打开
+    rp: 0, // RP值（金钱）
     map: null,
     keys: { w: false, a: false, s: false, d: false },
     mouse: { x: 0, y: 0 },
@@ -31,5 +34,8 @@ export const GameState = {
         this.score = 0;
         this.gameOver = false;
         this.spawnTimer = 0;
+        this.inventory = [null, null, null, null];
+        this.inventoryOpen = false;
+        this.rp = 0;
     }
 };
