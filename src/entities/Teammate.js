@@ -6,20 +6,35 @@ import { Bullet } from './Bullet.js';
 export class Teammate extends Entity {
     constructor(x, y, config) {
         super(x, y, {
-            health: config.health || 50,
-            speed: config.speed || 2.2,
+            health: config.health || 60,
+            speed: config.speed || 2.5,
             radius: config.radius || 15
         });
         this.shootCooldown = 0;
         this.shootDelay = config.shootDelay || 25;
         this.damage = config.damage || 15;
         this.bulletSpeed = config.bulletSpeed || 6;
-        this.followDistance = 100 + Math.random() * 50; // 跟随距离随机
-        this.color = '#42A5F5'; // 蓝色，区别于玩家绿色
+        this.color = '#42A5F5';
         this.alive = true;
+        // 随机分配角色：0=防守, 1=进攻, 2=游走
+        this.role = Math.random() < 0.4 ? 0 : (Math.random() < 0.6 ? 1 : 2);
+        // 每个队友绑定一个己方据点作为基地
+        this.homeBase = this.assignHomeBase();
+        // 巡逻参数
+        this.patrolAngle = Math.random() * Math.PI * 2;
+        this.patrolTimer = Math.random() * 1000;
+        this.patrolRadius = 80 + Math.random() * 100;
+        // 游走目标（进攻组/游走组用）
+        this.wanderTarget = null;
+        this.wanderTimer = 0;
     }
 
-    // 获取最近的可攻击目标（敌人）
+    assignHomeBase() {
+        const friendlyPoints = GameState.capturePoints.filter(p => p.owner === 'player');
+        if (friendlyPoints.length === 0) return null;
+        return friendlyPoints[Math.floor(Math.random() * friendlyPoints.length)];
+    }
+
     getClosestEnemy() {
         let target = null;
         let minDist = Infinity;
@@ -34,12 +49,11 @@ export class Teammate extends Entity {
         return { target, distance: minDist };
     }
 
-    // 寻找最近的敌方据点（用于进攻）
     getClosestEnemyPoint() {
         let target = null;
         let minDist = Infinity;
         for (const point of GameState.capturePoints) {
-            if (point.owner === 'player') continue; // 己方据点不去
+            if (point.owner === 'player') continue;
             const d = Math.hypot(point.x - this.x, point.y - this.y);
             if (d < minDist) {
                 minDist = d;
@@ -49,21 +63,18 @@ export class Teammate extends Entity {
         return { target, distance: minDist };
     }
 
-    // 判断是否在己方据点内
-    isInFriendlyPoint() {
-        for (const point of GameState.capturePoints) {
-            if (point.owner === 'player' && this.contains(point)) {
-                return true;
+    // 生成一个随机游走目标
+    pickWanderTarget() {
+        const world = GameState.config.world;
+        const map = GameState.map;
+        for (let i = 0; i < 20; i++) {
+            const x = 200 + Math.random() * (world.width - 400);
+            const y = 200 + Math.random() * (world.height - 400);
+            if (!map || map.isWalkable(x, y, this.radius)) {
+                return { x, y };
             }
         }
-        return false;
-    }
-
-    // 检测自己是否在据点内
-    contains(point) {
-        const dx = point.x - this.x;
-        const dy = point.y - this.y;
-        return dx*dx + dy*dy < (point.radius + this.radius) ** 2;
+        return { x: world.width / 2, y: world.height / 2 };
     }
 
     update() {
@@ -71,74 +82,88 @@ export class Teammate extends Entity {
         const player = GameState.player;
         if (!player || !player.alive) return;
 
-        // 1. 寻找最近的敌人
-        const { target, distance } = this.getClosestEnemy();
-
-        // 2. 寻找最近的敌方据点
+        const { target: enemy, distance: enemyDist } = this.getClosestEnemy();
         const { target: captureTarget, distance: captureDist } = this.getClosestEnemyPoint();
-
-        // 3. 判断战术策略：
-        //    - 有敌人（< 400）-> 优先战斗
-        //    - 有非己方据点 -> 前往攻占（优先去最近的敌方据点）
-        //    - 所有据点都是己方的 -> 去最近的己方据点巡逻
-        const hasNearbyEnemy = target && distance < 400;
 
         let moveX = 0, moveY = 0;
         let targetX = null, targetY = null;
 
+        const hasNearbyEnemy = enemy && enemyDist < 400;
+
         if (hasNearbyEnemy) {
-            // 战斗模式：侧向环绕敌人
-            const angleToEnemy = Math.atan2(target.y - this.y, target.x - this.x);
-            moveX = -Math.sin(angleToEnemy) * 0.5;
-            moveY = Math.cos(angleToEnemy) * 0.5;
-        } else if (captureTarget) {
-            // 有非己方据点 -> 前往攻占（任何距离）
-            targetX = captureTarget.x;
-            targetY = captureTarget.y;
-        } else {
-            // 所有据点都是己方的 -> 去最近的己方据点驻守
-            let nearestFriendly = null;
-            let nearestFriendlyDist = Infinity;
-            for (const point of GameState.capturePoints) {
-                if (point.owner === 'player') {
-                    const d = Math.hypot(point.x - this.x, point.y - this.y);
-                    if (d < nearestFriendlyDist) {
-                        nearestFriendlyDist = d;
-                        nearestFriendly = point;
-                    }
-                }
-            }
-            if (nearestFriendly) {
-                const dx = nearestFriendly.x - this.x;
-                const dy = nearestFriendly.y - this.y;
+            // 附近有敌人 -> 战斗
+            const angleToEnemy = Math.atan2(enemy.y - this.y, enemy.x - this.x);
+            moveX = -Math.sin(angleToEnemy) * 0.6;
+            moveY = Math.cos(angleToEnemy) * 0.6;
+        } else if (this.role === 0) {
+            // 防守组：在己方据点周围巡逻
+            if (this.homeBase) {
+                const dx = this.homeBase.x - this.x;
+                const dy = this.homeBase.y - this.y;
                 const dist = Math.hypot(dx, dy);
-                if (dist > 60) {
-                    targetX = nearestFriendly.x;
-                    targetY = nearestFriendly.y;
+                if (dist > this.patrolRadius) {
+                    // 离基地太远，回去
+                    targetX = this.homeBase.x;
+                    targetY = this.homeBase.y;
                 } else {
-                    // 已在据点附近，小幅巡逻
-                    moveX = (Math.random() - 0.5) * 0.4;
-                    moveY = (Math.random() - 0.5) * 0.4;
+                    // 在基地周围巡逻
+                    this.patrolTimer++;
+                    const angle = this.patrolAngle + Math.sin(this.patrolTimer * 0.01) * 2;
+                    const patrolDist = 40 + Math.sin(this.patrolTimer * 0.02) * this.patrolRadius * 0.5;
+                    targetX = this.homeBase.x + Math.cos(angle) * patrolDist;
+                    targetY = this.homeBase.y + Math.sin(angle) * patrolDist;
                 }
+            } else {
+                // 无基地，跟随玩家
+                targetX = player.x + (Math.random() - 0.5) * 200;
+                targetY = player.y + (Math.random() - 0.5) * 200;
             }
+        } else if (this.role === 1) {
+            // 进攻组：优先攻占据点
+            if (captureTarget) {
+                targetX = captureTarget.x;
+                targetY = captureTarget.y;
+            } else {
+                // 所有据点已占领，游走
+                this.wanderTimer++;
+                if (this.wanderTimer > 300 || !this.wanderTarget) {
+                    this.wanderTarget = this.pickWanderTarget();
+                    this.wanderTimer = 0;
+                }
+                targetX = this.wanderTarget.x;
+                targetY = this.wanderTarget.y;
+            }
+        } else {
+            // 游走组：自由探索地图
+            this.wanderTimer++;
+            if (this.wanderTimer > 200 || !this.wanderTarget) {
+                // 有敌方据点就去，否则随机游走
+                if (captureTarget && Math.random() < 0.4) {
+                    this.wanderTarget = { x: captureTarget.x, y: captureTarget.y };
+                } else {
+                    this.wanderTarget = this.pickWanderTarget();
+                }
+                this.wanderTimer = 0;
+            }
+            targetX = this.wanderTarget.x;
+            targetY = this.wanderTarget.y;
         }
 
-        // 如果目标是据点，计算移动方向
+        // 移动向目标
         if (targetX !== null && targetY !== null) {
             const dx = targetX - this.x;
             const dy = targetY - this.y;
             const dist = Math.hypot(dx, dy);
-            if (dist > 40) { // 还没到据点，继续前进
+            if (dist > 20) {
                 moveX = dx / dist;
                 moveY = dy / dist;
             } else {
-                // 已到达据点附近，小幅徘徊
                 moveX = (Math.random() - 0.5) * 0.3;
                 moveY = (Math.random() - 0.5) * 0.3;
             }
         }
 
-        // 归一化并应用速度（考虑地形减速）
+        // 应用速度
         const len = Math.hypot(moveX, moveY);
         if (len > 0.01) {
             const speedFactor = GameState.map ? GameState.map.getSpeedFactor(this.x, this.y) : 1;
@@ -147,37 +172,50 @@ export class Teammate extends Entity {
             this.y += (moveY / len) * finalSpeed;
         }
 
-        // 地图碰撞（防止走入房屋等不可通行区域）
+        // 地图碰撞
         if (GameState.map && !GameState.map.isWalkable(this.x, this.y, this.radius)) {
-            // 回退到上一帧位置（简单处理，也可以尝试推开）
-            // 这里简化：直接拉回
-            const dxBack = this.x - (this.x - (moveX / len) * this.speed);
-            const dyBack = this.y - (this.y - (moveY / len) * this.speed);
-            this.x -= dxBack * 0.8;
-            this.y -= dyBack * 0.8;
-            // 如果仍然不可通行，直接重置到玩家附近
+            this.x -= moveX * 0.8;
+            this.y -= moveY * 0.8;
             if (!GameState.map.isWalkable(this.x, this.y, this.radius)) {
-                this.x = player.x + (Math.random() - 0.5) * 80;
-                this.y = player.y + (Math.random() - 0.5) * 80;
+                // 传送到基地附近，而不是玩家身边
+                if (this.homeBase) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const dist = 30 + Math.random() * 60;
+                    this.x = this.homeBase.x + Math.cos(angle) * dist;
+                    this.y = this.homeBase.y + Math.sin(angle) * dist;
+                } else {
+                    const friendlyPoints = GameState.capturePoints.filter(p => p.owner === 'player');
+                    if (friendlyPoints.length > 0) {
+                        const pt = friendlyPoints[Math.floor(Math.random() * friendlyPoints.length)];
+                        const angle = Math.random() * Math.PI * 2;
+                        const dist = 30 + Math.random() * 60;
+                        this.x = pt.x + Math.cos(angle) * dist;
+                        this.y = pt.y + Math.sin(angle) * dist;
+                    } else {
+                        // 最后的 fallback：地图中心
+                        this.x = GameState.config.world.width / 2;
+                        this.y = GameState.config.world.height / 2;
+                    }
+                }
             }
         }
 
-        // 世界边界限制
+        // 世界边界
         const world = GameState.config.world;
         this.x = Math.max(this.radius, Math.min(world.width - this.radius, this.x));
         this.y = Math.max(this.radius, Math.min(world.height - this.radius, this.y));
 
-        // 3. 射击逻辑
+        // 射击
         if (this.shootCooldown > 0) {
             this.shootCooldown--;
-        } else if (target && distance < 350) {
-            const angle = Math.atan2(target.y - this.y, target.x - this.x);
+        } else if (enemy && enemyDist < 350) {
+            const angle = Math.atan2(enemy.y - this.y, enemy.x - this.x);
             const bullet = new Bullet(
                 this.x + Math.cos(angle) * this.radius,
                 this.y + Math.sin(angle) * this.radius,
                 Math.cos(angle) * this.bulletSpeed,
                 Math.sin(angle) * this.bulletSpeed,
-                false, // 友军子弹属于玩家阵营
+                false,
                 this.damage
             );
             GameState.bullets.push(bullet);
@@ -187,7 +225,6 @@ export class Teammate extends Entity {
 
     draw(ctx) {
         ctx.save();
-        // 身体（蓝色）
         ctx.beginPath();
         ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
         ctx.fillStyle = this.color;
@@ -196,14 +233,12 @@ export class Teammate extends Entity {
         ctx.lineWidth = 2;
         ctx.stroke();
 
-        // 友军标识（空心星）
         ctx.fillStyle = '#BBDEFB';
         ctx.font = '12px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText('✦', 0, -2);
 
-        // 血条
         const hpPercent = this.health / this.maxHealth;
         ctx.fillStyle = 'rgba(0,0,0,0.5)';
         ctx.fillRect(-18, -25, 36, 4);

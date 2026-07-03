@@ -62,6 +62,30 @@ export const Renderer = {
         }
         this.clear();
 
+        // 检查是否打开了菜单（背包/军械库）
+        const menuOpen = GameState.inventoryOpen || GameState.arsenalOpen;
+        
+        // 控制HUD显示
+        const hud = document.getElementById('hud');
+        if (hud) {
+            hud.style.display = menuOpen ? 'none' : 'flex';
+        }
+
+        // 如果菜单打开，跳过游戏世界渲染
+        if (menuOpen) {
+            // 只绘制半透明背景
+            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+            this.ctx.fillRect(0, 0, this.width, this.height);
+            
+            // 绘制对应的菜单
+            if (GameState.arsenalOpen) {
+                this.drawArsenalShop();
+            } else if (GameState.inventoryOpen) {
+                this.drawInventory();
+            }
+            return;
+        }
+
         // 绘制地图
         if (GameState.map) {
             GameState.map.draw(this.ctx, GameState.camera);
@@ -85,8 +109,10 @@ export const Renderer = {
             GameState.arsenal.draw(this.ctx);
         }
 
-        // 绘制实体
+        // 绘制实体（优化：减少save/restore）
         const { player, enemies, teammates, bullets } = GameState;
+        
+        // 子弹
         for (const b of bullets) {
             if (!b.alive) continue;
             const pos = this.toScreen(b.x, b.y);
@@ -95,6 +121,8 @@ export const Renderer = {
             b.draw(this.ctx);
             this.ctx.restore();
         }
+        
+        // 敌人
         for (const e of enemies) {
             if (!e.alive) continue;
             const pos = this.toScreen(e.x, e.y);
@@ -103,6 +131,8 @@ export const Renderer = {
             e.draw(this.ctx);
             this.ctx.restore();
         }
+        
+        // 队友
         for (const t of teammates) {
             if (!t.alive) continue;
             const pos = this.toScreen(t.x, t.y);
@@ -111,6 +141,8 @@ export const Renderer = {
             t.draw(this.ctx);
             this.ctx.restore();
         }
+        
+        // 玩家
         if (player && player.alive) {
             const pos = this.toScreen(player.x, player.y);
             this.ctx.save();

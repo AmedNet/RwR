@@ -36,14 +36,14 @@ const CONFIG = {
         maxEnemies: 30
     },
     teammate: {
-        health: 50,
-        speed: 2.2,
+        health: 60,
+        speed: 2.5,
         radius: 15,
         shootDelay: 25,
         damage: 15,
         bulletSpeed: 6,
-        maxCount: 10,
-        respawnDelay: 300 // 5秒（60fps下300帧）后重生
+        maxCount: 50,
+        respawnDelay: 360 // 6秒后重生
     },
     bullet: {
         radius: 5,
@@ -58,8 +58,8 @@ const CONFIG = {
         enemyHueMax: 360
     },
     map: {
-        cols: 80,
-        rows: 80,
+        cols: 300,
+        rows: 250,
         tileSize: 50
     },
     capturePoints: {
@@ -100,6 +100,8 @@ function initMap() {
     // 更新世界尺寸（确保与地图一致）
     CONFIG.world.width = map.cols * map.tileSize;
     CONFIG.world.height = map.rows * map.tileSize;
+    // 标记小地图需要重绘
+    if (Minimap.initialized) Minimap.mapDirty = true;
     console.log('✅ 地图初始化完成');
 }
 
@@ -218,27 +220,44 @@ function initArsenal(playerPoints) {
 }
 
 // ---------- 生成队友 ----------
-function spawnTeammate() {
-    const player = GameState.player;
-    if (!player) return null;
+function spawnTeammate(spawnPoint, minDistance = 150) {
     const config = GameState.config.teammate;
     const world = GameState.config.world;
     const map = GameState.map;
+    const player = GameState.player;
     
-    // 尝试在玩家周围找到可通行的位置
-    for (let attempt = 0; attempt < 30; attempt++) {
+    // 如果指定了生成点，在生成点周围生成
+    let centerX, centerY;
+    if (spawnPoint) {
+        centerX = spawnPoint.x;
+        centerY = spawnPoint.y;
+    } else if (player) {
+        centerX = player.x;
+        centerY = player.y;
+    } else {
+        centerX = world.width / 2;
+        centerY = world.height / 2;
+    }
+    
+    // 尝试在生成点周围找到可通行的位置，保持最小距离
+    for (let attempt = 0; attempt < 50; attempt++) {
         const angle = Math.random() * Math.PI * 2;
-        const dist = 60 + Math.random() * 80;
-        let x = player.x + Math.cos(angle) * dist;
-        let y = player.y + Math.sin(angle) * dist;
+        const dist = minDistance + Math.random() * 150; // 至少 minDistance 距离
+        let x = centerX + Math.cos(angle) * dist;
+        let y = centerY + Math.sin(angle) * dist;
         x = Math.max(config.radius, Math.min(world.width - config.radius, x));
         y = Math.max(config.radius, Math.min(world.height - config.radius, y));
         if (!map || map.isWalkable(x, y, config.radius)) {
             return new Teammate(x, y, config);
         }
     }
-    // 如果找不到合适位置，强行放在玩家旁边（碰撞系统会处理）
-    return new Teammate(player.x + 50, player.y + 50, config);
+    
+    // Fallback：用更大的随机偏移
+    const fallbackAngle = Math.random() * Math.PI * 2;
+    const fallbackDist = minDistance + Math.random() * 100;
+    const fx = Math.max(config.radius, Math.min(world.width - config.radius, centerX + Math.cos(fallbackAngle) * fallbackDist));
+    const fy = Math.max(config.radius, Math.min(world.height - config.radius, centerY + Math.sin(fallbackAngle) * fallbackDist));
+    return new Teammate(fx, fy, config);
 }
 
 // ---------- 重置游戏 ----------
@@ -265,9 +284,12 @@ function resetGame() {
     // 创建玩家
     GameState.player = new Player(spawnX, spawnY, config.player);
 
-    // 初始队友（5人）
-    for (let i = 0; i < 5; i++) {
-        const t = spawnTeammate();
+    // 初始队友（15人），分散到各个己方据点（至少250像素外）
+    const playerPoints = GameState.capturePoints.filter(p => p.owner === 'player');
+    for (let i = 0; i < 15; i++) {
+        // 轮流在各个据点生成，保持250像素最小距离
+        const spawnPoint = playerPoints.length > 0 ? playerPoints[i % playerPoints.length] : null;
+        const t = spawnTeammate(spawnPoint, 250);
         if (t) GameState.teammates.push(t);
     }
 
@@ -357,10 +379,15 @@ function init() {
     EventBus.on('player_rank_up', (data) => {
         const maxCount = CONFIG.teammate.maxCount;
         if (GameState.teammates.length < maxCount) {
-            const t = spawnTeammate();
+            // 随机选择一个己方据点生成新队友
+            const playerPoints = GameState.capturePoints.filter(p => p.owner === 'player');
+            const spawnPoint = playerPoints.length > 0 
+                ? playerPoints[Math.floor(Math.random() * playerPoints.length)] 
+                : null;
+            const t = spawnTeammate(spawnPoint, 200);
             if (t) {
                 GameState.teammates.push(t);
-                console.log(`🎖️ 军衔提升！新增一名队友，当前 ${GameState.teammates.length} 人`);
+                console.log(`🎖️ 军衔提升！新增一名队友在据点，当前 ${GameState.teammates.length} 人`);
             }
         }
         UIManager.updateAll(GameState);
@@ -412,11 +439,13 @@ function updateTeammateRespawns() {
                 spawnX = point.x + Math.cos(angle) * dist;
                 spawnY = point.y + Math.sin(angle) * dist;
             } else {
-                // 无己方据点，在玩家附近重生
+                // 无己方据点，在玩家周围200-350像素外重生
                 const player = GameState.player;
                 if (player) {
-                    spawnX = player.x + (Math.random() - 0.5) * 100;
-                    spawnY = player.y + (Math.random() - 0.5) * 100;
+                    const angle = Math.random() * Math.PI * 2;
+                    const dist = 200 + Math.random() * 150;
+                    spawnX = player.x + Math.cos(angle) * dist;
+                    spawnY = player.y + Math.sin(angle) * dist;
                 } else {
                     spawnX = GameState.config.world.width / 2;
                     spawnY = GameState.config.world.height / 2;

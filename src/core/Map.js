@@ -6,6 +6,9 @@ export const Terrain = {
     HOUSE: 1,
     RIVER: 2,
     CAPTURE: 3,
+    FOREST: 4,
+    MOUNTAIN: 5,
+    ROAD: 6,
 };
 
 const TERRAIN_COLORS = {
@@ -13,6 +16,9 @@ const TERRAIN_COLORS = {
     [Terrain.HOUSE]: '#8D6E63',
     [Terrain.RIVER]: '#42A5F5',
     [Terrain.CAPTURE]: '#FFD740',
+    [Terrain.FOREST]: '#2E7D32',
+    [Terrain.MOUNTAIN]: '#757575',
+    [Terrain.ROAD]: '#D7CCC8',
 };
 
 export class Map {
@@ -60,8 +66,8 @@ export class Map {
         for (let r = startRow; r <= endRow; r++) {
             for (let c = startCol; c <= endCol; c++) {
                 const tile = this.getTile(c, r);
-                if (tile === -1 || tile === Terrain.HOUSE) {
-                    // 房屋完全不可通行
+                if (tile === -1 || tile === Terrain.HOUSE || tile === Terrain.MOUNTAIN) {
+                    // 房屋和山地完全不可通行
                     return false;
                 }
             }
@@ -73,6 +79,8 @@ export class Map {
         const { col, row } = this.worldToTile(wx, wy);
         const tile = this.getTile(col, row);
         if (tile === Terrain.RIVER) return 0.5;
+        if (tile === Terrain.FOREST) return 0.7;
+        if (tile === Terrain.ROAD) return 1.3;
         return 1.0;
     }
 
