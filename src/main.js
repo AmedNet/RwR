@@ -10,8 +10,8 @@ import { SpawnSystem } from './systems/SpawnSystem.js';
 import { CollisionSystem } from './systems/CollisionSystem.js';
 import { Map, Terrain } from './core/Map.js';
 import { CapturePoint } from './entities/CapturePoint.js';
-import { MapEditor } from './systems/MapEditor.js';
 import { Minimap } from './rendering/Minimap.js';
+import { MapGenerator } from './utils/MapGenerator.js';
 
 // ---------- 配置 ----------
 const CONFIG = {
@@ -48,6 +48,7 @@ const CONFIG = {
         life: 200
     },
     rankUpKills: 5,
+    level: 'random',
     colors: {
         player: "#4CAF50",
         playerStroke: "#1B5E20",
@@ -90,19 +91,9 @@ function initMap() {
             console.warn('⚠️ 本地地图数据损坏，使用默认');
         }
     } else {
-        // 生成默认示例地形（房屋、河流）
-        for (let r = 0; r < map.rows; r++) {
-            for (let c = 0; c < map.cols; c++) {
-                if (Math.random() < 0.02) {
-                    map.setTile(c, r, Terrain.HOUSE);
-                }
-                // 河流
-                if (r > 30 && r < 35 && c > 10 && c < 70) {
-                    map.setTile(c, r, Terrain.RIVER);
-                }
-            }
-        }
-        console.log('🗺️ 使用默认地图');
+        // 使用随机地图生成器
+        MapGenerator.generateRandomMap(map);
+        console.log('🗺️ 使用随机生成地图');
     }
     GameState.map = map;
     // 更新世界尺寸（确保与地图一致）
@@ -247,22 +238,6 @@ function init() {
 
     window.addEventListener('restartGame', resetGame);
     window.addEventListener('resize', () => Renderer.resize());
-
-    // ---- 编辑器快捷键 ----
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'e' || e.key === 'E') {
-            MapEditor.toggle();
-            e.preventDefault();
-        }
-        MapEditor.handleKey(e);
-    });
-    const canvas = document.getElementById('gameCanvas');
-    canvas.addEventListener('mousemove', (e) => {
-        MapEditor.handleMouseMove(e);
-    });
-    canvas.addEventListener('mousedown', (e) => {
-        if (e.button === 0) MapEditor.handleClick(e);
-    });
 
     // 初始化小地图
     Minimap.init();

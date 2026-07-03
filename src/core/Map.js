@@ -49,13 +49,13 @@ export class Map {
     // 判断世界坐标是否可通行，考虑了半径
     isWalkable(wx, wy, radius = 0) {
         // 检查以 (wx, wy) 为中心，半径为 radius 的所有格子
-        const half = radius / this.tileSize + 0.5; // 粗略，确保覆盖
+        const half = Math.ceil(radius / this.tileSize);
         const centerCol = Math.floor(wx / this.tileSize);
         const centerRow = Math.floor(wy / this.tileSize);
-        const startCol = Math.max(0, Math.floor(centerCol - half));
-        const endCol = Math.min(this.cols - 1, Math.ceil(centerCol + half));
-        const startRow = Math.max(0, Math.floor(centerRow - half));
-        const endRow = Math.min(this.rows - 1, Math.ceil(centerRow + half));
+        const startCol = Math.max(0, centerCol - half);
+        const endCol = Math.min(this.cols - 1, centerCol + half);
+        const startRow = Math.max(0, centerRow - half);
+        const endRow = Math.min(this.rows - 1, centerRow + half);
 
         for (let r = startRow; r <= endRow; r++) {
             for (let c = startCol; c <= endCol; c++) {

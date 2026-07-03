@@ -9,18 +9,14 @@ export const CollisionSystem = {
         const map = GameState.map;
         if (!map) return;
         const radius = entity.radius;
-        // 检查实体中心附近的格子，如果不可通行则推开
-        const margin = radius * 0.8;
+        // 检查实体中心及上下左右四个点
+        const margin = radius * 0.5;
         const checkPoints = [
             { dx: 0, dy: 0 },
             { dx: margin, dy: 0 },
             { dx: -margin, dy: 0 },
             { dx: 0, dy: margin },
-            { dx: 0, dy: -margin },
-            { dx: margin, dy: margin },
-            { dx: -margin, dy: -margin },
-            { dx: margin, dy: -margin },
-            { dx: -margin, dy: margin }
+            { dx: 0, dy: -margin }
         ];
         for (const pt of checkPoints) {
             const wx = entity.x + pt.dx;
@@ -28,8 +24,8 @@ export const CollisionSystem = {
             const { col, row } = map.worldToTile(wx, wy);
             const tile = map.getTile(col, row);
             if (tile === Terrain.HOUSE) {
-                // 简单推开：沿方向反推
-                const overlap = radius * 0.6;
+                // 向反方向推一点
+                const overlap = radius * 0.3;
                 const angle = Math.atan2(wy - entity.y, wx - entity.x);
                 entity.x -= Math.cos(angle) * overlap;
                 entity.y -= Math.sin(angle) * overlap;

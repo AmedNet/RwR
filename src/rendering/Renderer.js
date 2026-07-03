@@ -1,6 +1,5 @@
 // src/rendering/Renderer.js
 import { GameState } from '../core/GameState.js';
-import { MapEditor } from '../systems/MapEditor.js';
 
 export const Renderer = {
     canvas: document.getElementById('gameCanvas'),
@@ -80,11 +79,6 @@ export const Renderer = {
             ctx.translate(pos.x, pos.y);
             player.draw(ctx);
             ctx.restore();
-        }
-
-        // 编辑器叠加层
-        if (MapEditor.active) {
-            MapEditor.drawOverlay(ctx);
         }
 
         // Game Over
