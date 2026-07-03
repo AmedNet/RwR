@@ -20,28 +20,71 @@ export class Enemy extends Entity {
         this.config = config;
     }
 
+    getTargets() {
+        const targets = [];
+        if (GameState.player && GameState.player.alive) {
+            targets.push(GameState.player);
+        }
+        for (const teammate of GameState.teammates) {
+            if (teammate.alive) {
+                targets.push(teammate);
+            }
+        }
+        return targets;
+    }
+
     update() {
         if (GameState.gameOver) return;
-        const player = GameState.player;
-        if (!player || !player.alive) return;
 
-        const dx = player.x - this.x;
-        const dy = player.y - this.y;
-        const dist = Math.sqrt(dx*dx + dy*dy);
-        if (dist > 0) {
-            this.x += (dx / dist) * this.speed;
-            this.y += (dy / dist) * this.speed;
+        // 寻找最近目标
+        const targets = this.getTargets();
+        let closestTarget = null;
+        let closestDist = Infinity;
+        for (const t of targets) {
+            if (!t.alive) continue;
+            const d = Math.hypot(t.x - this.x, t.y - this.y);
+            if (d < closestDist) {
+                closestDist = d;
+                closestTarget = t;
+            }
         }
 
-        // 世界边界限制
+        if (!closestTarget) return;
+
+        // 移动向目标
+        const dx = closestTarget.x - this.x;
+        const dy = closestTarget.y - this.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist > 0) {
+            const normX = dx / dist;
+            const normY = dy / dist;
+            const speedFactor = GameState.map ? GameState.map.getSpeedFactor(this.x, this.y) : 1;
+            const finalSpeed = this.speed * speedFactor;
+            let newX = this.x + normX * finalSpeed;
+            let newY = this.y + normY * finalSpeed;
+            // 地图碰撞检测
+            if (GameState.map && !GameState.map.isWalkable(newX, newY, this.radius)) {
+                if (GameState.map.isWalkable(newX, this.y, this.radius)) {
+                    this.x = newX;
+                } else if (GameState.map.isWalkable(this.x, newY, this.radius)) {
+                    this.y = newY;
+                }
+            } else {
+                this.x = newX;
+                this.y = newY;
+            }
+        }
+
+        // 世界边界
         const world = GameState.config.world;
         this.x = Math.max(this.radius, Math.min(world.width - this.radius, this.x));
         this.y = Math.max(this.radius, Math.min(world.height - this.radius, this.y));
 
+        // 射击
         if (this.shootCooldown > 0) {
             this.shootCooldown--;
-        } else if (dist < 400) {
-            const angle = Math.atan2(player.y - this.y, player.x - this.x);
+        } else if (closestTarget && closestDist < 400) {
+            const angle = Math.atan2(closestTarget.y - this.y, closestTarget.x - this.x);
             const speed = 4.5;
             const bullet = new Bullet(
                 this.x + Math.cos(angle) * this.radius,

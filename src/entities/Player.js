@@ -51,13 +51,32 @@ export class Player extends Entity {
         if (keys.d) dx += 1;
         if (dx !== 0 || dy !== 0) {
             const len = Math.sqrt(dx*dx + dy*dy);
-            dx = dx / len * this.speed;
-            dy = dy / len * this.speed;
-            this.x += dx;
-            this.y += dy;
+            dx = dx / len;
+            dy = dy / len;
+            // 速度因子（河流减速）
+            let speedFactor = 1;
+            if (GameState.map) {
+                speedFactor = GameState.map.getSpeedFactor(this.x, this.y);
+            }
+            const finalSpeed = this.speed * speedFactor;
+            let newX = this.x + dx * finalSpeed;
+            let newY = this.y + dy * finalSpeed;
+            // 检查地图碰撞（房屋不可通行）
+            if (GameState.map && !GameState.map.isWalkable(newX, newY, this.radius)) {
+                // 尝试分别沿X和Y移动
+                if (GameState.map.isWalkable(newX, this.y, this.radius)) {
+                    this.x = newX;
+                } else if (GameState.map.isWalkable(this.x, newY, this.radius)) {
+                    this.y = newY;
+                }
+                // 否则不动
+            } else {
+                this.x = newX;
+                this.y = newY;
+            }
         }
 
-        // 世界边界限制
+        // 边界限制（世界边界）
         const world = GameState.config.world;
         this.x = Math.max(this.radius, Math.min(world.width - this.radius, this.x));
         this.y = Math.max(this.radius, Math.min(world.height - this.radius, this.y));
@@ -68,7 +87,6 @@ export class Player extends Entity {
     shoot() {
         if (GameState.gameOver || this.shootCooldown > 0) return;
         const mouse = GameState.mouse;
-        // 计算玩家屏幕坐标
         const screenX = this.x - GameState.camera.x;
         const screenY = this.y - GameState.camera.y;
         const angle = Math.atan2(mouse.y - screenY, mouse.x - screenX);
@@ -86,7 +104,6 @@ export class Player extends Entity {
     }
 
     draw(ctx) {
-        // ctx 已平移至 (this.x, this.y) 的屏幕位置，所有绘制相对 (0,0)
         ctx.save();
         // 身体
         ctx.beginPath();
@@ -97,7 +114,7 @@ export class Player extends Entity {
         ctx.lineWidth = 3;
         ctx.stroke();
 
-        // 枪管方向：使用屏幕坐标计算角度
+        // 枪管
         const screenX = this.x - GameState.camera.x;
         const screenY = this.y - GameState.camera.y;
         const angle = Math.atan2(GameState.mouse.y - screenY, GameState.mouse.x - screenX);

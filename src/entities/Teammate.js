@@ -1,0 +1,149 @@
+// src/entities/Teammate.js
+import { Entity } from './Entity.js';
+import { GameState } from '../core/GameState.js';
+import { Bullet } from './Bullet.js';
+
+export class Teammate extends Entity {
+    constructor(x, y, config) {
+        super(x, y, {
+            health: config.health || 50,
+            speed: config.speed || 2.2,
+            radius: config.radius || 15
+        });
+        this.shootCooldown = 0;
+        this.shootDelay = config.shootDelay || 25;
+        this.damage = config.damage || 15;
+        this.bulletSpeed = config.bulletSpeed || 6;
+        this.followDistance = 100 + Math.random() * 50; // 跟随距离随机
+        this.color = '#42A5F5'; // 蓝色，区别于玩家绿色
+        this.alive = true;
+    }
+
+    // 获取最近的可攻击目标（敌人）
+    getClosestEnemy() {
+        let target = null;
+        let minDist = Infinity;
+        for (const enemy of GameState.enemies) {
+            if (!enemy.alive) continue;
+            const d = Math.hypot(enemy.x - this.x, enemy.y - this.y);
+            if (d < minDist) {
+                minDist = d;
+                target = enemy;
+            }
+        }
+        return { target, distance: minDist };
+    }
+
+    update() {
+        if (GameState.gameOver || !this.alive) return;
+        const player = GameState.player;
+        if (!player || !player.alive) return;
+
+        // 1. 寻找最近的敌人
+        const { target, distance } = this.getClosestEnemy();
+
+        // 2. 移动逻辑：跟随玩家，同时保持战术机动
+        const dxToPlayer = player.x - this.x;
+        const dyToPlayer = player.y - this.y;
+        const distToPlayer = Math.hypot(dxToPlayer, dyToPlayer);
+
+        let moveX = 0, moveY = 0;
+
+        if (target && distance < 350) {
+            // 有敌人在射程内，侧向移动（环绕）
+            const angleToEnemy = Math.atan2(target.y - this.y, target.x - this.x);
+            moveX = -Math.sin(angleToEnemy) * 0.5;
+            moveY = Math.cos(angleToEnemy) * 0.5;
+        }
+
+        // 如果离玩家太远，强制跟紧
+        if (distToPlayer > this.followDistance * 1.5) {
+            const angleToPlayer = Math.atan2(dyToPlayer, dxToPlayer);
+            moveX += Math.cos(angleToPlayer) * 0.8;
+            moveY += Math.sin(angleToPlayer) * 0.8;
+        } else if (distToPlayer > this.followDistance + 20) {
+            // 稍微靠近
+            const angleToPlayer = Math.atan2(dyToPlayer, dxToPlayer);
+            moveX += Math.cos(angleToPlayer) * 0.3;
+            moveY += Math.sin(angleToPlayer) * 0.3;
+        } else if (distToPlayer < this.followDistance - 30) {
+            // 太近，后退
+            const angleToPlayer = Math.atan2(dyToPlayer, dxToPlayer);
+            moveX -= Math.cos(angleToPlayer) * 0.2;
+            moveY -= Math.sin(angleToPlayer) * 0.2;
+        }
+
+        // 归一化并应用速度（考虑地形减速）
+        const len = Math.hypot(moveX, moveY);
+        if (len > 0.01) {
+            const speedFactor = GameState.map ? GameState.map.getSpeedFactor(this.x, this.y) : 1;
+            const finalSpeed = this.speed * speedFactor;
+            this.x += (moveX / len) * finalSpeed;
+            this.y += (moveY / len) * finalSpeed;
+        }
+
+        // 地图碰撞（防止走入房屋等不可通行区域）
+        if (GameState.map && !GameState.map.isWalkable(this.x, this.y, this.radius)) {
+            // 回退到上一帧位置（简单处理，也可以尝试推开）
+            // 这里简化：直接拉回
+            const dxBack = this.x - (this.x - (moveX / len) * this.speed);
+            const dyBack = this.y - (this.y - (moveY / len) * this.speed);
+            this.x -= dxBack * 0.8;
+            this.y -= dyBack * 0.8;
+            // 如果仍然不可通行，直接重置到玩家附近
+            if (!GameState.map.isWalkable(this.x, this.y, this.radius)) {
+                this.x = player.x + (Math.random() - 0.5) * 80;
+                this.y = player.y + (Math.random() - 0.5) * 80;
+            }
+        }
+
+        // 世界边界限制
+        const world = GameState.config.world;
+        this.x = Math.max(this.radius, Math.min(world.width - this.radius, this.x));
+        this.y = Math.max(this.radius, Math.min(world.height - this.radius, this.y));
+
+        // 3. 射击逻辑
+        if (this.shootCooldown > 0) {
+            this.shootCooldown--;
+        } else if (target && distance < 350) {
+            const angle = Math.atan2(target.y - this.y, target.x - this.x);
+            const bullet = new Bullet(
+                this.x + Math.cos(angle) * this.radius,
+                this.y + Math.sin(angle) * this.radius,
+                Math.cos(angle) * this.bulletSpeed,
+                Math.sin(angle) * this.bulletSpeed,
+                false, // 友军子弹属于玩家阵营
+                this.damage
+            );
+            GameState.bullets.push(bullet);
+            this.shootCooldown = this.shootDelay;
+        }
+    }
+
+    draw(ctx) {
+        ctx.save();
+        // 身体（蓝色）
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = this.color;
+        ctx.fill();
+        ctx.strokeStyle = '#0D47A1';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // 友军标识（空心星）
+        ctx.fillStyle = '#BBDEFB';
+        ctx.font = '12px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('✦', 0, -2);
+
+        // 血条
+        const hpPercent = this.health / this.maxHealth;
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillRect(-18, -25, 36, 4);
+        ctx.fillStyle = hpPercent > 0.6 ? '#4CAF50' : (hpPercent > 0.3 ? '#FFC107' : '#f44336');
+        ctx.fillRect(-18, -25, 36 * hpPercent, 4);
+        ctx.restore();
+    }
+}

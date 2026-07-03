@@ -1,177 +1,165 @@
+好的！以下是更新后的完整项目说明文档，涵盖了所有新增功能（大地图、友军 AI、夺点机制、地图编辑器）。
 
-# RwR · 项目结构说明
+---
+
+# 小兵步枪 · 战地夺点版
 
 ## 📁 项目概述
 
-这是一个基于 **原生 JavaScript + Canvas** 开发的俯视角射击游戏原型，采用 **ES Module** 模块化架构，配置与代码分离，易于扩展和维护。
+这是一个基于 **原生 JavaScript + Canvas** 开发的俯视角战术射击游戏，核心玩法为 **夺点占领 + 小队作战**。游戏包含：
+
+- **超大地图**（最高 4000×4000 像素，可配置）
+- **地形系统**（草地、房屋、河流、据点）
+- **友军 AI 小队**（随军衔提升自动加入）
+- **多据点争夺**（玩家 vs 敌人，实时占领进度）
+- **内置地图编辑器**（按 `E` 键进入，支持保存/加载 JSON 地图）
+- **毛玻璃 HUD** + **全屏自适应**
 
 ---
 
-## 🗂️ 目录结构
+## 🗂️ 完整目录结构
 
 ```
 RwR/
-├── index.html                  # 游戏入口页面
-├── config.json                 # 外部配置文件（当前未使用，配置已内嵌）
-├── .gitignore                  # Git 忽略文件
-└── src/                        # 源代码目录
-    ├── main.js                 # 游戏启动入口
-    ├── core/                   # 核心模块
+├── index.html                  # 游戏入口（全屏 + HUD）
+├── config.json                 # 外部配置（已废弃，配置内嵌在 main.js）
+├── .gitignore
+└── src/
+    ├── main.js                 # 游戏启动、配置、初始化、主循环
+    ├── core/
     │   ├── EventBus.js         # 事件总线（模块间通信）
-    │   └── GameState.js        # 全局游戏状态（单例）
-    ├── entities/               # 实体类
+    │   ├── GameState.js        # 全局游戏状态（玩家、敌人、队友、据点、地图）
+    │   └── Map.js              # 地图类（地形数据、渲染、碰撞检测、编辑器支持）
+    ├── entities/
     │   ├── Entity.js           # 实体基类
-    │   ├── Player.js           # 玩家类
-    │   ├── Enemy.js            # 敌人类
-    │   └── Bullet.js           # 子弹类
-    ├── systems/                # 系统模块（逻辑层）
-    │   ├── SpawnSystem.js      # 敌人生成系统
-    │   └── CollisionSystem.js  # 碰撞检测系统
-    ├── rendering/              # 渲染模块（表现层）
-    │   ├── Renderer.js         # Canvas 渲染器
-    │   └── UIManager.js        # HTML UI 管理器
-    └── input/                  # 输入模块
-        └── InputManager.js     # 键盘/鼠标输入管理
+    │   ├── Player.js           # 玩家类（移动、射击、军衔、与地图交互）
+    │   ├── Enemy.js            # 敌人类（AI 攻击最近目标、地图交互）
+    │   ├── Teammate.js         # 友军 AI（跟随、攻击、侧移战术）
+    │   ├── Bullet.js           # 子弹（阵营、碰撞、抵消）
+    │   ├── CapturePoint.js     # 据点类（占领进度、所有者、绘制）
+    │   └── Obstacle.js         # 旧障碍物（已废弃，保留兼容）
+    ├── systems/
+    │   ├── SpawnSystem.js      # 敌人生成（动态难度）
+    │   ├── CollisionSystem.js  # 碰撞检测（子弹、实体、地图房屋）
+    │   └── MapEditor.js        # 地图编辑器（快捷键、鼠标交互、保存/加载）
+    ├── rendering/
+    │   ├── Renderer.js         # Canvas 渲染（地图、据点、所有实体、编辑器叠加层）
+    │   └── UIManager.js        # HTML UI 更新（军衔、击杀、血量、分数）
+    └── input/
+        └── InputManager.js     # 键盘/鼠标输入
 ```
 
 ---
 
-## 📦 模块详解
+## 🎮 核心机制
 
-### 1. 入口层
-| 文件 | 职责 |
-|------|------|
-| `index.html` | HTML 结构，包含画布和 UI 元素，加载 `main.js` |
-| `main.js` | 配置注入、游戏初始化、主循环、重置逻辑 |
+### 1. 大地图与地形
+- 地图由网格构成（默认 80×80 格子，每格 50px = 4000×4000 世界）。
+- 四种地形：
+  - **草地**（默认，可通行）
+  - **房屋**（不可通行，子弹和角色均被阻挡）
+  - **河流**（移动速度减半）
+  - **据点**（本身可通行，但用于标识据点位置）
+- 地图数据可通过编辑器修改，并保存为 JSON 文件。
 
-### 2. 核心层 (`core/`)
-| 文件 | 职责 |
-|------|------|
-| `EventBus.js` | 发布/订阅模式，解耦模块通信（如 `player_kill`、`game_over` 事件） |
-| `GameState.js` | 全局状态容器，存储玩家、敌人、子弹、输入状态等 |
+### 2. 夺点系统
+- 地图上预设多个据点（可在 `CONFIG.capturePoints` 调整位置和数量）。
+- 玩家、友军或敌人进入据点范围（半径 80px）即可开始占领。
+- 占领进度实时变化：
+  - 只有我方单位在点内 → 进度增加（100% 时占领）。
+  - 只有敌方单位在点内 → 进度减少（0% 时中立）。
+  - 双方都在 → 人数多的一方缓慢推进，否则僵持。
+  - 无人 → 进度缓慢回归 50%（中立）。
+- 占领后我方获得 +10 分，敌人占领则 -5 分。
 
-### 3. 实体层 (`entities/`)
-| 文件 | 职责 |
-|------|------|
-| `Entity.js` | 实体基类，定义位置、血量、速度、`takeDamage` 等通用属性/方法 |
-| `Player.js` | 玩家逻辑：移动、射击、军衔、击杀统计 |
-| `Enemy.js` | 敌人逻辑：追踪玩家、自动射击、血条显示 |
-| `Bullet.js` | 子弹逻辑：飞行、生命周期、阵营（敌/友） |
+### 3. 友军 AI 小队
+- 每升一级（每 5 击杀）生成 1 个队友，最多 4 个。
+- AI 行为：
+  - 跟随玩家（保持 100~150 距离）。
+  - 自动攻击 350px 内最近的敌人。
+  - 环绕射击（侧移机动）。
+  - 避开房屋、河流减速、不跑出世界边界。
 
-### 4. 系统层 (`systems/`)
-| 文件 | 职责 |
-|------|------|
-| `SpawnSystem.js` | 控制敌人生成位置、频率，受击杀数影响动态调整 |
-| `CollisionSystem.js` | 检测并处理所有碰撞（子弹→实体、实体→实体） |
-
-### 5. 渲染层 (`rendering/`)
-| 文件 | 职责 |
-|------|------|
-| `Renderer.js` | Canvas 绘制：网格、所有实体、游戏结束画面 |
-| `UIManager.js` | 更新 HTML 界面元素（军衔、击杀数、血量） |
-
-### 6. 输入层 (`input/`)
-| 文件 | 职责 |
-|------|------|
-| `InputManager.js` | 监听键盘（WASD/空格/R）和鼠标（移动/左键射击） |
-
----
-
-## 🔄 数据流向
-
-```
-用户输入 (InputManager)
-        ↓
-GameState 更新 (keys/mouse)
-        ↓
-main.js 游戏循环 (gameLoop)
-        ↓
-┌─────────────────────────────────────┐
-│ 1. Player.update()   - 移动/射击    │
-│ 2. SpawnSystem.update() - 生成敌人  │
-│ 3. Enemy.update()     - AI 行为     │
-│ 4. Bullet.update()    - 子弹飞行    │
-│ 5. CollisionSystem.checkAll() - 碰撞│
-└─────────────────────────────────────┘
-        ↓
-EventBus 触发事件 (player_kill / game_over)
-        ↓
-UIManager / Renderer 更新界面
-```
+### 4. 地图编辑器
+- 按 **`E`** 键进入/退出编辑模式。
+- 按数字键 **`1`~`4`** 选择地形类型：
+  - `1` 草地
+  - `2` 房屋
+  - `3` 河流
+  - `4` 据点（仅标记，实际据点由配置决定）
+- 点击地图格子即可放置所选地形。
+- **`S`** 键 → 下载当前地图为 `map.json`。
+- **`L`** 键 → 打开文件选择器，加载 JSON 地图。
+- 编辑器覆盖层会高亮当前悬停的格子。
 
 ---
 
-## ⚙️ 配置管理
+## 🎯 操作指南
 
-配置统一在 `main.js` 顶部的 `CONFIG` 对象中：
+| 按键 | 功能 |
+|------|------|
+| `W A S D` | 移动角色 |
+| `鼠标左键` / `空格` | 向鼠标方向射击 |
+| `R` | 游戏结束后重新开始 |
+| `E` | 切换地图编辑器 |
+| `1`~`4` | 在编辑模式下选择地形类型 |
+| `S` | 保存地图（下载 JSON） |
+| `L` | 加载地图（上传 JSON） |
+
+---
+
+## ⚙️ 配置说明（`main.js` 中的 `CONFIG`）
+
+所有可调参数集中在 `CONFIG` 对象中：
 
 ```javascript
 const CONFIG = {
     player: { health, speed, radius, shootDelay, bulletSpeed, damage },
     enemy: { health, speedMin, speedMax, radius, shootDelayMin, shootDelayMax, damage, spawnBaseRate, maxEnemies },
+    teammate: { health, speed, radius, shootDelay, damage, bulletSpeed, maxCount },
     bullet: { radius, life },
-    rankUpKills: 5,
-    colors: { player, playerStroke, enemyHueMin, enemyHueMax }
+    rankUpKills: 5,                 // 每击杀数升一级
+    colors: { player, playerStroke, enemyHueMin, enemyHueMax },
+    world: { width, height },       // 会自动根据地图尺寸调整
+    map: { cols, rows, tileSize }, // 地图格子数
+    capturePoints: [               // 据点世界坐标
+        { x, y }, ...
+    ]
 };
 ```
 
-**修改方式**：直接编辑 `CONFIG` 中的数值即可调整游戏平衡性。
+---
+
+## 🛠️ 技术栈
+
+- **语言**：ES6+ JavaScript
+- **渲染**：HTML5 Canvas
+- **模块化**：ES Module（原生）
+- **无第三方依赖**，纯原生实现
+- **存储**：地图数据可导出/导入 JSON，支持 `localStorage` 自动加载（可选）
 
 ---
 
 ## 🚀 如何运行
 
-### 方式一：VS Code + Live Server（推荐）
-1. 安装 Live Server 插件
-2. 右键 `index.html` → **Open with Live Server**
+1. **使用 HTTP 服务器**（必须）：
+   - VS Code + Live Server（推荐）
+   - 或 `npx serve`
+   - 或 `python -m http.server`
 
-### 方式二：命令行
-```bash
-# Node.js
-npx serve
+2. 打开 `http://localhost:3000`（或对应端口）。
 
-# Python 3
-python -m http.server
-```
-然后访问 `http://localhost:3000` 或 `http://localhost:8000`
-
-### 方式三：直接双击（需代码内嵌配置）
-由于已使用内嵌配置，双击 `index.html` 也能运行（但部分浏览器可能限制模块加载，建议使用 HTTP 服务器）。
+3. 享受游戏，尝试编辑地图并保存/加载。
 
 ---
 
-## 🎮 操作说明
+## 📌 扩展建议
 
-| 按键 | 功能 |
-|------|------|
-| `W A S D` | 控制角色移动 |
-| `鼠标左键` / `空格` | 向鼠标方向射击 |
-| `R` | 游戏结束后重新开始 |
-
----
-
-## 🔧 扩展建议
-
-1. **添加新敌人类型**：在 `CONFIG.enemy` 中定义 `types` 数组，在 `SpawnSystem` 中随机选择
-2. **大地图与摄像机**：创建 `Camera` 类，在 `Renderer` 中应用偏移
-3. **武器切换**：新增 `WeaponSystem`，在 `Player` 中持有当前武器
-4. **友军小队**：创建 `Ally` 类，随军衔提升生成
+- **新增地形类型**：在 `Map.js` 的 `Terrain` 和 `TERRAIN_COLORS` 中添加。
+- **增加地图大小**：调整 `CONFIG.map.cols/rows`，并同步 `world.width/height`。
+- **调整据点数量**：修改 `CONFIG.capturePoints` 数组。
+- **自定义地图**：使用编辑器制作复杂战场，保存后分享给其他玩家。
 
 ---
 
-## 📄 技术栈
-
-- 原生 JavaScript (ES6+)
-- HTML5 Canvas
-- ES Module (原生模块化)
-- 无第三方依赖
-
----
-
-## 📌 注意事项
-
-- 所有 `import` 语句必须带 `.js` 后缀
-- 使用 **命名导出** (`export const`) 而非 `export default`
-- 必须通过 HTTP 服务器运行（ES Module 限制）
-
----
+*文档版本：2.0 | 更新日期：2026-07-03*
