@@ -34,6 +34,38 @@ export class Teammate extends Entity {
         return { target, distance: minDist };
     }
 
+    // 寻找最近的敌方据点（用于进攻）
+    getClosestEnemyPoint() {
+        let target = null;
+        let minDist = Infinity;
+        for (const point of GameState.capturePoints) {
+            if (point.owner === 'player') continue; // 己方据点不去
+            const d = Math.hypot(point.x - this.x, point.y - this.y);
+            if (d < minDist) {
+                minDist = d;
+                target = point;
+            }
+        }
+        return { target, distance: minDist };
+    }
+
+    // 判断是否在己方据点内
+    isInFriendlyPoint() {
+        for (const point of GameState.capturePoints) {
+            if (point.owner === 'player' && this.contains(point)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // 检测自己是否在据点内
+    contains(point) {
+        const dx = point.x - this.x;
+        const dy = point.y - this.y;
+        return dx*dx + dy*dy < (point.radius + this.radius) ** 2;
+    }
+
     update() {
         if (GameState.gameOver || !this.alive) return;
         const player = GameState.player;
@@ -42,35 +74,68 @@ export class Teammate extends Entity {
         // 1. 寻找最近的敌人
         const { target, distance } = this.getClosestEnemy();
 
-        // 2. 移动逻辑：跟随玩家，同时保持战术机动
-        const dxToPlayer = player.x - this.x;
-        const dyToPlayer = player.y - this.y;
-        const distToPlayer = Math.hypot(dxToPlayer, dyToPlayer);
+        // 2. 寻找最近的敌方据点
+        const { target: captureTarget, distance: captureDist } = this.getClosestEnemyPoint();
+
+        // 3. 判断战术策略：
+        //    - 有敌人（< 400）-> 优先战斗
+        //    - 有非己方据点 -> 前往攻占（优先去最近的敌方据点）
+        //    - 所有据点都是己方的 -> 去最近的己方据点巡逻
+        const hasNearbyEnemy = target && distance < 400;
 
         let moveX = 0, moveY = 0;
+        let targetX = null, targetY = null;
 
-        if (target && distance < 350) {
-            // 有敌人在射程内，侧向移动（环绕）
+        if (hasNearbyEnemy) {
+            // 战斗模式：侧向环绕敌人
             const angleToEnemy = Math.atan2(target.y - this.y, target.x - this.x);
             moveX = -Math.sin(angleToEnemy) * 0.5;
             moveY = Math.cos(angleToEnemy) * 0.5;
+        } else if (captureTarget) {
+            // 有非己方据点 -> 前往攻占（任何距离）
+            targetX = captureTarget.x;
+            targetY = captureTarget.y;
+        } else {
+            // 所有据点都是己方的 -> 去最近的己方据点驻守
+            let nearestFriendly = null;
+            let nearestFriendlyDist = Infinity;
+            for (const point of GameState.capturePoints) {
+                if (point.owner === 'player') {
+                    const d = Math.hypot(point.x - this.x, point.y - this.y);
+                    if (d < nearestFriendlyDist) {
+                        nearestFriendlyDist = d;
+                        nearestFriendly = point;
+                    }
+                }
+            }
+            if (nearestFriendly) {
+                const dx = nearestFriendly.x - this.x;
+                const dy = nearestFriendly.y - this.y;
+                const dist = Math.hypot(dx, dy);
+                if (dist > 60) {
+                    targetX = nearestFriendly.x;
+                    targetY = nearestFriendly.y;
+                } else {
+                    // 已在据点附近，小幅巡逻
+                    moveX = (Math.random() - 0.5) * 0.4;
+                    moveY = (Math.random() - 0.5) * 0.4;
+                }
+            }
         }
 
-        // 如果离玩家太远，强制跟紧
-        if (distToPlayer > this.followDistance * 1.5) {
-            const angleToPlayer = Math.atan2(dyToPlayer, dxToPlayer);
-            moveX += Math.cos(angleToPlayer) * 0.8;
-            moveY += Math.sin(angleToPlayer) * 0.8;
-        } else if (distToPlayer > this.followDistance + 20) {
-            // 稍微靠近
-            const angleToPlayer = Math.atan2(dyToPlayer, dxToPlayer);
-            moveX += Math.cos(angleToPlayer) * 0.3;
-            moveY += Math.sin(angleToPlayer) * 0.3;
-        } else if (distToPlayer < this.followDistance - 30) {
-            // 太近，后退
-            const angleToPlayer = Math.atan2(dyToPlayer, dxToPlayer);
-            moveX -= Math.cos(angleToPlayer) * 0.2;
-            moveY -= Math.sin(angleToPlayer) * 0.2;
+        // 如果目标是据点，计算移动方向
+        if (targetX !== null && targetY !== null) {
+            const dx = targetX - this.x;
+            const dy = targetY - this.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist > 40) { // 还没到据点，继续前进
+                moveX = dx / dist;
+                moveY = dy / dist;
+            } else {
+                // 已到达据点附近，小幅徘徊
+                moveX = (Math.random() - 0.5) * 0.3;
+                moveY = (Math.random() - 0.5) * 0.3;
+            }
         }
 
         // 归一化并应用速度（考虑地形减速）

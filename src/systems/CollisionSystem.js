@@ -113,8 +113,11 @@ export const CollisionSystem = {
                             teammate.takeDamage(bullet.damage);
                             bulletUsed = true;
                             if (!teammate.alive) {
-                                console.log('💔 队友阵亡');
-                                // 立即移除（也可等全局过滤）
+                                console.log('💔 队友阵亡，加入重生队列');
+                                // 加入重生队列
+                                GameState.teammateRespawnQueue.push({
+                                    timer: GameState.config.teammate.respawnDelay
+                                });
                                 teammates.splice(j, 1);
                             }
                             break;

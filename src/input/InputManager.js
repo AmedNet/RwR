@@ -7,11 +7,31 @@ export const InputManager = {
 
         document.addEventListener('keydown', (e) => {
             const key = e.key.toLowerCase();
-            if (key === 'r' && GameState.gameOver) {
-                window.dispatchEvent(new CustomEvent('restartGame'));
-                e.preventDefault();
-                return;
+            
+            if (GameState.gameOver) {
+                // 永久战败，不能复活
+                if (GameState.permanentDefeat) {
+                    e.preventDefault();
+                    return;
+                }
+                // 死亡时：数字键 1-6 选择据点复活
+                const num = parseInt(e.key);
+                if (num >= 1 && num <= 6) {
+                    const playerPoints = GameState.capturePoints.filter(p => p.owner === 'player');
+                    if (playerPoints[num - 1]) {
+                        window.dispatchEvent(new CustomEvent('respawnPlayer', { detail: { pointIndex: num - 1 } }));
+                        e.preventDefault();
+                        return;
+                    }
+                }
+                if (key === 'r') {
+                    window.dispatchEvent(new CustomEvent('respawnPlayer'));
+                    e.preventDefault();
+                    return;
+                }
+                return; // 死亡状态下不处理其他按键
             }
+            
             if (key in GameState.keys) {
                 GameState.keys[key] = true;
                 e.preventDefault();
