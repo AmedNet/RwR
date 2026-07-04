@@ -211,6 +211,7 @@ export const InputManager = {
         // 鼠标点击射击/投掷
         canvas.addEventListener('mousedown', (e) => {
             if (e.button === 0 && GameState.player) {
+                GameState.mouse.down = true;
                 const weapon = GameState.getActiveWeapon();
                 if (weapon && weapon.config.type === 'grenade') {
                     GameState.player.throwGrenade();
@@ -219,6 +220,18 @@ export const InputManager = {
                 }
                 e.preventDefault();
             }
+        });
+
+        // 鼠标释放
+        canvas.addEventListener('mouseup', (e) => {
+            if (e.button === 0) {
+                GameState.mouse.down = false;
+            }
+        });
+
+        // 窗口失焦时重置鼠标状态
+        window.addEventListener('blur', () => {
+            GameState.mouse.down = false;
         });
 
         canvas.addEventListener('contextmenu', (e) => e.preventDefault());

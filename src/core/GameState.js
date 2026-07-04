@@ -15,7 +15,7 @@ export const GameState = {
     rp: 0, // RP值（金钱）
     map: null,
     keys: { w: false, a: false, s: false, d: false },
-    mouse: { x: 0, y: 0 },
+    mouse: { x: 0, y: 0, down: false },
     kills: 0,
     score: 0,
     gameOver: false,

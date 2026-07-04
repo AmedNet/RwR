@@ -4,7 +4,7 @@ import { GameState } from '../core/GameState.js';
 import { EventBus } from '../core/EventBus.js';
 import { Bullet } from './Bullet.js';
 import { Grenade } from './Grenade.js';
-import { WeaponRegistry } from '../core/WeaponRegistry.js';
+import { WeaponRegistry, FireMode } from '../core/WeaponRegistry.js';
 import { Weapon } from '../core/Weapon.js';
 
 export class Player extends Entity {
@@ -22,24 +22,49 @@ export class Player extends Entity {
         this.switchAnimDuration = 15;
         this.isSwitching = false;
         this.switchFromSlot = -1;
+        // 射击模式相关
+        this.burstCount = 0;        // 三连射剩余发数
+        this.burstTimer = 0;        // 三连射间隔计时器
+        this.lastMouseDown = false; // 上一帧鼠标状态（用于检测按下边沿）
+        // 通用武器贴图字典
+        this.weaponImages = {};
+        this.weaponImagesLoaded = {};
+        this.reloadImages = {};
+        this.reloadImagesLoaded = {};
         this.loadWeaponImage('beretta92');
         this.loadWeaponImage('knife');
         this.loadWeaponImage('m67');
+        this.loadWeaponImage('ak47');
     }
 
     loadWeaponImage(weaponId) {
+        const config = WeaponRegistry[weaponId];
+        if (!config) return;
+        // 加载普通贴图
         const img = new Image();
-        img.src = WeaponRegistry[weaponId].imagePath;
-        if (weaponId === 'beretta92') {
-            this.berettaImage = img;
-            img.onload = () => this.berettaImageLoaded = true;
-        } else if (weaponId === 'knife') {
-            this.knifeImage = img;
-            img.onload = () => this.knifeImageLoaded = true;
-        } else if (weaponId === 'm67') {
-            this.m67Image = img;
-            img.onload = () => this.m67ImageLoaded = true;
+        img.src = config.imagePath;
+        this.weaponImages[weaponId] = img;
+        this.weaponImagesLoaded[weaponId] = false;
+        img.onload = () => { this.weaponImagesLoaded[weaponId] = true; };
+        // 加载换弹贴图（如果有）
+        if (config.reloadImagePath) {
+            const reloadImg = new Image();
+            reloadImg.src = config.reloadImagePath;
+            this.reloadImages[weaponId] = reloadImg;
+            this.reloadImagesLoaded[weaponId] = false;
+            reloadImg.onload = () => { this.reloadImagesLoaded[weaponId] = true; };
         }
+    }
+
+    // 通用获取武器贴图方法
+    getWeaponImage(weaponId, isReloading = false) {
+        if (isReloading && this.reloadImagesLoaded[weaponId]) {
+            return this.reloadImages[weaponId];
+        }
+        if (this.weaponImagesLoaded[weaponId]) {
+            return this.weaponImages[weaponId];
+        }
+        return null;
     }
 
     getRankName() {
@@ -160,6 +185,49 @@ export class Player extends Entity {
         this.x = Math.max(this.radius, Math.min(world.width - this.radius, this.x));
         this.y = Math.max(this.radius, Math.min(world.height - this.radius, this.y));
         if (this.shootCooldown > 0) this.shootCooldown--;
+
+        // 处理三连射
+        if (this.burstCount > 0) {
+            this.burstTimer--;
+            if (this.burstTimer <= 0) {
+                this.shoot();
+                this.burstCount--;
+                this.burstTimer = 4; // 三连射每发间隔4帧
+            }
+        }
+
+        // 根据射击模式处理鼠标输入
+        if (weapon) {
+            const fireMode = weapon.config.fireMode || FireMode.SEMI;
+            const mouseDown = GameState.mouse.down;
+            const mouseJustPressed = mouseDown && !this.lastMouseDown;
+
+            switch (fireMode) {
+                case FireMode.AUTO:
+                    // 全自动：长按连发
+                    if (mouseDown) {
+                        this.shoot();
+                    }
+                    break;
+                case FireMode.BURST:
+                    // 三连射：按一次打3发
+                    if (mouseJustPressed && this.burstCount === 0) {
+                        this.burstCount = 3;
+                        this.burstTimer = 0;
+                        this.shoot(); // 立即打第一发
+                        this.burstCount--;
+                    }
+                    break;
+                case FireMode.SEMI:
+                default:
+                    // 半自动：只在按下瞬间射击
+                    if (mouseJustPressed) {
+                        this.shoot();
+                    }
+                    break;
+            }
+            this.lastMouseDown = mouseDown;
+        }
     }
 
     shoot() {
@@ -208,17 +276,8 @@ export class Player extends Entity {
         ctx.stroke();
 
         const weapon = this.getCurrentWeapon();
-        let weaponImage, weaponLoaded;
-        if (weapon.id === 'knife') {
-            weaponImage = this.knifeImage;
-            weaponLoaded = this.knifeImageLoaded;
-        } else if (weapon.id === 'm67') {
-            weaponImage = this.m67Image;
-            weaponLoaded = this.m67ImageLoaded;
-        } else {
-            weaponImage = this.berettaImage;
-            weaponLoaded = this.berettaImageLoaded;
-        }
+        const weaponImage = this.getWeaponImage(weapon.id, weapon.isReloading);
+        const weaponLoaded = weaponImage !== null;
 
         if (weaponImage && weaponLoaded) {
             ctx.save();
