@@ -94,7 +94,10 @@ export class Player extends Entity {
     switchWeapon(slot) {
         if (slot < 0 || slot > 3 || slot === GameState.activeWeaponSlot || !GameState.inventory[slot]) return;
         const current = GameState.getActiveWeapon();
-        if (current) current.isReloading = false;
+        if (current) {
+            current.isReloading = false;
+            current.clearJustEmptied(); // 切换武器时清除打空标记
+        }
         this.isSwitching = true;
         this.switchAnimTimer = this.switchAnimDuration;
         this.switchFromSlot = GameState.activeWeaponSlot;

@@ -51,7 +51,8 @@ export const WeaponRegistry = {
         icon: 'src/pkg/weapon/Beretta92/Beretta92.png',
         imagePath: 'src/pkg/weapon/Beretta92/Beretta92.png',
         range: Infinity,
-        fireMode: FireMode.SEMI  // 半自动
+        fireMode: FireMode.SEMI,  // 半自动
+        canChamberedReload: true  // 支持空仓挂机
     },
 
     // AK-47 突击步枪 - 连射武器
@@ -70,7 +71,8 @@ export const WeaponRegistry = {
         imagePath: 'src/pkg/weapon/ak47/ak47.png',
         reloadImagePath: 'src/pkg/weapon/ak47/ak47_Reload.png', // 换弹贴图
         range: Infinity,
-        fireMode: FireMode.AUTO  // 全自动
+        fireMode: FireMode.AUTO,  // 全自动
+        canChamberedReload: true  // 支持空仓挂机
     },
 
     // M4A1 卡宾枪 - 三连发武器
@@ -89,7 +91,8 @@ export const WeaponRegistry = {
         imagePath: 'src/pkg/weapon/m4a1/m4a1.png',
         reloadImagePath: 'src/pkg/weapon/m4a1/m4a1_Reload.png', // 换弹贴图
         range: Infinity,
-        fireMode: FireMode.BURST  // 三连发
+        fireMode: FireMode.BURST,  // 三连发
+        canChamberedReload: true   // 支持空仓挂机
     },
 
     // M67 手雷 - 投掷爆炸物

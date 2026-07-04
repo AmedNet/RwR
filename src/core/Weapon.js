@@ -13,6 +13,8 @@ export class Weapon {
         this.ammo = config.magSize; // 当前弹药，近战为 null
         this.isReloading = false;
         this.reloadTimer = 0;
+        this.isChamberedReload = false; // 空仓挂机快速换弹标记
+        this.justEmptied = false; // 打空后未切枪标记
     }
 
     // 能否射击
@@ -26,6 +28,13 @@ export class Weapon {
     consumeAmmo() {
         if (this.config.type === 'melee') return;
         if (this.ammo > 0) this.ammo--;
+        // 弹药打空时设置标记（空仓挂机机制）
+        if (this.ammo === 0) this.justEmptied = true;
+    }
+    
+    // 清除打空标记（切换武器时调用）
+    clearJustEmptied() {
+        this.justEmptied = false;
     }
 
     // 开始换弹
@@ -34,6 +43,8 @@ export class Weapon {
         if (this.isReloading) return;
         if (this.ammo >= this.config.magSize) return;
         this.isReloading = true;
+        // 空仓挂机：弹药>=1 且武器支持时，换弹时间减少45%
+        this.isChamberedReload = (this.ammo >= 1 && this.config.canChamberedReload === true);
         // 支持随机换弹时间 { min, max } 或固定数值
         const rt = this.config.reloadTime;
         if (typeof rt === 'object' && rt.min !== undefined) {
@@ -43,6 +54,18 @@ export class Weapon {
             this.reloadTimer = rt;
             this.reloadTimeTotal = rt;
         }
+        // 空仓挂机加速
+        if (this.isChamberedReload) {
+            this.reloadTimer = Math.floor(this.reloadTimer * 0.55);
+            this.reloadTimeTotal = this.reloadTimer;
+        }
+        // 打空后即时换弹加速（弹药=0且不切枪）：换弹时间减少30%
+        if (this.justEmptied && this.config.canChamberedReload === true) {
+            this.reloadTimer = Math.floor(this.reloadTimer * 0.7);
+            this.reloadTimeTotal = this.reloadTimer;
+        }
+        // 清除打空标记
+        this.justEmptied = false;
     }
 
     // 每帧更新换弹
@@ -50,9 +73,15 @@ export class Weapon {
         if (!this.isReloading) return;
         this.reloadTimer--;
         if (this.reloadTimer <= 0) {
-            this.ammo = this.config.magSize;
+            // 空仓挂机：换弹完成后弹药量 = magSize + 1
+            if (this.isChamberedReload) {
+                this.ammo = this.config.magSize + 1;
+            } else {
+                this.ammo = this.config.magSize;
+            }
             this.isReloading = false;
             this.reloadTimer = 0;
+            this.isChamberedReload = false;
         }
     }
 
