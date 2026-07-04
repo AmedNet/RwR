@@ -24,25 +24,25 @@ const CONFIG = {
         radius: 18,
         shootDelay: 12,
         bulletSpeed: 7,
-        damage: 20
+        damage: 34         // ×1.7
     },
     enemy: {
-        health: 30,
+        health: 100,         // 与友军一致
         speedMin: 1.2,
         speedMax: 2.0,
         radius: 16,
         shootDelayMin: 40,
         shootDelayMax: 70,
-        damage: 10,
+        damage: 17,         // ×1.7
         spawnBaseRate: 30,
         maxEnemies: 30
     },
     teammate: {
-        health: 60,
+        health: 100,
         speed: 2.5,
         radius: 15,
         shootDelay: 25,
-        damage: 15,
+        damage: 26,         // ×1.7
         bulletSpeed: 6,
         maxCount: 50,
         respawnDelay: 360 // 6秒后重生

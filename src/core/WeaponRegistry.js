@@ -23,7 +23,7 @@ export const WeaponRegistry = {
         id: 'knife',
         name: '匕首 919',
         type: WeaponType.MELEE,
-        damage: 5,
+        damage: 9,          // ×1.7
         shootDelay: 25,
         bulletSpeed: 0,
         magSize: null,      // 近战无弹药
@@ -41,7 +41,7 @@ export const WeaponRegistry = {
         id: 'beretta92',
         name: 'Beretta 92',
         type: WeaponType.PISTOL,
-        damage: 20,
+        damage: 34,         // ×1.7
         shootDelay: 12,
         bulletSpeed: 9,
         magSize: 17,
@@ -59,10 +59,10 @@ export const WeaponRegistry = {
         id: 'ak47',
         name: 'AK-47',
         type: WeaponType.RIFLE,
-        damage: 30,
-        shootDelay: 11,         // 连射速度适中（手枪是12）
-        bulletSpeed: 12,       // 子弹速度快（手枪是9）
-        magSize: 30,           // 30发弹容量
+        damage: 51,         // ×1.7
+        shootDelay: 11,     // 连射速度适中（手枪是12）
+        bulletSpeed: 12,    // 子弹速度快（手枪是9）
+        magSize: 30,        // 30发弹容量
         reloadTime: { min: 180, max: 300 }, // 与手枪一致 3-5秒
         buyPrice: 300,
         sellPrice: 150,
@@ -78,10 +78,10 @@ export const WeaponRegistry = {
         id: 'm4a1',
         name: 'M4A1',
         type: WeaponType.RIFLE,
-        damage: 27,
-        shootDelay: 7,          // 比AK更快（AK是11）
-        bulletSpeed: 14,        // 比AK更快（AK是12）
-        magSize: 25,            // 25发弹容量
+        damage: 46,         // ×1.7
+        shootDelay: 7,      // 比AK更快（AK是11）
+        bulletSpeed: 14,    // 比AK更快（AK是12）
+        magSize: 25,        // 25发弹容量
         reloadTime: { min: 180, max: 300 }, // 与AK一致 3-5秒
         buyPrice: 300,
         sellPrice: 150,
@@ -97,17 +97,17 @@ export const WeaponRegistry = {
         id: 'm67',
         name: 'M67 手雷',
         type: WeaponType.GRENADE,
-        damage: 60,
-        shootDelay: 0,        // 无射速延迟
+        damage: 102,        // ×1.7
+        shootDelay: 0,      // 无射速延迟
         bulletSpeed: 0,
-        magSize: 4,           // 堆叠4枚
+        magSize: 4,         // 堆叠4枚
         reloadTime: 0,
         buyPrice: 70,
         sellPrice: 35,
         icon: 'src/pkg/weapon/M67/M67.png',
         imagePath: 'src/pkg/weapon/M67/M67.png',
-        range: 400,           // 最大投掷距离
-        fuseTime: 120,        // 引信2秒
+        range: 400,         // 最大投掷距离
+        fuseTime: 120,      // 引信2秒
         explosionRadius: 120, // 爆炸半径
         fireMode: FireMode.SEMI
     }

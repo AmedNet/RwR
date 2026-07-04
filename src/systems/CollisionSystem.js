@@ -166,44 +166,7 @@ export const CollisionSystem = {
             }
         }
 
-        // ---- 敌人 vs 玩家/队友（碰撞伤害） ----
-        for (let i = enemies.length - 1; i >= 0; i--) {
-            const enemy = enemies[i];
-            if (!enemy.alive) continue;
-            // 对玩家
-            let dx = enemy.x - player.x;
-            let dy = enemy.y - player.y;
-            if (dx*dx + dy*dy < (enemy.radius + player.radius) ** 2) {
-                player.takeDamage(5);
-                EventBus.emit('player_hurt', { health: player.health });
-                if (!player.alive) {
-                    GameState.gameOver = true;
-                    EventBus.emit('game_over');
-                }
-                const angle = Math.atan2(dy, dx);
-                enemy.x += Math.cos(angle) * 20;
-                enemy.y += Math.sin(angle) * 20;
-                continue;
-            }
-            // 对队友
-            for (let j = teammates.length - 1; j >= 0; j--) {
-                const teammate = teammates[j];
-                if (!teammate.alive) continue;
-                dx = enemy.x - teammate.x;
-                dy = enemy.y - teammate.y;
-                if (dx*dx + dy*dy < (enemy.radius + teammate.radius) ** 2) {
-                    teammate.takeDamage(5);
-                    if (!teammate.alive) {
-                        console.log('💔 队友阵亡');
-                        teammates.splice(j, 1);
-                    }
-                    const angle = Math.atan2(dy, dx);
-                    enemy.x += Math.cos(angle) * 20;
-                    enemy.y += Math.sin(angle) * 20;
-                    break;
-                }
-            }
-        }
+        // ---- 敌人 vs 玩家/队友（碰撞伤害已移除）----
 
         GameState.bullets = GameState.bullets.filter(b => b.alive);
     }
