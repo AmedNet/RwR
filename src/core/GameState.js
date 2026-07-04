@@ -1,4 +1,6 @@
 // src/core/GameState.js
+import { Weapon } from './Weapon.js';
+
 export const GameState = {
     player: null,
     enemies: [],
@@ -7,7 +9,7 @@ export const GameState = {
     capturePoints: [],
     arsenal: null, // 军械库实例
     arsenalOpen: false, // 军械库界面是否打开
-    inventory: [null, null, null, null], // 背包，4个位置
+    inventory: [null, null, null, null], // 背包，4个位置，存储 Weapon 实例或 null
     inventoryOpen: false, // 背包是否打开
     rp: 0, // RP值（金钱）
     map: null,
@@ -24,6 +26,22 @@ export const GameState = {
     selectedSpawnPoint: null, // 数字选择时临时存储
     permanentDefeat: false, // 是否永久战败（无据点可复活）
     teammateRespawnQueue: [], // 等待重生的队友 { x, y, timer }
+    // 武器系统
+    activeWeaponSlot: 0, // 当前装备的背包位置 (0-3)
+    arsenalSelectedSlot: 0, // 军械库中选中的背包位置
+
+    // 获取当前装备的武器
+    getActiveWeapon() {
+        return this.inventory[this.activeWeaponSlot];
+    },
+
+    // 切换武器
+    switchWeapon(slot) {
+        if (slot < 0 || slot > 3) return false;
+        if (this.activeWeaponSlot === slot) return false;
+        this.activeWeaponSlot = slot;
+        return true;
+    },
 
     reset() {
         this.enemies = [];
@@ -34,8 +52,12 @@ export const GameState = {
         this.score = 0;
         this.gameOver = false;
         this.spawnTimer = 0;
-        this.inventory = [null, null, null, null];
+        // 初始化：背包第1格放 Beretta 92
+        this.inventory = [new Weapon('beretta92'), null, null, null];
+        this.activeWeaponSlot = 0;
+        this.arsenalSelectedSlot = 0;
         this.inventoryOpen = false;
+        this.arsenalOpen = false;
         this.rp = 0;
     }
 };
