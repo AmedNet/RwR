@@ -60,7 +60,7 @@ export const WeaponRegistry = {
         name: 'AK-47',
         type: WeaponType.RIFLE,
         damage: 30,
-        shootDelay: 8,         // 连射速度适中（手枪是12）
+        shootDelay: 11,         // 连射速度适中（手枪是12）
         bulletSpeed: 12,       // 子弹速度快（手枪是9）
         magSize: 30,           // 30发弹容量
         reloadTime: { min: 180, max: 300 }, // 与手枪一致 3-5秒

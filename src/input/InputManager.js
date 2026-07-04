@@ -3,6 +3,7 @@ import { GameState } from '../core/GameState.js';
 import { Weapon } from '../core/Weapon.js';
 import { WeaponRegistry } from '../core/WeaponRegistry.js';
 import { UIManager } from '../rendering/UIManager.js';
+import { Renderer } from '../rendering/Renderer.js';
 
 export const InputManager = {
     setup() {
@@ -126,7 +127,51 @@ export const InputManager = {
                 return;
             }
 
+            // ====== Debug面板打开时的处理 ======
+            if (GameState.debugOpen) {
+                // ESC 关闭Debug面板
+                if (key === 'escape') {
+                    GameState.debugOpen = false;
+                    e.preventDefault();
+                    return;
+                }
+                // 9键按下时按1键关闭
+                if (key === '1' && GameState.debugKey9Pressed) {
+                    GameState.debugOpen = false;
+                    GameState.debugKey9Pressed = false;
+                    e.preventDefault();
+                    return;
+                }
+                return;
+            }
+
             // ====== 正常游戏操作 ======
+            
+            // 9键追踪（用于组合键）
+            if (key === '9') {
+                GameState.debugKey9Pressed = true;
+            }
+            
+            // 9+1 组合键打开Debug面板
+            if (key === '1' && GameState.debugKey9Pressed) {
+                GameState.debugOpen = true;
+                GameState.debugKey9Pressed = false;
+                console.log('🐛 打开Debug面板');
+                e.preventDefault();
+                return;
+            }
+            
+            // K键自杀
+            if (key === 'k') {
+                if (GameState.player && GameState.player.alive) {
+                    GameState.player.alive = false;
+                    GameState.player.health = 0;
+                    GameState.gameOver = true;
+                    console.log('💀 玩家自杀');
+                }
+                e.preventDefault();
+                return;
+            }
             
             // 数字键 1-4：切换武器
             const num = parseInt(e.key);
@@ -208,19 +253,55 @@ export const InputManager = {
             GameState.mouse.y = (e.clientY - rect.top) * scaleY;
         });
 
-        // 鼠标点击射击/投掷
-        canvas.addEventListener('mousedown', (e) => {
-            if (e.button === 0 && GameState.player) {
-                GameState.mouse.down = true;
-                const weapon = GameState.getActiveWeapon();
-                if (weapon && weapon.config.type === 'grenade') {
-                    GameState.player.throwGrenade();
-                } else {
-                    GameState.player.shoot();
+// 鼠标点击射击/投掷
+canvas.addEventListener('mousedown', (e) => {
+    if (e.button === 0) {
+        GameState.mouse.down = true;
+
+        // Debug面板点击处理
+        if (GameState.debugOpen) {
+            const rect = canvas.getBoundingClientRect();
+            const logicalWidth = canvas.clientWidth;
+            const logicalHeight = canvas.clientHeight;
+            const scaleX = logicalWidth / rect.width;
+            const scaleY = logicalHeight / rect.height;
+            const clickX = (e.clientX - rect.left) * scaleX;
+            const clickY = (e.clientY - rect.top) * scaleY;
+
+            if (Renderer.debugButtons) {
+                for (const btn of Renderer.debugButtons) {
+                    if (clickX >= btn.x && clickX <= btn.x + btn.w &&
+                        clickY >= btn.y && clickY <= btn.y + btn.h) {
+                        if (btn.value) {
+                            GameState.rp += btn.value;
+                            console.log(`🐛 增加 ${btn.value} RP`);
+                            UIManager.updateAll(GameState);
+                        } else if (btn.action === 'heal') {
+                            if (GameState.player) {
+                                GameState.player.health = GameState.player.maxHealth;
+                                console.log('🐛 满血');
+                            }
+                        }
+                        break;
+                    }
                 }
-                e.preventDefault();
             }
-        });
+            e.preventDefault();
+            return;
+        }
+
+        // 正常射击
+        if (GameState.player) {
+            const weapon = GameState.getActiveWeapon();
+            if (weapon && weapon.config.type === 'grenade') {
+                GameState.player.throwGrenade();
+            } else {
+                GameState.player.shoot();
+            }
+        }
+        e.preventDefault();
+    }
+});
 
         // 鼠标释放
         canvas.addEventListener('mouseup', (e) => {

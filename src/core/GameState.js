@@ -32,6 +32,10 @@ export const GameState = {
     arsenalSelectedSlot: 0, // 军械库中选中的背包位置
     arsenalSelectedIndex: 0, // 军械库中选中的商品索引
 
+    // Debug系统
+    debugOpen: false, // Debug面板是否打开
+    debugKey9Pressed: false, // 追踪9键状态（用于组合键）
+
     // 获取当前装备的武器
     getActiveWeapon() {
         return this.inventory[this.activeWeaponSlot];
