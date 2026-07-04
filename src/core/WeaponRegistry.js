@@ -7,7 +7,8 @@ export const WeaponType = {
     RIFLE: 'rifle',      // 步枪（预留）
     SHOTGUN: 'shotgun',  // 霰弹枪（预留）
     SNIPER: 'sniper',    // 狙击枪（预留）
-    GRENADE: 'grenade'   // 手雷
+    GRENADE: 'grenade',  // 手雷
+    MEDICAL: 'medical'   // 医疗用品
 };
 
 // 射击模式
@@ -23,7 +24,7 @@ export const WeaponRegistry = {
         id: 'knife',
         name: '匕首 919',
         type: WeaponType.MELEE,
-        damage: 9,
+        damage: 67,
         shootDelay: 25,
         bulletSpeed: 0,
         magSize: null,
@@ -163,6 +164,20 @@ export const WeaponRegistry = {
         range: 400,
         fuseTime: 120,
         explosionRadius: 120,
+        fireMode: FireMode.SEMI
+    },
+
+    // 医疗包 - 恢复血量
+    cat: {
+        id: 'cat',
+        name: '医疗包',
+        type: WeaponType.MEDICAL,
+        healAmount: 30,
+        magSize: 3,
+        buyPrice: 30,
+        sellPrice: 15,
+        icon: 'src/pkg/weapon/CAT/CAT.png',
+        imagePath: 'src/pkg/weapon/CAT/CAT.png',
         fireMode: FireMode.SEMI
     }
 };

@@ -39,7 +39,10 @@ export class Weapon {
     }
 
     startReload() {
+        // 近战、医疗用品、手雷不能换弹
         if (this.config.type === 'melee') return;
+        if (this.config.type === 'medical') return;
+        if (this.config.type === 'grenade') return;
         if (this.isReloading) return;
         if (this.ammo >= this.config.magSize) return;
         this.isReloading = true;
@@ -80,7 +83,8 @@ export class Weapon {
 
     getReloadProgress() {
         if (!this.isReloading) return 1;
-        const total = this.reloadTimeTotal || this.config.reloadTime.max || this.config.reloadTime;
+        const rt = this.config.reloadTime;
+        const total = this.reloadTimeTotal || (rt && rt.max) || rt || 1;
         return 1 - (this.reloadTimer / total);
     }
 
@@ -125,10 +129,12 @@ export class Weapon {
 
     // 获取射击角度偏移（后坐力 + 随机散布）
     getShotAngleOffset() {
-        // 三连发模式：完全无偏移（三发子弹完全重合）
+        // 三连射模式：使用较小的固定散布，三发子弹紧密但非完全一个点
         const isBurstMode = this.config.fireMode === 'burst';
         if (isBurstMode) {
-            return 0; // 三连发完全无偏移，三发子弹完全重合
+            const spread = this.config.spread;
+            const burstSpread = spread ? spread.base * 0.5 : 0.01;
+            return (Math.random() - 0.5) * 2 * burstSpread;
         }
         const spread = this.config.spread;
         const spreadOffset = (Math.random() - 0.5) * 2 * this.currentSpread;

@@ -37,8 +37,8 @@ export function drawWeaponHUD(ctx, renderer) {
         ctx.textBaseline = 'middle';
         ctx.fillText(weapon.config.name, panelX + 75, panelY + 28);
 
-        // 弹药信息
-        if (weapon.config.type !== 'melee') {
+        // 弹药信息（排除近战、医疗、手雷）
+        if (weapon.config.type !== 'melee' && weapon.config.type !== 'medical' && weapon.config.type !== 'grenade') {
             if (weapon.isReloading) {
                 const progress = weapon.getReloadProgress();
                 ctx.fillStyle = '#FFC107';

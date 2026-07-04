@@ -6,6 +6,7 @@ import { Bullet } from './Bullet.js';
 import { Grenade } from './Grenade.js';
 import { WeaponRegistry, FireMode } from '../core/WeaponRegistry.js';
 import { Weapon } from '../core/Weapon.js';
+import { EffectsManager } from '../utils/EffectsManager.js';
 
 export class Player extends Entity {
     constructor(x, y, config) {
@@ -36,6 +37,7 @@ export class Player extends Entity {
         this.loadWeaponImage('m67');
         this.loadWeaponImage('ak47');
         this.loadWeaponImage('m4a1');
+        this.loadWeaponImage('cat'); // 医疗包
     }
 
     loadWeaponImage(weaponId) {
@@ -112,7 +114,7 @@ export class Player extends Entity {
     throwGrenade() {
         // 从任意槽位查找手雷
         let grenadeSlot = -1;
-        for (let i = 0; i < 4; i++) {
+        for (let i = 0; i < GameState.inventory.length; i++) {
             const w = GameState.inventory[i];
             if (w && w.id === 'm67' && w.ammo > 0) { grenadeSlot = i; break; }
         }
@@ -247,6 +249,12 @@ export class Player extends Entity {
         // 手雷类型武器不能射击，只能用G键投掷
         if (weapon.config.type === 'grenade') return;
 
+        // 医疗包：治疗自己（优先）或队友
+        if (weapon.config.type === 'medical') {
+            this.useMedical(weapon);
+            return;
+        }
+
         const mouse = GameState.mouse;
         const screenX = this.x - GameState.camera.x;
         const screenY = this.y - GameState.camera.y;
@@ -273,6 +281,87 @@ export class Player extends Entity {
         weapon.consumeAmmo();
         weapon.applyRecoilAndSpread(); // 射击后增加后坐力和散布
         this.shootCooldown = weapon.config.shootDelay;
+    }
+
+    // 使用医疗包
+    useMedical(weapon) {
+        if (!weapon || weapon.config.type !== 'medical') return;
+        
+        const healAmount = weapon.config.healAmount || 30;
+        const currentSlot = GameState.activeWeaponSlot;
+        
+        // 优先治疗自己（只要自己不满血）
+        if (this.health < this.maxHealth) {
+            this.health = Math.min(this.health + healAmount, this.maxHealth);
+            console.log(`💊 使用医疗包，恢复 ${healAmount} 血量`);
+            EffectsManager.spawnHealEffect(this.x, this.y, healAmount);
+            weapon.consumeAmmo(); // 消耗医疗包
+            
+            // 如果医疗包用完，清空槽位并切换武器
+            if (weapon.ammo <= 0) {
+                GameState.inventory[currentSlot] = null;
+                this.autoSwitchToNextWeapon();
+            }
+            
+            this.shootCooldown = 20;
+            return;
+        }
+        
+        // 自己满血时，检测面前是否有队友可以治疗
+        const mouse = GameState.mouse;
+        const screenX = this.x - GameState.camera.x;
+        const screenY = this.y - GameState.camera.y;
+        const angle = Math.atan2(mouse.y - screenY, mouse.x - screenX);
+        
+        // 检测鼠标方向上的队友（距离 < 100）
+        let nearestTeammate = null;
+        let nearestDist = 100; // 最大治疗距离
+        
+        for (const teammate of GameState.teammates) {
+            if (!teammate.alive) continue;
+            const dx = teammate.x - this.x;
+            const dy = teammate.y - this.y;
+            const dist = Math.hypot(dx, dy);
+            
+            // 检查是否在鼠标方向附近（角度差 < 30度）
+            const angleToTeammate = Math.atan2(dy, dx);
+            let angleDiff = Math.abs(angleToTeammate - angle);
+            if (angleDiff > Math.PI) angleDiff = Math.PI * 2 - angleDiff;
+            
+            if (dist < nearestDist && angleDiff < Math.PI / 6) { // 30度 = PI/6
+                nearestDist = dist;
+                nearestTeammate = teammate;
+            }
+        }
+        
+        if (nearestTeammate && nearestTeammate.health < nearestTeammate.maxHealth) {
+            nearestTeammate.health = Math.min(nearestTeammate.health + healAmount, nearestTeammate.maxHealth);
+            console.log(`💊 为队友 ${nearestTeammate.id || '队友'} 恢复 ${healAmount} 血量`);
+            EffectsManager.spawnHealEffect(nearestTeammate.x, nearestTeammate.y, healAmount);
+            weapon.consumeAmmo(); // 消耗医疗包
+            
+            // 如果医疗包用完，清空槽位并切换武器
+            if (weapon.ammo <= 0) {
+                GameState.inventory[currentSlot] = null;
+                this.autoSwitchToNextWeapon();
+            }
+            
+            this.shootCooldown = 20;
+        } else {
+            console.log('💊 血量已满，面前无需要治疗的队友');
+        }
+    }
+    
+    // 自动切换到下一个可用武器
+    autoSwitchToNextWeapon() {
+        for (let i = 0; i < GameState.inventory.length; i++) {
+            if (GameState.inventory[i]) {
+                GameState.activeWeaponSlot = i;
+                return;
+            }
+        }
+        // 如果没有武器，切换到空槽位（会使用匕首）
+        GameState.activeWeaponSlot = 0;
     }
 
     draw(ctx) {

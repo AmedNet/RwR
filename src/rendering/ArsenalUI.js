@@ -91,7 +91,16 @@ export function drawArsenalShop(ctx, renderer) {
         ctx.fillText(config.name, itemX - 120, itemY + 32);
         ctx.fillStyle = '#aaa';
         ctx.font = '14px sans-serif';
-        const typeText = config.type === 'grenade' ? `装填 ${config.magSize} 发 | 手雷` : `弹容量 ${config.magSize} | ${config.type === 'pistol' ? '手枪' : '步枪'}`;
+        let typeText;
+        if (config.type === 'grenade') {
+            typeText = `装填 ${config.magSize} 发 | 手雷`;
+        } else if (config.type === 'medical') {
+            typeText = `数量 ${config.magSize} | 医疗用品`;
+        } else if (config.type === 'pistol') {
+            typeText = `弹容量 ${config.magSize} | 手枪`;
+        } else {
+            typeText = `弹容量 ${config.magSize} | 步枪`;
+        }
         ctx.fillText(typeText, itemX - 120, itemY + 58);
 
         // 价格

@@ -8,7 +8,8 @@ export const ParticleType = {
     KILL: 3,     // 击杀提示
     CAPTURE: 4,   // 占领据点
     GRENADE_BLAST: 5, // 手雷爆炸
-    SMOKE: 6     // 烟雾
+    SMOKE: 6,    // 烟雾
+    HEAL: 7      // 治疗
 };
 
 export const EffectsManager = {
@@ -110,6 +111,36 @@ export const EffectsManager = {
             life: 40,
             maxLife: 40,
             vy: -2.5 // 向上飘
+        });
+    },
+
+    // 生成治疗效果
+    spawnHealEffect(x, y, amount) {
+        // 绿色粒子向上飘散
+        for (let i = 0; i < 12; i++) {
+            const angle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 0.8;
+            const speed = 1.5 + Math.random() * 2.5;
+            this.particles.push({
+                x: x + (Math.random() - 0.5) * 20,
+                y: y + (Math.random() - 0.5) * 10,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                life: 30 + Math.random() * 20,
+                maxLife: 50,
+                color: ['#4CAF50', '#81C784', '#A5D6A7', '#66BB6A'][Math.floor(Math.random() * 4)],
+                size: 3 + Math.random() * 3,
+                type: ParticleType.HEAL
+            });
+        }
+
+        // 显示治疗数字
+        this.damageNumbers.push({
+            x, y: y - 20,
+            text: `+${amount}`,
+            isHeal: true,
+            life: 50,
+            maxLife: 50,
+            vy: -1.5 // 向上飘
         });
     },
 
@@ -230,8 +261,12 @@ export const EffectsManager = {
             // 阴影
             ctx.fillStyle = 'rgba(0,0,0,0.6)';
             ctx.fillText(d.text, 1, 1);
-            // 文字颜色
-            ctx.fillStyle = d.isPlayer ? '#ff5252' : '#4CAF50';
+            // 文字颜色：治疗数字用亮绿色
+            if (d.isHeal) {
+                ctx.fillStyle = '#69F0AE';
+            } else {
+                ctx.fillStyle = d.isPlayer ? '#ff5252' : '#4CAF50';
+            }
             ctx.fillText(d.text, 0, 0);
             ctx.restore();
         }
