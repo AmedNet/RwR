@@ -73,6 +73,25 @@ export const WeaponRegistry = {
         fireMode: FireMode.AUTO  // 全自动
     },
 
+    // M4A1 卡宾枪 - 三连发武器
+    m4a1: {
+        id: 'm4a1',
+        name: 'M4A1',
+        type: WeaponType.RIFLE,
+        damage: 27,
+        shootDelay: 7,          // 比AK更快（AK是11）
+        bulletSpeed: 14,        // 比AK更快（AK是12）
+        magSize: 25,            // 25发弹容量
+        reloadTime: { min: 180, max: 300 }, // 与AK一致 3-5秒
+        buyPrice: 300,
+        sellPrice: 150,
+        icon: 'src/pkg/weapon/m4a1/m4a1.png',
+        imagePath: 'src/pkg/weapon/m4a1/m4a1.png',
+        reloadImagePath: 'src/pkg/weapon/m4a1/m4a1_Reload.png', // 换弹贴图
+        range: Infinity,
+        fireMode: FireMode.BURST  // 三连发
+    },
+
     // M67 手雷 - 投掷爆炸物
     m67: {
         id: 'm67',

@@ -35,6 +35,7 @@ export class Player extends Entity {
         this.loadWeaponImage('knife');
         this.loadWeaponImage('m67');
         this.loadWeaponImage('ak47');
+        this.loadWeaponImage('m4a1');
     }
 
     loadWeaponImage(weaponId) {
@@ -190,11 +191,13 @@ export class Player extends Entity {
         if (this.burstCount > 0) {
             this.burstTimer--;
             if (this.burstTimer <= 0) {
+                this.shootCooldown = 0;  // 临时清除冷却，让 burst 射击通过
                 this.shoot();
                 this.burstCount--;
                 this.burstTimer = 4; // 三连射每发间隔4帧
             }
         }
+
 
         // 根据射击模式处理鼠标输入
         if (weapon) {

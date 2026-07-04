@@ -473,10 +473,29 @@ for (const b of bullets) {
         const itemW = 400;
         const itemH = 80;
         const rowGap = 15;
+        const listTop = 190;
+        const listViewportHeight = 280;
+        const listBottom = listTop + listViewportHeight;
+        const scrollOffset = GameState.arsenalScrollOffset || 0;
+        const totalItemsHeight = shopItems.length * (itemH + rowGap);
+        const maxScroll = Math.max(0, totalItemsHeight - listViewportHeight);
+
+        // 限制滚动范围
+        GameState.arsenalScrollOffset = Math.max(0, Math.min(scrollOffset, maxScroll));
+        const clampedScroll = GameState.arsenalScrollOffset;
+
+        // 裁剪列表区域
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(itemX - itemW / 2 - 10, listTop, itemW + 20, listViewportHeight);
+        ctx.clip();
 
         shopItems.forEach(([id, config], index) => {
-            const itemY = 190 + index * (itemH + rowGap);
+            const itemY = listTop + index * (itemH + rowGap) - clampedScroll;
             const isSelected = index === GameState.arsenalSelectedIndex;
+
+            // 跳过不在可视区域内的项
+            if (itemY + itemH < listTop || itemY > listBottom) return;
 
             // 选中高亮边框
             if (isSelected) {
@@ -530,8 +549,23 @@ for (const b of bullets) {
             }
         });
 
-        // --- 出售区 ---
-        const sellSectionY = 190 + shopItems.length * (itemH + rowGap) + 20;
+        ctx.restore(); // 恢复裁剪
+
+        // 滚动指示器
+        if (maxScroll > 0) {
+            ctx.fillStyle = 'rgba(255,255,255,0.5)';
+            ctx.font = '14px sans-serif';
+            ctx.textAlign = 'center';
+            if (clampedScroll > 0) {
+                ctx.fillText('▲ 更多商品', this.width / 2, listTop - 5);
+            }
+            if (clampedScroll < maxScroll) {
+                ctx.fillText('▼ 更多商品', this.width / 2, listBottom + 15);
+            }
+        }
+
+        // --- 出售区（固定底部）---
+        const sellSectionY = listBottom + 30;
         ctx.fillStyle = '#ff5252';
         ctx.font = 'bold 24px sans-serif';
         ctx.textAlign = 'center';

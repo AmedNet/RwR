@@ -52,20 +52,24 @@ export const InputManager = {
                     e.preventDefault();
                     return;
                 }
-        // 军械库：↑/W 键选择上一个商品
-        if (GameState.arsenalOpen && (key === 'arrowup' || key === 'w')) {
-            const items = Object.entries(WeaponRegistry).filter(([,c]) => c.buyPrice > 0);
-            GameState.arsenalSelectedIndex = (GameState.arsenalSelectedIndex - 1 + items.length) % items.length;
-            e.preventDefault();
-            return;
-        }
-        // 军械库：↓ 键选择下一个商品
-        if (GameState.arsenalOpen && key === 'arrowdown') {
-            const items = Object.entries(WeaponRegistry).filter(([,c]) => c.buyPrice > 0);
-            GameState.arsenalSelectedIndex = (GameState.arsenalSelectedIndex + 1) % items.length;
-            e.preventDefault();
-            return;
-        }
+// 军械库：↑/W 键选择上一个商品
+if (GameState.arsenalOpen && (key === 'arrowup' || key === 'w')) {
+    const items = Object.entries(WeaponRegistry).filter(([,c]) => c.buyPrice > 0);
+    GameState.arsenalSelectedIndex = (GameState.arsenalSelectedIndex - 1 + items.length) % items.length;
+    // 自动滚动到选中项
+    InputManager._scrollToSelected(80, 15, 190, 280);
+    e.preventDefault();
+    return;
+}
+// 军械库：↓ 键选择下一个商品
+if (GameState.arsenalOpen && key === 'arrowdown') {
+    const items = Object.entries(WeaponRegistry).filter(([,c]) => c.buyPrice > 0);
+    GameState.arsenalSelectedIndex = (GameState.arsenalSelectedIndex + 1) % items.length;
+    // 自动滚动到选中项
+    InputManager._scrollToSelected(80, 15, 190, 280);
+    e.preventDefault();
+    return;
+}
         // 军械库购买：B 键购买选中商品
         if (GameState.arsenalOpen && key === 'b') {
             const items = Object.entries(WeaponRegistry).filter(([,c]) => c.buyPrice > 0);
@@ -316,5 +320,30 @@ canvas.addEventListener('mousedown', (e) => {
         });
 
         canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+        // 军械库鼠标滚轮滚动
+        canvas.addEventListener('wheel', (e) => {
+            if (GameState.arsenalOpen) {
+                const scrollStep = 40;
+                GameState.arsenalScrollOffset = (GameState.arsenalScrollOffset || 0) + (e.deltaY > 0 ? scrollStep : -scrollStep);
+                e.preventDefault();
+            }
+        }, { passive: false });
+    },
+
+    // 军械库自动滚动到选中项
+    _scrollToSelected(itemH, rowGap, listTop, viewportHeight) {
+        const index = GameState.arsenalSelectedIndex;
+        const itemTop = index * (itemH + rowGap);
+        const itemBottom = itemTop + itemH;
+        const scroll = GameState.arsenalScrollOffset || 0;
+
+        if (itemTop < scroll) {
+            // 选中项在视口上方，向上滚动
+            GameState.arsenalScrollOffset = itemTop;
+        } else if (itemBottom > scroll + viewportHeight) {
+            // 选中项在视口下方，向下滚动
+            GameState.arsenalScrollOffset = itemBottom - viewportHeight;
+        }
     }
 };

@@ -32,6 +32,9 @@ export const GameState = {
     arsenalSelectedSlot: 0, // 军械库中选中的背包位置
     arsenalSelectedIndex: 0, // 军械库中选中的商品索引
 
+    // 军械库滚动
+    arsenalScrollOffset: 0, // 军械库列表滚动偏移量
+
     // Debug系统
     debugOpen: false, // Debug面板是否打开
     debugKey9Pressed: false, // 追踪9键状态（用于组合键）
