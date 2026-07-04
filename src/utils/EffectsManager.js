@@ -6,13 +6,16 @@ export const ParticleType = {
     EXPLOSION: 1, // 敌人死亡
     HIT: 2,      // 命中反馈
     KILL: 3,     // 击杀提示
-    CAPTURE: 4   // 占领据点
+    CAPTURE: 4,   // 占领据点
+    GRENADE_BLAST: 5, // 手雷爆炸
+    SMOKE: 6     // 烟雾
 };
 
 export const EffectsManager = {
     particles: [],
     screenShake: { x: 0, y: 0, timer: 0, intensity: 0 },
     damageNumbers: [],
+    explosions: [], // 爆炸效果数组
 
     // 生成粒子
     spawnParticles(x, y, type, count = 8) {
@@ -39,6 +42,63 @@ export const EffectsManager = {
                 type
             });
         }
+    },
+
+    // 生成手雷爆炸效果
+    spawnGrenadeExplosion(x, y, radius) {
+        // 冲击波环
+        this.explosions.push({
+            x, y,
+            radius,
+            currentRadius: 0,
+            maxRadius: radius,
+            life: 20,
+            maxLife: 20,
+            type: 'shockwave'
+        });
+
+        // 内层闪光
+        this.explosions.push({
+            x, y,
+            radius: radius * 0.3,
+            life: 10,
+            maxLife: 10,
+            type: 'flash'
+        });
+
+        // 外层烟雾
+        for (let i = 0; i < 12; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            this.particles.push({
+                x, y,
+                vx: Math.cos(angle) * (1 + Math.random() * 2),
+                vy: Math.sin(angle) * (1 + Math.random() * 2) - 2,
+                life: 40 + Math.random() * 30,
+                maxLife: 70,
+                color: '#333',
+                size: 3 + Math.random() * 5,
+                type: ParticleType.SMOKE
+            });
+        }
+
+        // 碎片粒子
+        for (let i = 0; i < 25; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 3 + Math.random() * 5;
+            this.particles.push({
+                x, y,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed - 2,
+                life: 25 + Math.random() * 15,
+                maxLife: 40,
+                color: ['#ff5252', '#ff1744', '#ff9100'][Math.floor(Math.random() * 3)],
+                size: 2 + Math.random() * 3,
+                type: ParticleType.GRENADE_BLAST
+            });
+        }
+
+        // 屏幕震动
+        this.triggerShake(20, 25);
     },
 
     // 添加伤害数字
@@ -86,6 +146,18 @@ export const EffectsManager = {
             }
         }
 
+        // 更新爆炸效果
+        for (let i = this.explosions.length - 1; i >= 0; i--) {
+            const e = this.explosions[i];
+            e.life--;
+            if (e.type === 'shockwave') {
+                e.currentRadius = (1 - e.life / e.maxLife) * e.maxRadius;
+            }
+            if (e.life <= 0) {
+                this.explosions.splice(i, 1);
+            }
+        }
+
         // 更新屏幕震动
         if (this.screenShake.timer > 0) {
             this.screenShake.x = (Math.random() - 0.5) * this.screenShake.intensity;
@@ -104,6 +176,30 @@ export const EffectsManager = {
 
     // 绘制所有特效
     draw(ctx, camera) {
+        // 绘制爆炸效果（在粒子前绘制，确保可见）
+        for (const e of this.explosions) {
+            const sx = e.x - camera.x + this.screenShake.x;
+            const sy = e.y - camera.y + this.screenShake.y;
+            const alpha = e.life / e.maxLife;
+            
+            ctx.save();
+            if (e.type === 'shockwave') {
+                // 冲击波环
+                ctx.beginPath();
+                ctx.arc(sx, sy, e.currentRadius, 0, Math.PI * 2);
+                ctx.strokeStyle = `rgba(255, 100, 0, ${alpha * 0.8})`;
+                ctx.lineWidth = 3;
+                ctx.stroke();
+            } else if (e.type === 'flash') {
+                // 内层闪光
+                ctx.beginPath();
+                ctx.arc(sx, sy, e.radius, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(255, 200, 100, ${alpha})`;
+                ctx.fill();
+            }
+            ctx.restore();
+        }
+
         // 绘制粒子
         for (const p of this.particles) {
             const sx = p.x - camera.x + this.screenShake.x;

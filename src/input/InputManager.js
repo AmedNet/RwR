@@ -1,6 +1,8 @@
 // src/input/InputManager.js
 import { GameState } from '../core/GameState.js';
 import { Weapon } from '../core/Weapon.js';
+import { WeaponRegistry } from '../core/WeaponRegistry.js';
+import { UIManager } from '../rendering/UIManager.js';
 
 export const InputManager = {
     setup() {
@@ -49,17 +51,47 @@ export const InputManager = {
                     e.preventDefault();
                     return;
                 }
-                // 军械库购买：B 键购买 Beretta 92
-                if (GameState.arsenalOpen && key === 'b') {
-                    const slot = GameState.arsenalSelectedSlot;
-                    if (GameState.rp >= 100 && !GameState.inventory[slot]) {
-                        GameState.inventory[slot] = new Weapon('beretta92');
-                        GameState.rp -= 100;
-                        console.log('🔫 购买 Beretta 92！');
+        // 军械库：↑/W 键选择上一个商品
+        if (GameState.arsenalOpen && (key === 'arrowup' || key === 'w')) {
+            const items = Object.entries(WeaponRegistry).filter(([,c]) => c.buyPrice > 0);
+            GameState.arsenalSelectedIndex = (GameState.arsenalSelectedIndex - 1 + items.length) % items.length;
+            e.preventDefault();
+            return;
+        }
+        // 军械库：↓ 键选择下一个商品
+        if (GameState.arsenalOpen && key === 'arrowdown') {
+            const items = Object.entries(WeaponRegistry).filter(([,c]) => c.buyPrice > 0);
+            GameState.arsenalSelectedIndex = (GameState.arsenalSelectedIndex + 1) % items.length;
+            e.preventDefault();
+            return;
+        }
+        // 军械库购买：B 键购买选中商品
+        if (GameState.arsenalOpen && key === 'b') {
+            const items = Object.entries(WeaponRegistry).filter(([,c]) => c.buyPrice > 0);
+            const [selectedId, config] = items[GameState.arsenalSelectedIndex];
+            const slot = GameState.arsenalSelectedSlot;
+            
+            if (GameState.rp >= config.buyPrice) {
+                if (!GameState.inventory[slot]) {
+                    // 空格子：直接创建新武器
+                    GameState.inventory[slot] = new Weapon(selectedId);
+                    GameState.rp -= config.buyPrice;
+                    console.log(`💰 购买 ${config.name}！`);
+                } else if (GameState.inventory[slot].id === selectedId) {
+                    // 已有同类武器：补充弹药
+                    const maxAmmo = config.magSize;
+                    if (GameState.inventory[slot].ammo < maxAmmo) {
+                        GameState.inventory[slot].ammo = maxAmmo;
+                        GameState.rp -= config.buyPrice;
+                        console.log(`💰 补充 ${config.name} 弹药！`);
                     }
-                    e.preventDefault();
-                    return;
                 }
+                // 刷新HUD的RP显示
+                UIManager.updateAll(GameState);
+            }
+            e.preventDefault();
+            return;
+        }
                 // 军械库出售：S 键出售选中武器
                 if (GameState.arsenalOpen && key === 's') {
                     const slot = GameState.arsenalSelectedSlot;
@@ -77,6 +109,7 @@ export const InputManager = {
                             }
                         }
                         console.log('💰 出售武器！');
+                        UIManager.updateAll(GameState);
                     }
                     e.preventDefault();
                     return;
@@ -100,6 +133,15 @@ export const InputManager = {
             if (num >= 1 && num <= 4) {
                 if (GameState.player && GameState.inventory[num - 1]) {
                     GameState.player.switchWeapon(num - 1);
+                }
+                e.preventDefault();
+                return;
+            }
+
+            // G 键：投掷手雷
+            if (key === 'g') {
+                if (GameState.player) {
+                    GameState.player.throwGrenade();
                 }
                 e.preventDefault();
                 return;
@@ -166,10 +208,15 @@ export const InputManager = {
             GameState.mouse.y = (e.clientY - rect.top) * scaleY;
         });
 
-        // 鼠标点击射击
+        // 鼠标点击射击/投掷
         canvas.addEventListener('mousedown', (e) => {
             if (e.button === 0 && GameState.player) {
-                GameState.player.shoot();
+                const weapon = GameState.getActiveWeapon();
+                if (weapon && weapon.config.type === 'grenade') {
+                    GameState.player.throwGrenade();
+                } else {
+                    GameState.player.shoot();
+                }
                 e.preventDefault();
             }
         });

@@ -141,6 +141,11 @@ export const Renderer = {
             GameState.arsenal.draw(this.ctx);
         }
 
+        // 绘制手雷
+        for (const g of GameState.grenades) {
+            g.draw(this.ctx);
+        }
+
         // 绘制实体（优化：减少save/restore）
         const { player, enemies, teammates, bullets } = GameState;
         
@@ -385,15 +390,40 @@ for (const b of bullets) {
             // 物品
             const item = GameState.inventory[i];
             if (item) {
-                ctx.font = '36px sans-serif';
+                // 武器缩略图
+                const invImg = this.getWeaponImage(item.id);
+                if (invImg) {
+                    const invH = 50;
+                    const invScale = invH / invImg.naturalHeight;
+                    const invW = invImg.naturalWidth * invScale;
+                    ctx.drawImage(invImg, x + slotSize / 2 - invW / 2, y + slotSize / 2 - invH / 2 - 5, invW, invH);
+                } else {
+                    ctx.font = '36px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(item.config.type === 'grenade' ? '💣' : '🔫', x + slotSize / 2, y + slotSize / 2);
+                }
+                // 武器名称
+                ctx.fillStyle = '#aaa';
+                ctx.font = '11px sans-serif';
                 ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(item.icon || '📦', x + slotSize / 2, y + slotSize / 2);
+                ctx.textBaseline = 'bottom';
+                ctx.fillText(item.config.name, x + slotSize / 2, y + slotSize - 4);
+                // 弹药数
+                if (item.config.type !== 'melee') {
+                    ctx.fillStyle = item.ammo === 0 ? '#ff5252' : 'rgba(255,255,255,0.7)';
+                    ctx.font = 'bold 11px sans-serif';
+                    ctx.textAlign = 'right';
+                    ctx.textBaseline = 'top';
+                    ctx.fillText(`${item.ammo}`, x + slotSize - 4, y + 4);
+                }
             } else {
                 // 空槽位编号
                 ctx.fillStyle = '#666';
                 ctx.font = '16px sans-serif';
-                ctx.fillText(`[${i + 1}]`, x + slotSize / 2, y + slotSize - 15);
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(`[${i + 1}]`, x + slotSize / 2, y + slotSize / 2);
             }
         }
 
@@ -431,67 +461,86 @@ for (const b of bullets) {
         ctx.font = 'bold 24px sans-serif';
         ctx.fillText('━━━ 购买 ━━━', this.width / 2, 155);
 
+        // 获取所有可购买商品
+        const shopItems = Object.entries(WeaponRegistry).filter(([, config]) => config.buyPrice > 0);
         const itemX = this.width / 2;
-        const itemY = 190;
         const itemW = 400;
         const itemH = 80;
+        const rowGap = 15;
 
-        // 按纽背景
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
-        ctx.fillRect(itemX - itemW / 2, itemY, itemW, itemH);
-        ctx.strokeStyle = 'rgba(255, 215, 0, 0.6)';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(itemX - itemW / 2, itemY, itemW, itemH);
+        shopItems.forEach(([id, config], index) => {
+            const itemY = 190 + index * (itemH + rowGap);
+            const isSelected = index === GameState.arsenalSelectedIndex;
 
-        // 武器贴图
-        const shopImg = this.getWeaponImage('beretta92');
-        if (shopImg) {
-            const shopH = 50;
-            const shopScale = shopH / shopImg.naturalHeight;
-            const shopW = shopImg.naturalWidth * shopScale;
-            ctx.drawImage(shopImg, itemX - 170 - shopW / 2, itemY + itemH / 2 - shopH / 2, shopW, shopH);
-        } else {
-            ctx.font = '36px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('🔫', itemX - 170, itemY + itemH / 2);
-        }
+            // 选中高亮边框
+            if (isSelected) {
+                ctx.strokeStyle = '#4CAF50';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(itemX - itemW / 2, itemY, itemW, itemH);
+            }
 
-        // 名称
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 22px sans-serif';
-        ctx.textAlign = 'left';
-        ctx.fillText('Beretta 92', itemX - 120, itemY + 32);
-        ctx.fillStyle = '#aaa';
-        ctx.font = '14px sans-serif';
-        ctx.fillText('弹容量 17 | 手枪', itemX - 120, itemY + 58);
+            // 商品背景
+            ctx.fillStyle = isSelected ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.08)';
+            ctx.fillRect(itemX - itemW / 2, itemY, itemW, itemH);
+            ctx.strokeStyle = 'rgba(255, 215, 0, 0.6)';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(itemX - itemW / 2, itemY, itemW, itemH);
 
-        // 价格
-        ctx.fillStyle = GameState.rp >= 100 ? '#FFD700' : '#ff5252';
-        ctx.font = 'bold 20px sans-serif';
-        ctx.textAlign = 'right';
-        ctx.fillText(`💰 100`, itemX + 170, itemY + 30);
+            // 武器贴图
+            const shopImg = this.getWeaponImage(id);
+            if (shopImg) {
+                const shopH = 50;
+                const shopScale = shopH / shopImg.naturalHeight;
+                const shopW = shopImg.naturalWidth * shopScale;
+                ctx.drawImage(shopImg, itemX - 170 - shopW / 2, itemY + itemH / 2 - shopH / 2, shopW, shopH);
+            } else {
+                ctx.font = '36px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(config.type === 'grenade' ? '💣' : '🔫', itemX - 170, itemY + itemH / 2);
+            }
 
-        // 购买按钮
-        ctx.fillStyle = GameState.rp >= 100 ? '#4CAF50' : '#666';
-        ctx.font = 'bold 16px sans-serif';
-        ctx.fillText('[B] 购买', itemX + 170, itemY + 60);
+            // 名称
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 22px sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText(config.name, itemX - 120, itemY + 32);
+            ctx.fillStyle = '#aaa';
+            ctx.font = '14px sans-serif';
+            const typeText = config.type === 'grenade' ? `装填 ${config.magSize} 发 | 手雷` : `弹容量 ${config.magSize} | ${config.type === 'pistol' ? '手枪' : '步枪'}`;
+            ctx.fillText(typeText, itemX - 120, itemY + 58);
+
+            // 价格
+            ctx.fillStyle = GameState.rp >= config.buyPrice ? '#FFD700' : '#ff5252';
+            ctx.font = 'bold 20px sans-serif';
+            ctx.textAlign = 'right';
+            ctx.fillText(`💰 ${config.buyPrice}`, itemX + 170, itemY + 30);
+
+            // 选中指示器
+            if (isSelected) {
+                ctx.fillStyle = '#4CAF50';
+                ctx.font = 'bold 16px sans-serif';
+                ctx.fillText('▶', itemX - itemW / 2 + 10, itemY + itemH / 2);
+            }
+        });
 
         // --- 出售区 ---
+        const sellSectionY = 190 + shopItems.length * (itemH + rowGap) + 20;
         ctx.fillStyle = '#ff5252';
         ctx.font = 'bold 24px sans-serif';
-        ctx.fillText('━━━ 出售 ━━━', this.width / 2, 310);
+        ctx.textAlign = 'center';
+        ctx.fillText('━━━ 出售 ━━━', this.width / 2, sellSectionY);
 
         // 选择背包位置的提示
         ctx.fillStyle = '#aaa';
         ctx.font = '16px sans-serif';
-        ctx.fillText('当前选中: 背包第 ' + (GameState.arsenalSelectedSlot + 1) + ' 格', itemX, 345);
+        ctx.fillText('当前选中: 背包第 ' + (GameState.arsenalSelectedSlot + 1) + ' 格', itemX, sellSectionY + 35);
 
         // 背包4格显示
         const slotSize = 90;
         const slotGap = 15;
         const slotStartX = itemX - (4 * slotSize + 3 * slotGap) / 2;
-        const slotStartY = 365;
+        const slotStartY = sellSectionY + 60;
 
         for (let i = 0; i < 4; i++) {
             const sx = slotStartX + i * (slotSize + slotGap);
@@ -516,7 +565,7 @@ for (const b of bullets) {
                     ctx.font = '24px sans-serif';
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
-                    ctx.fillText('🔫', sx + slotSize / 2, slotStartY + slotSize / 2 - 10);
+                    ctx.fillText(weapon.config.type === 'grenade' ? '💣' : '🔫', sx + slotSize / 2, slotStartY + slotSize / 2 - 10);
                 }
                 ctx.fillStyle = '#aaa';
                 ctx.font = '12px sans-serif';
@@ -551,7 +600,7 @@ for (const b of bullets) {
         ctx.fillStyle = '#aaa';
         ctx.font = '15px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('数字 1-4 选择背包格 | B 购买 | S 出售 | E 关闭', this.width / 2, this.height - 30);
+        ctx.fillText('↑↓ 选择商品 | 1-4 选择背包格 | B 购买 | S 出售 | E 关闭', this.width / 2, this.height - 30);
 
         ctx.restore();
     },

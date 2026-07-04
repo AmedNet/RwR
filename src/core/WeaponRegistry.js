@@ -6,7 +6,8 @@ export const WeaponType = {
     PISTOL: 'pistol',    // 手枪
     RIFLE: 'rifle',      // 步枪（预留）
     SHOTGUN: 'shotgun',  // 霰弹枪（预留）
-    SNIPER: 'sniper'     // 狙击枪（预留）
+    SNIPER: 'sniper',    // 狙击枪（预留）
+    GRENADE: 'grenade'   // 手雷
 };
 
 export const WeaponRegistry = {
@@ -42,5 +43,24 @@ export const WeaponRegistry = {
         icon: 'src/pkg/weapon/Beretta92/Beretta92.png',
         imagePath: 'src/pkg/weapon/Beretta92/Beretta92.png',
         range: Infinity
+    },
+
+    // M67 手雷 - 投掷爆炸物
+    m67: {
+        id: 'm67',
+        name: 'M67 手雷',
+        type: WeaponType.GRENADE,
+        damage: 60,
+        shootDelay: 0,        // 无射速延迟
+        bulletSpeed: 0,
+        magSize: 4,           // 堆叠4枚
+        reloadTime: 0,
+        buyPrice: 70,
+        sellPrice: 35,
+        icon: 'src/pkg/weapon/M67/M67.png',
+        imagePath: 'src/pkg/weapon/M67/M67.png',
+        range: 400,           // 最大投掷距离
+        fuseTime: 120,        // 引信2秒
+        explosionRadius: 120  // 爆炸半径
     }
 };

@@ -333,11 +333,13 @@ function gameLoop() {
         for (const enemy of GameState.enemies) enemy.update();
         for (const teammate of GameState.teammates) teammate.update();
         for (const bullet of GameState.bullets) bullet.update();
+        for (const grenade of GameState.grenades) grenade.update();
         CollisionSystem.checkAll();
         
         // ---- 过滤死亡实体 ----
         GameState.enemies = GameState.enemies.filter(e => e.alive);
         GameState.bullets = GameState.bullets.filter(b => b.alive);
+        GameState.grenades = GameState.grenades.filter(g => g.alive);
 
         // ---- 队友重生逻辑 ----
         updateTeammateRespawns();
@@ -414,6 +416,49 @@ function init() {
         respawnPlayer(pointIndex);
     });
     window.addEventListener('resize', () => Renderer.resize());
+
+    // ---- 手雷爆炸监听 ----
+    window.addEventListener('grenade_explode', (e) => {
+        const { x, y, radius, damage } = e.detail;
+        
+        // 爆炸效果
+        EffectsManager.spawnGrenadeExplosion(x, y, radius);
+
+        // 破片伤害：对爆炸半径内所有实体造成距离衰减伤害
+        const entities = [
+            ...GameState.enemies.filter(e => e.alive),
+            ...GameState.teammates.filter(t => t.alive)
+        ];
+        if (GameState.player && GameState.player.alive) {
+            entities.push(GameState.player);
+        }
+
+        for (const entity of entities) {
+            const d = Math.hypot(entity.x - x, entity.y - y);
+            if (d < radius) {
+                // 距离衰减伤害
+                const dmg = Math.floor(damage * (1 - d / radius));
+                if (dmg > 0) {
+                    entity.takeDamage(dmg);
+                    EffectsManager.addDamageNumber(entity.x, entity.y, dmg, entity === GameState.player);
+                    // 击退效果
+                    const angle = Math.atan2(entity.y - y, entity.x - x);
+                    const knockback = 60 * (1 - d / radius);
+                    entity.x += Math.cos(angle) * knockback;
+                    entity.y += Math.sin(angle) * knockback;
+                }
+            }
+        }
+
+        // 清除被炸死的敌人
+        GameState.enemies = GameState.enemies.filter(e => e.alive);
+
+        // 如果玩家被炸死
+        if (GameState.player && !GameState.player.alive) {
+            GameState.gameOver = true;
+            EventBus.emit('game_over');
+        }
+    });
 
     // 初始化小地图
     Minimap.init();

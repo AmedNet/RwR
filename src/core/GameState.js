@@ -6,6 +6,7 @@ export const GameState = {
     enemies: [],
     teammates: [],
     bullets: [],
+    grenades: [],
     capturePoints: [],
     arsenal: null, // 军械库实例
     arsenalOpen: false, // 军械库界面是否打开
@@ -29,6 +30,7 @@ export const GameState = {
     // 武器系统
     activeWeaponSlot: 0, // 当前装备的背包位置 (0-3)
     arsenalSelectedSlot: 0, // 军械库中选中的背包位置
+    arsenalSelectedIndex: 0, // 军械库中选中的商品索引
 
     // 获取当前装备的武器
     getActiveWeapon() {
@@ -56,6 +58,7 @@ export const GameState = {
         this.inventory = [new Weapon('beretta92'), null, null, null];
         this.activeWeaponSlot = 0;
         this.arsenalSelectedSlot = 0;
+        this.arsenalSelectedIndex = 0;
         this.inventoryOpen = false;
         this.arsenalOpen = false;
         this.rp = 0;

@@ -3,6 +3,7 @@ import { Entity } from './Entity.js';
 import { GameState } from '../core/GameState.js';
 import { EventBus } from '../core/EventBus.js';
 import { Bullet } from './Bullet.js';
+import { Grenade } from './Grenade.js';
 import { WeaponRegistry } from '../core/WeaponRegistry.js';
 import { Weapon } from '../core/Weapon.js';
 
@@ -17,17 +18,13 @@ export class Player extends Entity {
         this.rankNames = ['列兵', '下士', '中士', '上士'];
         this.shootCooldown = 0;
         this.config = config;
-        // 武器贴图缓存
-        this.weaponImage = null;
-        this.weaponImageLoaded = false;
-        // 切换动画
         this.switchAnimTimer = 0;
-        this.switchAnimDuration = 15; // 0.25秒
+        this.switchAnimDuration = 15;
         this.isSwitching = false;
         this.switchFromSlot = -1;
-        // 预加载武器贴图
         this.loadWeaponImage('beretta92');
         this.loadWeaponImage('knife');
+        this.loadWeaponImage('m67');
     }
 
     loadWeaponImage(weaponId) {
@@ -39,6 +36,9 @@ export class Player extends Entity {
         } else if (weaponId === 'knife') {
             this.knifeImage = img;
             img.onload = () => this.knifeImageLoaded = true;
+        } else if (weaponId === 'm67') {
+            this.m67Image = img;
+            img.onload = () => this.m67ImageLoaded = true;
         }
     }
 
@@ -57,96 +57,87 @@ export class Player extends Entity {
     addKill() {
         GameState.kills++;
         EventBus.emit('player_kill', { kills: GameState.kills });
-        if (GameState.kills % GameState.config.rankUpKills === 0) {
-            this.addRank();
-        }
+        if (GameState.kills % GameState.config.rankUpKills === 0) this.addRank();
     }
 
-    // 获取当前武器（包含匕首 fallback）
     getCurrentWeapon() {
-        // 检查背包是否有武器
-        for (let i = 0; i < 4; i++) {
-            if (GameState.inventory[i]) {
-                return GameState.inventory[GameState.activeWeaponSlot] || GameState.inventory[i];
-            }
-        }
-        // 全空 → 使用匕首
-        return new Weapon('knife');
+        const weapon = GameState.inventory[GameState.activeWeaponSlot];
+        return weapon || new Weapon('knife');
     }
 
-    // 切换武器
     switchWeapon(slot) {
-        if (slot < 0 || slot > 3) return;
-        if (slot === GameState.activeWeaponSlot) return;
-        // 检查目标位置是否有武器
-        if (!GameState.inventory[slot]) return;
-        // 如果正在换弹，取消换弹
+        if (slot < 0 || slot > 3 || slot === GameState.activeWeaponSlot || !GameState.inventory[slot]) return;
         const current = GameState.getActiveWeapon();
         if (current) current.isReloading = false;
-        // 启动切换动画
         this.isSwitching = true;
         this.switchAnimTimer = this.switchAnimDuration;
         this.switchFromSlot = GameState.activeWeaponSlot;
         GameState.activeWeaponSlot = slot;
     }
 
-    // 开始换弹
     reload() {
         const weapon = GameState.getActiveWeapon();
         if (weapon) weapon.startReload();
     }
 
-    // 检查是否可以使用匕首
+    throwGrenade() {
+        // 从任意槽位查找手雷
+        let grenadeSlot = -1;
+        for (let i = 0; i < 4; i++) {
+            const w = GameState.inventory[i];
+            if (w && w.id === 'm67' && w.ammo > 0) { grenadeSlot = i; break; }
+        }
+        if (grenadeSlot < 0) return;
+        const weapon = GameState.inventory[grenadeSlot];
+
+        const config = weapon.config;
+        const mouse = GameState.mouse;
+        const screenX = this.x - GameState.camera.x;
+        const screenY = this.y - GameState.camera.y;
+        const targetX = this.x + (mouse.x - screenX);
+        const targetY = this.y + (mouse.y - screenY);
+
+        const grenade = new Grenade(this.x, this.y, targetX, targetY, config);
+        GameState.grenades.push(grenade);
+
+        weapon.ammo--;
+        if (weapon.ammo <= 0) GameState.inventory[grenadeSlot] = null;
+    }
+
     hasOnlyKnife() {
         return !GameState.inventory.some(slot => slot !== null);
     }
 
-    // 近战攻击：对最近的敌人造成伤害
     meleeAttack() {
         const knifeConfig = WeaponRegistry.knife;
-        let nearestEnemy = null;
-        let nearestDist = knifeConfig.range;
+        let nearestEnemy = null, nearestDist = knifeConfig.range;
         for (const enemy of GameState.enemies) {
             if (!enemy.alive) continue;
             const d = Math.hypot(enemy.x - this.x, enemy.y - this.y);
-            if (d < nearestDist) {
-                nearestDist = d;
-                nearestEnemy = enemy;
-            }
+            if (d < nearestDist) { nearestDist = d; nearestEnemy = enemy; }
         }
         if (nearestEnemy) {
             nearestEnemy.takeDamage(knifeConfig.damage);
-            // 击退效果
             const angle = Math.atan2(nearestEnemy.y - this.y, nearestEnemy.x - this.x);
             nearestEnemy.x += Math.cos(angle) * 30;
             nearestEnemy.y += Math.sin(angle) * 30;
             if (!nearestEnemy.alive) {
                 GameState.enemies = GameState.enemies.filter(e => e.alive);
-                if (GameState.player && GameState.player.alive) {
-                    this.addKill();
-                    GameState.rp += 10;
-                }
+                if (GameState.player && GameState.player.alive) { this.addKill(); GameState.rp += 10; }
             }
         }
     }
 
     update() {
         if (GameState.gameOver) return;
-
-        // 更新切换动画
         if (this.isSwitching) {
             this.switchAnimTimer--;
-            if (this.switchAnimTimer <= 0) {
-                this.isSwitching = false;
-            }
-            return; // 切换期间不能移动/射击
+            if (this.switchAnimTimer <= 0) this.isSwitching = false;
+            return;
         }
-
-        // 更新当前武器的换弹状态
         const weapon = GameState.getActiveWeapon();
         if (weapon) weapon.updateReload();
 
-        // 移动
         const keys = GameState.keys;
         let dx = 0, dy = 0;
         if (keys.w) dy -= 1;
@@ -155,41 +146,29 @@ export class Player extends Entity {
         if (keys.d) dx += 1;
         if (dx !== 0 || dy !== 0) {
             const len = Math.sqrt(dx*dx + dy*dy);
-            dx = dx / len;
-            dy = dy / len;
-            let speedFactor = 1;
-            if (GameState.map) {
-                speedFactor = GameState.map.getSpeedFactor(this.x, this.y);
-            }
+            dx /= len; dy /= len;
+            const speedFactor = GameState.map ? GameState.map.getSpeedFactor(this.x, this.y) : 1;
             const finalSpeed = this.speed * speedFactor;
-            let newX = this.x + dx * finalSpeed;
-            let newY = this.y + dy * finalSpeed;
+            const newX = this.x + dx * finalSpeed;
+            const newY = this.y + dy * finalSpeed;
             if (GameState.map && !GameState.map.isWalkable(newX, newY, this.radius)) {
-                if (GameState.map.isWalkable(newX, this.y, this.radius)) {
-                    this.x = newX;
-                } else if (GameState.map.isWalkable(this.x, newY, this.radius)) {
-                    this.y = newY;
-                }
-            } else {
-                this.x = newX;
-                this.y = newY;
-            }
+                if (GameState.map.isWalkable(newX, this.y, this.radius)) this.x = newX;
+                else if (GameState.map.isWalkable(this.x, newY, this.radius)) this.y = newY;
+            } else { this.x = newX; this.y = newY; }
         }
-
-        // 边界限制
         const world = GameState.config.world;
         this.x = Math.max(this.radius, Math.min(world.width - this.radius, this.x));
         this.y = Math.max(this.radius, Math.min(world.height - this.radius, this.y));
-
         if (this.shootCooldown > 0) this.shootCooldown--;
     }
 
     shoot() {
-        if (GameState.gameOver || this.shootCooldown > 0) return;
-        if (this.isSwitching) return;
-
+        if (GameState.gameOver || this.shootCooldown > 0 || this.isSwitching) return;
         const weapon = GameState.getActiveWeapon();
         if (!weapon || !weapon.canShoot()) return;
+
+        // 手雷类型武器不能射击，只能用G键投掷
+        if (weapon.config.type === 'grenade') return;
 
         const mouse = GameState.mouse;
         const screenX = this.x - GameState.camera.x;
@@ -197,37 +176,29 @@ export class Player extends Entity {
         const angle = Math.atan2(mouse.y - screenY, mouse.x - screenX);
 
         if (weapon.config.type === 'melee') {
-            // 近战攻击
             this.meleeAttack();
             this.shootCooldown = weapon.config.shootDelay;
             weapon.consumeAmmo();
             return;
         }
 
-        // 远程射击
         const speed = weapon.config.bulletSpeed;
-        const bullet = new Bullet(
+        GameState.bullets.push(new Bullet(
             this.x + Math.cos(angle) * this.radius,
             this.y + Math.sin(angle) * this.radius,
-            Math.cos(angle) * speed,
-            Math.sin(angle) * speed,
-            false,
-            weapon.config.damage,
-            true
-        );
-        GameState.bullets.push(bullet);
+            Math.cos(angle) * speed, Math.sin(angle) * speed,
+            false, weapon.config.damage, true
+        ));
         weapon.consumeAmmo();
         this.shootCooldown = weapon.config.shootDelay;
     }
 
     draw(ctx) {
         ctx.save();
-
         const screenX = this.x - GameState.camera.x;
         const screenY = this.y - GameState.camera.y;
         const angle = Math.atan2(GameState.mouse.y - screenY, GameState.mouse.x - screenX);
 
-        // 身体
         ctx.beginPath();
         ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
         ctx.fillStyle = GameState.config.colors.player;
@@ -236,58 +207,51 @@ export class Player extends Entity {
         ctx.lineWidth = 3;
         ctx.stroke();
 
-        // 武器贴图
         const weapon = this.getCurrentWeapon();
-        const weaponImage = weapon.id === 'knife' ? this.knifeImage : this.berettaImage;
-        const weaponLoaded = weapon.id === 'knife' ? this.knifeImageLoaded : this.berettaImageLoaded;
+        let weaponImage, weaponLoaded;
+        if (weapon.id === 'knife') {
+            weaponImage = this.knifeImage;
+            weaponLoaded = this.knifeImageLoaded;
+        } else if (weapon.id === 'm67') {
+            weaponImage = this.m67Image;
+            weaponLoaded = this.m67ImageLoaded;
+        } else {
+            weaponImage = this.berettaImage;
+            weaponLoaded = this.berettaImageLoaded;
+        }
 
         if (weaponImage && weaponLoaded) {
             ctx.save();
-            // 判断是否朝左
             const facingLeft = Math.cos(angle) < 0;
-            
-            // 放大贴图，计算等比缩放
             const targetHeight =50;
             const scale = targetHeight / weaponImage.naturalHeight;
             const drawW = weaponImage.naturalWidth * scale;
             const drawH = targetHeight;
-            
-            // 先移到角色边缘（枪的一侧）
+
             ctx.translate(facingLeft ? -2 : 2, 0);
-            
             if (facingLeft) {
-                // 朝左：旋转后翻转，让枪管指向鼠标方向
-                ctx.scale(1, -1);  // 先翻转
-                ctx.rotate(-angle); // 再旋转 → 旋转方向也被翻转了，枪口指向自己
+                ctx.scale(1, -1); // 先旋转到鼠标方向，再水平翻转
+                ctx.rotate(-angle);
             } else {
-                // 朝右：直接旋转
                 ctx.rotate(angle);
             }
-            
-            // 切换动画
+
             let yOffset = 0;
             if (this.isSwitching && this.switchFromSlot >= 0) {
-                const progress = this.switchAnimTimer / this.switchAnimDuration;
-                yOffset = Math.sin(progress * Math.PI) * 20;
+                yOffset = Math.sin((this.switchAnimTimer / this.switchAnimDuration) * Math.PI) * 20;
             }
-            // 绘制：让枪管向前延伸（+X方向），握把靠近角色
             ctx.drawImage(weaponImage, -drawW * 0.15, -drawH / 2 + yOffset, drawW, drawH);
             ctx.restore();
         } else {
-            // 贴图未加载时用默认枪管
             ctx.beginPath();
             ctx.moveTo(0, 0);
             ctx.lineTo(Math.cos(angle) * 30, Math.sin(angle) * 30);
-            ctx.strokeStyle = '#333';
-            ctx.lineWidth = 6;
-            ctx.stroke();
+            ctx.strokeStyle = '#333'; ctx.lineWidth = 6; ctx.stroke();
         }
 
-        // 军衔星
         ctx.fillStyle = '#FFD700';
         ctx.font = '16px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText('★'.repeat(Math.min(this.rank + 1, 4)), 0, -28);
         ctx.restore();
     }
