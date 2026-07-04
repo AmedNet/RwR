@@ -1,5 +1,6 @@
 // src/main.js
 import { GameState } from './core/GameState.js';
+import { Weapon } from './core/Weapon.js';
 import { EventBus } from './core/EventBus.js';
 import { Player } from './entities/Player.js';
 import { Teammate } from './entities/Teammate.js';
@@ -538,6 +539,18 @@ function respawnPlayer(pointIndex) {
     } else {
         console.log('⚠️ 无己方据点，在中心重生');
     }
+    
+    // 非自杀死亡：清空背包，只保留初始手枪
+    if (!GameState.suicideDeath) {
+        console.log('💔 阵亡损失：背包物品已清空');
+        GameState.inventory = [new Weapon('beretta92'), null, null, null];
+        GameState.activeWeaponSlot = 0;
+    } else {
+        console.log('✅ 自杀：保留背包物品');
+    }
+    
+    // 重置自杀标记
+    GameState.suicideDeath = false;
     
     // 重置玩家状态（位置、血量等）
     GameState.player = new Player(spawnX, spawnY, config.player);

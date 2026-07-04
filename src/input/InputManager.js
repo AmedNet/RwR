@@ -168,6 +168,7 @@ if (GameState.arsenalOpen && key === 'arrowdown') {
             // K键自杀
             if (key === 'k') {
                 if (GameState.player && GameState.player.alive) {
+                    GameState.suicideDeath = true; // 标记为自杀
                     GameState.player.alive = false;
                     GameState.player.health = 0;
                     GameState.gameOver = true;

@@ -35,6 +35,9 @@ export const GameState = {
     // 军械库滚动
     arsenalScrollOffset: 0, // 军械库列表滚动偏移量
 
+    // 死亡标记
+    suicideDeath: false, // 标记本次死亡是否为自杀（自杀保留物品）
+
     // Debug系统
     debugOpen: false, // Debug面板是否打开
     debugKey9Pressed: false, // 追踪9键状态（用于组合键）
