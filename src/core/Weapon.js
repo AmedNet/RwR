@@ -10,70 +10,63 @@ export class Weapon {
         }
         this.id = weaponId;
         this.config = config;
-        this.ammo = config.magSize; // 当前弹药，近战为 null
+        this.ammo = config.magSize;
         this.isReloading = false;
         this.reloadTimer = 0;
-        this.isChamberedReload = false; // 空仓挂机快速换弹标记
-        this.justEmptied = false; // 打空后未切枪标记
+        this.isChamberedReload = false;
+        this.justEmptied = false;
+        // 后坐力 & 散布状态
+        this.currentRecoil = 0;
+        this.currentSpread = config.spread ? config.spread.base : 0;
+        // 连续射击计数
+        this.consecutiveShots = 0;
     }
 
-    // 能否射击
     canShoot() {
         if (this.isReloading) return false;
-        if (this.config.type === 'melee') return true; // 近战无弹药限制
+        if (this.config.type === 'melee') return true;
         return this.ammo > 0;
     }
 
-    // 消耗弹药
     consumeAmmo() {
         if (this.config.type === 'melee') return;
         if (this.ammo > 0) this.ammo--;
-        // 弹药打空时设置标记（空仓挂机机制）
         if (this.ammo === 0) this.justEmptied = true;
     }
-    
-    // 清除打空标记（切换武器时调用）
+
     clearJustEmptied() {
         this.justEmptied = false;
     }
 
-    // 开始换弹
     startReload() {
         if (this.config.type === 'melee') return;
         if (this.isReloading) return;
         if (this.ammo >= this.config.magSize) return;
         this.isReloading = true;
-        // 空仓挂机：弹药>=1 且武器支持时，换弹时间减少45%
         this.isChamberedReload = (this.ammo >= 1 && this.config.canChamberedReload === true);
-        // 支持随机换弹时间 { min, max } 或固定数值
         const rt = this.config.reloadTime;
         if (typeof rt === 'object' && rt.min !== undefined) {
             this.reloadTimer = rt.min + Math.random() * (rt.max - rt.min);
-            this.reloadTimeTotal = this.reloadTimer; // 保存总时长用于计算进度
+            this.reloadTimeTotal = this.reloadTimer;
         } else {
             this.reloadTimer = rt;
             this.reloadTimeTotal = rt;
         }
-        // 空仓挂机加速
         if (this.isChamberedReload) {
             this.reloadTimer = Math.floor(this.reloadTimer * 0.55);
             this.reloadTimeTotal = this.reloadTimer;
         }
-        // 打空后即时换弹加速（弹药=0且不切枪）：换弹时间减少30%
         if (this.justEmptied && this.config.canChamberedReload === true) {
             this.reloadTimer = Math.floor(this.reloadTimer * 0.7);
             this.reloadTimeTotal = this.reloadTimer;
         }
-        // 清除打空标记
         this.justEmptied = false;
     }
 
-    // 每帧更新换弹
     updateReload() {
         if (!this.isReloading) return;
         this.reloadTimer--;
         if (this.reloadTimer <= 0) {
-            // 空仓挂机：换弹完成后弹药量 = magSize + 1
             if (this.isChamberedReload) {
                 this.ammo = this.config.magSize + 1;
             } else {
@@ -85,14 +78,64 @@ export class Weapon {
         }
     }
 
-    // 获取换弹进度 (0-1)
     getReloadProgress() {
         if (!this.isReloading) return 1;
         const total = this.reloadTimeTotal || this.config.reloadTime.max || this.config.reloadTime;
         return 1 - (this.reloadTimer / total);
     }
 
-    // 克隆武器（用于重置/复制）
+    // 射击时增加后坐力和散布
+    applyRecoilAndSpread() {
+        const recoil = this.config.recoil;
+        const spread = this.config.spread;
+        // 三连发模式：完全不增加后坐力和散布（三发子弹完全重合）
+        const isBurstMode = this.config.fireMode === 'burst';
+        if (!isBurstMode) {
+            if (recoil) {
+                this.currentRecoil = Math.min(this.currentRecoil + recoil.maxAngle * 0.5, recoil.maxAngle);
+            }
+            if (spread) {
+                this.currentSpread = Math.min(this.currentSpread + spread.increase, spread.max);
+                // 连续开火散布递增（三连发不算）
+                this.consecutiveShots++;
+                const sustained = this.config.sustainedFire;
+                if (sustained && this.consecutiveShots > sustained.threshold) {
+                    const bonus = (this.consecutiveShots - sustained.threshold) * sustained.bonusPerShot;
+                    this.currentSpread = Math.min(this.currentSpread + bonus, spread.max);
+                }
+            }
+        }
+    }
+
+    // 每帧恢复后坐力和散布
+    updateRecoilAndSpread() {
+        const recoil = this.config.recoil;
+        const spread = this.config.spread;
+        if (recoil && this.currentRecoil > 0) {
+            this.currentRecoil = Math.max(0, this.currentRecoil - recoil.recoverySpeed);
+        }
+        if (spread && this.currentSpread > spread.base) {
+            this.currentSpread = Math.max(spread.base, this.currentSpread - spread.recovery);
+            // 停止射击时递减连续计数
+            if (this.consecutiveShots > 0) {
+                this.consecutiveShots--;
+            }
+        }
+    }
+
+    // 获取射击角度偏移（后坐力 + 随机散布）
+    getShotAngleOffset() {
+        // 三连发模式：完全无偏移（三发子弹完全重合）
+        const isBurstMode = this.config.fireMode === 'burst';
+        if (isBurstMode) {
+            return 0; // 三连发完全无偏移，三发子弹完全重合
+        }
+        const spread = this.config.spread;
+        const spreadOffset = (Math.random() - 0.5) * 2 * this.currentSpread;
+        const recoilOffset = -this.currentRecoil * (0.5 + Math.random() * 0.5);
+        return spreadOffset + recoilOffset;
+    }
+
     clone() {
         return new Weapon(this.id);
     }

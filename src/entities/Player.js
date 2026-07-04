@@ -165,7 +165,10 @@ export class Player extends Entity {
             return;
         }
         const weapon = GameState.getActiveWeapon();
-        if (weapon) weapon.updateReload();
+        if (weapon) {
+            weapon.updateReload();
+            weapon.updateRecoilAndSpread(); // 每帧恢复后坐力和散布
+        }
 
         const keys = GameState.keys;
         let dx = 0, dy = 0;
@@ -256,14 +259,19 @@ export class Player extends Entity {
             return;
         }
 
+        // 应用后坐力和散布到射击角度
+        const angleOffset = weapon.getShotAngleOffset();
+        const finalAngle = angle + angleOffset;
+
         const speed = weapon.config.bulletSpeed;
         GameState.bullets.push(new Bullet(
-            this.x + Math.cos(angle) * this.radius,
-            this.y + Math.sin(angle) * this.radius,
-            Math.cos(angle) * speed, Math.sin(angle) * speed,
+            this.x + Math.cos(finalAngle) * this.radius,
+            this.y + Math.sin(finalAngle) * this.radius,
+            Math.cos(finalAngle) * speed, Math.sin(finalAngle) * speed,
             false, weapon.config.damage, true
         ));
         weapon.consumeAmmo();
+        weapon.applyRecoilAndSpread(); // 射击后增加后坐力和散布
         this.shootCooldown = weapon.config.shootDelay;
     }
 
@@ -305,7 +313,11 @@ export class Player extends Entity {
             if (this.isSwitching && this.switchFromSlot >= 0) {
                 yOffset = Math.sin((this.switchAnimTimer / this.switchAnimDuration) * Math.PI) * 20;
             }
-            ctx.drawImage(weaponImage, -drawW * 0.15, -drawH / 2 + yOffset, drawW, drawH);
+            // 后坐力视觉偏移：武器向后退 + 枪口逆时针旋转上抬
+            const recoilBack = weapon.currentRecoil ? weapon.currentRecoil * 33 : 0; // 向后（削减45%）
+            const recoilRotate = weapon.currentRecoil ? weapon.currentRecoil * 0.3 : 0; // 逆时针旋转
+            ctx.rotate(-recoilRotate); // 枪口上抬（逆时针）
+            ctx.drawImage(weaponImage, -drawW * 0.15 - recoilBack, -drawH / 2 + yOffset, drawW, drawH);
             ctx.restore();
         } else {
             ctx.beginPath();
