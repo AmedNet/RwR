@@ -109,11 +109,13 @@ export function drawInventory(ctx, renderer) {
         }
     }
 
-    // 底部提示
+    // 底部提示（始终显示在背包格子下方）
+    const totalRows = Math.ceil(7 / slotsPerRow);
+    const slotsBottomY = startY + totalRows * (slotSize + slotGap);
     ctx.fillStyle = '#aaa';
     ctx.font = '16px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('按 Q 关闭背包', renderer.width / 2, startY + 140);
+    ctx.fillText('按 Q 关闭背包', renderer.width / 2, slotsBottomY + 30);
 
     ctx.restore();
 }

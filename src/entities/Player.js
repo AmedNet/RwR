@@ -38,6 +38,7 @@ export class Player extends Entity {
         this.loadWeaponImage('ak47');
         this.loadWeaponImage('m4a1');
         this.loadWeaponImage('cat'); // 医疗包
+        this.loadWeaponImage('sa28'); // 霰弹枪
     }
 
     loadWeaponImage(weaponId) {
@@ -269,15 +270,40 @@ export class Player extends Entity {
 
         // 应用后坐力和散布到射击角度
         const angleOffset = weapon.getShotAngleOffset();
-        const finalAngle = angle + angleOffset;
+        const baseAngle = angle + angleOffset;
 
         const speed = weapon.config.bulletSpeed;
-        GameState.bullets.push(new Bullet(
-            this.x + Math.cos(finalAngle) * this.radius,
-            this.y + Math.sin(finalAngle) * this.radius,
-            Math.cos(finalAngle) * speed, Math.sin(finalAngle) * speed,
-            false, weapon.config.damage, true
-        ));
+        const knockback = weapon.config.knockback || 0;
+
+        // 霰弹枪：一次发射多颗弹丸
+        if (weapon.config.type === 'shotgun') {
+            const pellets = weapon.config.pellets || 8;
+            const spreadAngle = weapon.config.spreadAngle || 0.35;
+            const pelletRadius = (GameState.config.bullet.radius) * 0.6; // 霰弹枪弹丸更小
+            const maxRange = weapon.config.range || 250;
+
+            for (let i = 0; i < pellets; i++) {
+                // 在锥角内均匀随机分布
+                const pelletAngle = baseAngle + (Math.random() - 0.5) * spreadAngle;
+                const spawnX = this.x + Math.cos(pelletAngle) * this.radius;
+                const spawnY = this.y + Math.sin(pelletAngle) * this.radius;
+                GameState.bullets.push(new Bullet(
+                    spawnX, spawnY,
+                    Math.cos(pelletAngle) * speed,
+                    Math.sin(pelletAngle) * speed,
+                    false, weapon.config.damage, true,
+                    knockback, pelletRadius, maxRange
+                ));
+            }
+        } else {
+            GameState.bullets.push(new Bullet(
+                this.x + Math.cos(baseAngle) * this.radius,
+                this.y + Math.sin(baseAngle) * this.radius,
+                Math.cos(baseAngle) * speed, Math.sin(baseAngle) * speed,
+                false, weapon.config.damage, true,
+                knockback
+            ));
+        }
         weapon.consumeAmmo();
         weapon.applyRecoilAndSpread(); // 射击后增加后坐力和散布
         this.shootCooldown = weapon.config.shootDelay;

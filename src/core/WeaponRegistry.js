@@ -34,7 +34,8 @@ export const WeaponRegistry = {
         icon: '🗡️',
         imagePath: 'src/pkg/weapon/919/919.png',
         range: 80,
-        fireMode: FireMode.SEMI
+        fireMode: FireMode.SEMI,
+        knockback: 12
     },
 
     // Beretta 92 - 初始武器
@@ -70,7 +71,8 @@ export const WeaponRegistry = {
         sustainedFire: {
             threshold: 3,
             bonusPerShot: 0.008
-        }
+        },
+        knockback: 2
     },
 
     // AK-47 突击步枪 - 连射武器
@@ -107,7 +109,8 @@ export const WeaponRegistry = {
         sustainedFire: {
             threshold: 3,
             bonusPerShot: 0.012
-        }
+        },
+        knockback: 4
     },
 
     // M4A1 卡宾枪 - 三连发武器
@@ -144,6 +147,32 @@ export const WeaponRegistry = {
         sustainedFire: {
             threshold: 3,
             bonusPerShot: 0.010
+        },
+        knockback: 3
+    },
+
+    // SA28 霰弹枪 - 半自动，多弹丸
+    sa28: {
+        id: 'sa28',
+        name: 'SA28 霰弹枪',
+        type: WeaponType.SHOTGUN,
+        damage: 33,           // 每颗弹丸伤害
+        pellets: 8,           // 每次射击弹丸数
+        spreadAngle: 0.35,    // 20度锥角（总角度，弧度）
+        shootDelay: 32,       // 半自动射速较慢
+        bulletSpeed: 10,
+        magSize: 8,
+        reloadTime: { min: 180, max: 240 },
+        buyPrice: 400,
+        sellPrice: 150,
+        icon: 'src/pkg/weapon/SA28/SA28.png',
+        imagePath: 'src/pkg/weapon/SA28/SA28.png',
+        range: 550,           // 有效射程（像素）
+        fireMode: FireMode.SEMI,
+        knockback: 8,         // 击退力度大
+        recoil: {
+            maxAngle: 0.25,
+            recoverySpeed: 0.008
         }
     },
 

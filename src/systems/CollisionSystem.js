@@ -139,6 +139,12 @@ export const CollisionSystem = {
                     if (dx*dx + dy*dy < (bullet.radius + enemy.radius) ** 2) {
                         enemy.takeDamage(bullet.damage);
                         bulletUsed = true;
+                        // 击退效果
+                        if (bullet.knockback > 0) {
+                            const kbAngle = Math.atan2(bullet.vy, bullet.vx);
+                            enemy.x += Math.cos(kbAngle) * bullet.knockback;
+                            enemy.y += Math.sin(kbAngle) * bullet.knockback;
+                        }
                         // 特效：子弹击中敌人
                         EffectsManager.spawnParticles(bullet.x, bullet.y, ParticleType.SPARK, 6);
                         EffectsManager.addDamageNumber(enemy.x, enemy.y, bullet.damage, false);

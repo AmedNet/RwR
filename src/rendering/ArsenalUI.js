@@ -98,6 +98,8 @@ export function drawArsenalShop(ctx, renderer) {
             typeText = `数量 ${config.magSize} | 医疗用品`;
         } else if (config.type === 'pistol') {
             typeText = `弹容量 ${config.magSize} | 手枪`;
+        } else if (config.type === 'shotgun') {
+            typeText = `弹容量 ${config.magSize} | 霰弹枪`;
         } else {
             typeText = `弹容量 ${config.magSize} | 步枪`;
         }
