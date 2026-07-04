@@ -135,13 +135,16 @@ export function drawArsenalShop(ctx, renderer) {
     ctx.font = '16px sans-serif';
     ctx.fillText('当前选中: 背包第 ' + (GameState.arsenalSelectedSlot + 1) + ' 格', itemX, sellSectionY + 35);
 
-    // 背包4格显示
-    const slotSize = 90;
+    // 背包7格显示（自适应屏幕宽度）
+    const maxSlotWidth = 90;
     const slotGap = 15;
-    const slotStartX = itemX - (4 * slotSize + 3 * slotGap) / 2;
+    const totalWidthNeeded = 7 * maxSlotWidth + 6 * slotGap;
+    const availableWidth = Math.min(renderer.width - 40, totalWidthNeeded);
+    const slotSize = Math.floor((availableWidth - 6 * slotGap) / 7);
+    const slotStartX = itemX - (7 * slotSize + 6 * slotGap) / 2;
     const slotStartY = sellSectionY + 60;
 
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 7; i++) {
         const sx = slotStartX + i * (slotSize + slotGap);
         const isSelected = i === GameState.arsenalSelectedSlot;
 
@@ -199,7 +202,7 @@ export function drawArsenalShop(ctx, renderer) {
     ctx.fillStyle = '#aaa';
     ctx.font = '15px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('↑↓ 选择商品 | 1-4 选择背包格 | B 购买 | S 出售 | E 关闭', renderer.width / 2, renderer.height - 30);
+    ctx.fillText('↑↓ 选择商品 | 1-7 选择背包格 | B 购买 | S 出售 | E 关闭', renderer.width / 2, renderer.height - 30);
 
     ctx.restore();
 }

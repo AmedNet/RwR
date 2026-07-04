@@ -10,7 +10,7 @@ export const GameState = {
     capturePoints: [],
     arsenal: null, // 军械库实例
     arsenalOpen: false, // 军械库界面是否打开
-    inventory: [null, null, null, null], // 背包，4个位置，存储 Weapon 实例或 null
+    inventory: [null, null, null, null, null, null, null], // 背包，7个位置，存储 Weapon 实例或 null
     inventoryOpen: false, // 背包是否打开
     rp: 0, // RP值（金钱）
     map: null,
@@ -28,7 +28,7 @@ export const GameState = {
     permanentDefeat: false, // 是否永久战败（无据点可复活）
     teammateRespawnQueue: [], // 等待重生的队友 { x, y, timer }
     // 武器系统
-    activeWeaponSlot: 0, // 当前装备的背包位置 (0-3)
+    activeWeaponSlot: 0, // 当前装备的背包位置 (0-6)
     arsenalSelectedSlot: 0, // 军械库中选中的背包位置
     arsenalSelectedIndex: 0, // 军械库中选中的商品索引
 
@@ -49,7 +49,7 @@ export const GameState = {
 
     // 切换武器
     switchWeapon(slot) {
-        if (slot < 0 || slot > 3) return false;
+        if (slot < 0 || slot > 6) return false;
         if (this.activeWeaponSlot === slot) return false;
         this.activeWeaponSlot = slot;
         return true;
@@ -65,7 +65,7 @@ export const GameState = {
         this.gameOver = false;
         this.spawnTimer = 0;
         // 初始化：背包第1格放 Beretta 92
-        this.inventory = [new Weapon('beretta92'), null, null, null];
+        this.inventory = [new Weapon('beretta92'), null, null, null, null, null, null];
         this.activeWeaponSlot = 0;
         this.arsenalSelectedSlot = 0;
         this.arsenalSelectedIndex = 0;

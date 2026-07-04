@@ -106,7 +106,7 @@ if (GameState.arsenalOpen && key === 'arrowdown') {
                         GameState.inventory[slot] = null;
                         // 如果出售的是当前武器，切换到其他武器
                         if (GameState.activeWeaponSlot === slot) {
-                            for (let i = 0; i < 4; i++) {
+                            for (let i = 0; i < 7; i++) {
                                 if (GameState.inventory[i]) {
                                     GameState.activeWeaponSlot = i;
                                     break;
@@ -119,10 +119,10 @@ if (GameState.arsenalOpen && key === 'arrowdown') {
                     e.preventDefault();
                     return;
                 }
-                // 数字键 1-4 选择背包位置（军械库中）
+                // 数字键 1-7 选择背包位置（军械库中）
                 if (GameState.arsenalOpen) {
                     const num = parseInt(e.key);
-                    if (num >= 1 && num <= 4) {
+                    if (num >= 1 && num <= 7) {
                         GameState.arsenalSelectedSlot = num - 1;
                         e.preventDefault();
                         return;
@@ -178,9 +178,9 @@ if (GameState.arsenalOpen && key === 'arrowdown') {
                 return;
             }
             
-            // 数字键 1-4：切换武器
+            // 数字键 1-7：切换武器
             const num = parseInt(e.key);
-            if (num >= 1 && num <= 4) {
+            if (num >= 1 && num <= 7) {
                 if (GameState.player && GameState.inventory[num - 1]) {
                     GameState.player.switchWeapon(num - 1);
                 }

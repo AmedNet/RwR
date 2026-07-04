@@ -58,7 +58,7 @@ export function drawWeaponHUD(ctx, renderer) {
     }
 
     // 底部武器槽位（毛玻璃风格）
-    const slotCount = 4;
+    const slotCount = 7;
     const slotSize = 52;
     const gap = 8;
     const totalW = slotCount * slotSize + (slotCount - 1) * gap;

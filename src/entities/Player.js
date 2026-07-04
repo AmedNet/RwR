@@ -92,7 +92,7 @@ export class Player extends Entity {
     }
 
     switchWeapon(slot) {
-        if (slot < 0 || slot > 3 || slot === GameState.activeWeaponSlot || !GameState.inventory[slot]) return;
+        if (slot < 0 || slot > 6 || slot === GameState.activeWeaponSlot || !GameState.inventory[slot]) return;
         const current = GameState.getActiveWeapon();
         if (current) {
             current.isReloading = false;

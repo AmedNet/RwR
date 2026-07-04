@@ -56,7 +56,7 @@ export function drawInventory(ctx, renderer) {
     const startX = renderer.width / 2 - (slotsPerRow * slotSize + (slotsPerRow - 1) * slotGap) / 2;
     const startY = 300;
 
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 7; i++) {
         const row = Math.floor(i / slotsPerRow);
         const col = i % slotsPerRow;
         const x = startX + col * (slotSize + slotGap);
@@ -113,7 +113,7 @@ export function drawInventory(ctx, renderer) {
     ctx.fillStyle = '#aaa';
     ctx.font = '16px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('按 Q 关闭背包', renderer.width / 2, startY + 120);
+    ctx.fillText('按 Q 关闭背包', renderer.width / 2, startY + 140);
 
     ctx.restore();
 }
