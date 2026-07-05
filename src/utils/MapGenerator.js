@@ -110,62 +110,106 @@ export const MapGenerator = {
     }
 };
 
-// 生成蜿蜒河流
+// 角度累积法生成蜿蜒河流
 function generateRivers(map, noise) {
-    const numRivers = 3 + Math.floor(Math.random() * 3); // 3-5条河流
+    const numRivers = 3 + Math.floor(Math.random() * 2); // 3-4条河流
+    console.log(`🏞️ 生成 ${numRivers} 条河流...`);
 
     for (let i = 0; i < numRivers; i++) {
         // 随机起点（从地图边缘开始）
         const startEdge = Math.floor(Math.random() * 4); // 0=上, 1=右, 2=下, 3=左
-        let col, row;
+        let curC, curR, baseAngle;
 
         switch (startEdge) {
             case 0: // 上边缘
-                col = 20 + Math.floor(Math.random() * (map.cols - 40));
-                row = 0;
+                curC = 30 + Math.floor(Math.random() * (map.cols - 60));
+                curR = 3;
+                baseAngle = Math.PI / 2 + (Math.random() - 0.5) * 0.5; // 主要向下
                 break;
             case 1: // 右边缘
-                col = map.cols - 1;
-                row = 20 + Math.floor(Math.random() * (map.rows - 40));
+                curC = map.cols - 4;
+                curR = 30 + Math.floor(Math.random() * (map.rows - 60));
+                baseAngle = Math.PI + (Math.random() - 0.5) * 0.5; // 主要向左
                 break;
             case 2: // 下边缘
-                col = 20 + Math.floor(Math.random() * (map.cols - 40));
-                row = map.rows - 1;
+                curC = 30 + Math.floor(Math.random() * (map.cols - 60));
+                curR = map.rows - 4;
+                baseAngle = -Math.PI / 2 + (Math.random() - 0.5) * 0.5; // 主要向上
                 break;
             case 3: // 左边缘
-                col = 0;
-                row = 20 + Math.floor(Math.random() * (map.rows - 40));
+                curC = 3;
+                curR = 30 + Math.floor(Math.random() * (map.rows - 60));
+                baseAngle = (Math.random() - 0.5) * 0.5; // 主要向右
                 break;
         }
 
-        const riverWidth = 2 + Math.floor(Math.random() * 2); // 2-3格宽
-        const length = 30 + Math.floor(Math.random() * 60); // 河流长度
+        const riverWidth = 2 + Math.floor(Math.random() * 1); // 2格宽
+        const length = 100 + Math.floor(Math.random() * 80); // 河流长度
+        let angle = baseAngle;
+        const visited = new Set();
 
         for (let step = 0; step < length; step++) {
-            // 在地图范围内绘制河流
+            const key = `${curR},${curC}`;
+            if (visited.has(key)) break;
+            visited.add(key);
+
+            // 绘制河流
             for (let dw = 0; dw < riverWidth; dw++) {
-                const wc = col + (dw - Math.floor(riverWidth / 2));
-                if (wc >= 0 && wc < map.cols && row >= 0 && row < map.rows) {
-                    // 河流覆盖其他地形
-                    map.setTile(wc, row, Terrain.RIVER);
+                const wc = curC + (dw - Math.floor(riverWidth / 2));
+                if (wc >= 0 && wc < map.cols && curR >= 0 && curR < map.rows) {
+                    const tile = map.getTile(wc, curR);
+                    if (tile !== Terrain.MOUNTAIN && tile !== Terrain.HOUSE) {
+                        map.setTile(wc, curR, Terrain.RIVER);
+                    }
                 }
             }
 
-            // 随机蜿蜒（使用噪声来决定方向）
-            const n = noise[Math.min(row, map.rows - 1)][Math.min(col, map.cols - 1)];
-            const direction = n * 2 - 1; // -1 到 1
+            // 到达地图边缘则停止
+            if (curC <= 2 || curC >= map.cols - 3 || curR <= 2 || curR >= map.rows - 3) break;
 
-            // 根据起始边缘决定主要流向
-            switch (startEdge) {
-                case 0: row++; col += Math.round(direction * 1.5); break; // 向下
-                case 1: col--; row += Math.round(direction * 1.5); break; // 向左
-                case 2: row--; col += Math.round(direction * 1.5); break; // 向上
-                case 3: col++; row += Math.round(direction * 1.5); break; // 向右
-            }
+            // 使用噪声值微调角度，产生自然蜿蜒
+            const noiseVal = noise[Math.min(curR, map.rows - 1)][Math.min(curC, map.cols - 1)];
+            const angleDelta = (noiseVal - 0.5) * 0.8; // -0.4 到 0.4 弧度
+            angle += angleDelta;
+
+            // 保持主要方向
+            const dirPull = (baseAngle - angle) * 0.02; // 轻微拉回主方向
+            angle += dirPull;
+
+            // 根据角度移动
+            curC += Math.round(Math.cos(angle));
+            curR += Math.round(Math.sin(angle));
 
             // 确保在范围内
-            col = Math.max(5, Math.min(map.cols - 5, col));
-            row = Math.max(5, Math.min(map.rows - 5, row));
+            curC = Math.max(3, Math.min(map.cols - 4, curC));
+            curR = Math.max(3, Math.min(map.rows - 4, curR));
+        }
+    }
+
+    // 沿河流生成河滩沙地（河流附近2格内）
+    for (let r = 0; r < map.rows; r++) {
+        for (let c = 0; c < map.cols; c++) {
+            if (map.getTile(c, r) === Terrain.RIVER) {
+                // 在河流附近随机生成沙地
+                for (let dr = -2; dr <= 2; dr++) {
+                    for (let dc = -2; dc <= 2; dc++) {
+                        if (dr === 0 && dc === 0) continue;
+                        const nc = c + dc;
+                        const nr = r + dr;
+                        if (nc >= 0 && nc < map.cols && nr >= 0 && nr < map.rows) {
+                            const tile = map.getTile(nc, nr);
+                            if (tile === Terrain.GRASS) {
+                                // 距离河流越近，概率越高
+                                const dist = Math.hypot(dc, dr);
+                                const prob = dist <= 1 ? 0.3 : 0.1;
+                                if (Math.random() < prob) {
+                                    map.setTile(nc, nr, Terrain.SAND);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

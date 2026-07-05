@@ -76,6 +76,7 @@ export const Minimap = {
                         case 4: color = 'rgba(27, 94, 32, 0.5)'; break;
                         case 5: color = 'rgba(117, 117, 117, 0.6)'; break;
                         case 6: color = 'rgba(215, 204, 200, 0.4)'; break;
+                        case 7: color = 'rgba(244, 228, 188, 0.5)'; break;
                         default: color = 'rgba(76, 175, 80, 0.3)';
                     }
                     this.offscreenCtx.fillStyle = color;

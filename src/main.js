@@ -60,8 +60,8 @@ const CONFIG = {
         enemyHueMax: 360
     },
     map: {
-        cols: 300,
-        rows: 250,
+        cols: 360,
+        rows: 300,
         tileSize: 50
     },
     capturePoints: {

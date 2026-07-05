@@ -9,6 +9,7 @@ export const Terrain = {
     FOREST: 4,
     MOUNTAIN: 5,
     ROAD: 6,
+    SAND: 7,
 };
 
 const TERRAIN_COLORS = {
@@ -19,6 +20,7 @@ const TERRAIN_COLORS = {
     [Terrain.FOREST]: '#2E7D32',
     [Terrain.MOUNTAIN]: '#757575',
     [Terrain.ROAD]: '#D7CCC8',
+    [Terrain.SAND]: '#F4E4BC',
 };
 
 export class Map {
@@ -93,6 +95,7 @@ export class Map {
         const { col, row } = this.worldToTile(wx, wy);
         const tile = this.getTile(col, row);
         if (tile === Terrain.RIVER) return 0.5;
+        if (tile === Terrain.SAND) return 0.6;
         if (tile === Terrain.FOREST) return 0.7;
         if (tile === Terrain.ROAD) return 1.3;
         return 1.0;
