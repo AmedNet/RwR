@@ -9,7 +9,8 @@ export const WeaponType = {
     SNIPER: 'sniper',    // 狙击枪
     GRENADE: 'grenade',  // 手雷
     MEDICAL: 'medical',  // 医疗包
-    LAUNCHER: 'launcher' // 重武器/发射器
+    LAUNCHER: 'launcher', // 重武器/发射器
+    SMG: 'smg'           // 冲锋枪
 };
 
 // 射击模式
@@ -322,7 +323,50 @@ export const WeaponRegistry = {
         },
 
         // 拖尾特效
-        hasTrail: true
+        hasTrail: true,
+
+        // 火箭弹保持原始大小（不使用默认0.6倍率）
+        bulletRadiusMultiplier: 1.0
+    },
+
+    // HK MP5 冲锋枪 - 极速射速，小弹丸
+    hkmp5: {
+        id: 'hkmp5',
+        name: 'HK MP5',
+        type: WeaponType.SMG,
+        damage: 34,               // 同手枪
+        shootDelay: 6,            // 极快射速
+        bulletSpeed: 12,          // 同AK-47
+        magSize: 30,
+        reloadTime: { min: 180, max: 300 },
+        buyPrice: 200,
+        sellPrice: 100,
+        icon: 'src/pkg/weapon/hkmp5/hkmp5.png',
+        imagePath: 'src/pkg/weapon/hkmp5/hkmp5.png',
+        reloadImagePath: 'src/pkg/weapon/hkmp5/hkmp5_Reload.png',
+        range: Infinity,
+        fireMode: FireMode.AUTO,
+        canChamberedReload: true,
+        bulletRadiusMultiplier: 0.6, // 子弹大小同霰弹枪弹丸
+        shellType: 'pistol',         // 抛壳复用手枪配置
+        // 后坐力：介于手枪和步枪之间
+        recoil: {
+            maxAngle: 0.20,
+            recoverySpeed: 0.007
+        },
+        // 散布：连射精度损失极大
+        spread: {
+            base: 0.05,
+            max: 0.22,
+            increase: 0.025,
+            recovery: 0.007
+        },
+        // 连续射击散布增加
+        sustainedFire: {
+            threshold: 3,
+            bonusPerShot: 0.015
+        },
+        knockback: 3
     },
 
     // 医疗包 - 恢复血量

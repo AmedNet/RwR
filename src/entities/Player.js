@@ -42,6 +42,7 @@ export class Player extends Entity {
         this.loadWeaponImage('awp'); // 狙击枪
         this.loadWeaponImage('m82'); // 反器材狙击枪
         this.loadWeaponImage('at4'); // 火箭筒
+        this.loadWeaponImage('hkmp5'); // 冲锋枪
     }
 
     loadWeaponImage(weaponId) {
@@ -383,12 +384,17 @@ export class Player extends Entity {
                 : null;
             // 获取拖尾配置（AT4用）
             const hasTrail = weapon.config.hasTrail === true;
+            // 获取子弹大小倍率（默认0.6，火箭筒等除外）
+            const bulletRadiusMult = weapon.config.bulletRadiusMultiplier !== undefined
+                ? weapon.config.bulletRadiusMultiplier
+                : 0.6;
+            const bulletRadius = GameState.config.bullet.radius * bulletRadiusMult;
             GameState.bullets.push(new Bullet(
                 this.x + Math.cos(baseAngle) * this.radius,
                 this.y + Math.sin(baseAngle) * this.radius,
                 Math.cos(baseAngle) * speed, Math.sin(baseAngle) * speed,
                 false, weapon.config.damage, true,
-                knockback, null, null, penetration, explosion, hasTrail
+                knockback, bulletRadius, null, penetration, explosion, hasTrail
             ));
         }
         weapon.consumeAmmo();
@@ -398,7 +404,8 @@ export class Player extends Entity {
         // 抛壳效果（排除不抛壳的武器类型）
         const noShellTypes = ['melee', 'grenade', 'medical', 'launcher'];
         if (!noShellTypes.includes(weapon.config.type)) {
-            EffectsManager.spawnShellCasing(this.x, this.y, weapon.config.type);
+            const shellType = weapon.config.shellType || weapon.config.type;
+            EffectsManager.spawnShellCasing(this.x, this.y, shellType);
         }
 
         // 火箭筒等一次性堆叠武器：射击后消耗堆叠，用完销毁

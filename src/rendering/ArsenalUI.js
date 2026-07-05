@@ -104,6 +104,8 @@ export function drawArsenalShop(ctx, renderer) {
             typeText = `弹容量 ${config.magSize} | 狙击枪`;
         } else if (config.type === 'launcher') {
             typeText = `堆叠上限 ${config.maxStack} | 重武器`;
+        } else if (config.type === 'smg') {
+            typeText = `弹容量 ${config.magSize} | 冲锋枪`;
         } else {
             typeText = `弹容量 ${config.magSize} | 步枪`;
         }
