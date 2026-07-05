@@ -58,13 +58,18 @@ export class Enemy extends Entity {
     updateRole() {
         const enemyPoints = GameState.capturePoints.filter(p => p.owner === 'enemy');
         const playerPoints = GameState.capturePoints.filter(p => p.owner === 'player');
-        
-        // 敌方据点少于3个，或玩家据点明显多于敌方时，防守兵转为突击兵
-        if (this.role === 0 && (enemyPoints.length <= 2 || playerPoints.length > enemyPoints.length * 2)) {
-            if (Math.random() < 0.01) { // 每帧1%概率转换，避免突然全部转换
+
+        // 劣势时更快转换：概率提高到3%/帧
+        if (this.role === 0 && (enemyPoints.length <= 2 || playerPoints.length > enemyPoints.length * 1.5)) {
+            if (Math.random() < 0.03) {
                 this.role = 1;
                 this.guardPoint = null;
             }
+        }
+        // 只剩1个据点时，防守兵立即转为突击兵
+        if (this.role === 0 && enemyPoints.length <= 1) {
+            this.role = 1;
+            this.guardPoint = null;
         }
     }
 

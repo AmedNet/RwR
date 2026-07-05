@@ -189,7 +189,7 @@ export const WeaponRegistry = {
         buyPrice: 500,
         sellPrice: 400,
         icon: 'src/pkg/weapon/AWP/AWP.png',
-        imagePath: 'src/pkg/weapon/AWP/AWPd.png',
+        imagePath: 'src/pkg/weapon/AWP/AWP.png',
         reloadImagePath: 'src/pkg/weapon/AWP/AWP_Reload.png',
         range: Infinity,
         fireMode: FireMode.SEMI,

@@ -43,6 +43,25 @@ export class Teammate extends Entity {
         return friendlyPoints[Math.floor(Math.random() * friendlyPoints.length)];
     }
 
+    // 动态角色调整：后期己方据点多时，防守兵转为进攻
+    updateRole() {
+        const friendlyPoints = GameState.capturePoints.filter(p => p.owner === 'player');
+        const enemyPoints = GameState.capturePoints.filter(p => p.owner === 'enemy');
+        
+        // 己方据点明显多于敌方 → 防守兵转为进攻
+        if (this.role === 0 && friendlyPoints.length > enemyPoints.length + 1) {
+            if (Math.random() < 0.005) { // 0.5%/帧，约3秒内完成转换
+                this.role = 1;
+                this.homeBase = null;
+            }
+        }
+        // 所有据点都是己方的 → 全部转为进攻/游走
+        if (this.role === 0 && enemyPoints.length === 0) {
+            this.role = Math.random() < 0.5 ? 1 : 2;
+            this.homeBase = null;
+        }
+    }
+
     getClosestEnemy() {
         let target = null;
         let minDist = Infinity;
@@ -62,9 +81,17 @@ export class Teammate extends Entity {
         let minDist = Infinity;
         for (const point of GameState.capturePoints) {
             if (point.owner === 'player') continue;
-            const d = Math.hypot(point.x - this.x, point.y - this.y);
-            if (d < minDist) {
-                minDist = d;
+            // 计算据点附近已有队友数量
+            let nearbyAllies = 0;
+            for (const t of GameState.teammates) {
+                if (t !== this && t.alive && Math.hypot(t.x - point.x, t.y - point.y) < 200) {
+                    nearbyAllies++;
+                }
+            }
+            // 有效距离 = 实际距离 + 队友拥挤惩罚
+            const effectiveDist = Math.hypot(point.x - this.x, point.y - this.y) + nearbyAllies * 150;
+            if (effectiveDist < minDist) {
+                minDist = effectiveDist;
                 target = point;
             }
         }
@@ -89,6 +116,9 @@ export class Teammate extends Entity {
         if (GameState.gameOver || !this.alive) return;
         const player = GameState.player;
         if (!player || !player.alive) return;
+
+        // 动态调整角色
+        this.updateRole();
 
         const { target: enemy, distance: enemyDist } = this.getClosestEnemy();
         const { target: captureTarget, distance: captureDist } = this.getClosestEnemyPoint();
