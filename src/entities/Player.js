@@ -40,6 +40,7 @@ export class Player extends Entity {
         this.loadWeaponImage('cat'); // 医疗包
         this.loadWeaponImage('sa28'); // 霰弹枪
         this.loadWeaponImage('awp'); // 狙击枪
+        this.loadWeaponImage('m82'); // 反器材狙击枪
     }
 
     loadWeaponImage(weaponId) {
@@ -372,12 +373,16 @@ export class Player extends Entity {
         } else {
             // 获取穿透配置（狙击枪用）
             const penetration = weapon.config.penetration || null;
+            // 获取爆炸配置（M82用）
+            const explosion = (weapon.config.explosionRadius && weapon.config.explosionDamage) 
+                ? { radius: weapon.config.explosionRadius, damage: weapon.config.explosionDamage }
+                : null;
             GameState.bullets.push(new Bullet(
                 this.x + Math.cos(baseAngle) * this.radius,
                 this.y + Math.sin(baseAngle) * this.radius,
                 Math.cos(baseAngle) * speed, Math.sin(baseAngle) * speed,
                 false, weapon.config.damage, true,
-                knockback, null, null, penetration
+                knockback, null, null, penetration, explosion
             ));
         }
         weapon.consumeAmmo();

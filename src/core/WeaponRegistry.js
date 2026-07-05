@@ -225,6 +225,52 @@ export const WeaponRegistry = {
         }
     },
 
+    // M82 反器材狙击枪 - 爆炸弹
+    m82: {
+        id: 'm82',
+        name: 'M82',
+        type: WeaponType.SNIPER,
+        damage: 200,              // 爆炸中心伤害（距离衰减）
+        shootDelay: 12,           // 同手枪射速
+        bulletSpeed: 50,          // 同AWP
+        magSize: 10,
+        reloadTime: { min: 240, max: 360 },
+        buyPrice: 800,
+        sellPrice: 400,
+        icon: 'src/pkg/weapon/M82/M82.png',
+        imagePath: 'src/pkg/weapon/M82/M82.png',
+        reloadImagePath: 'src/pkg/weapon/M82/M82_Reload.png',
+        range: Infinity,
+        fireMode: FireMode.SEMI,
+        canChamberedReload: true, // 支持空仓挂机
+        knockback: 60,            // 同手雷击退
+        
+        // 爆炸弹配置
+        explosionRadius: 70,      // 爆炸半径（像素）
+        explosionDamage: 160,     // 爆炸中心伤害
+        
+        // 倍镜配置
+        scope: {
+            activateDelay: 30,
+            maxOffset: 400,
+            offsetSensitivity: 300
+        },
+        
+        // 后坐力（同AWP）
+        recoil: {
+            maxAngle: 0.35,
+            recoverySpeed: 0.004
+        },
+        
+        // 精度（第一发比AWP稍差，连射精度损失极大）
+        spread: {
+            base: 0.015,
+            max: 0.35,
+            increase: 0.04,
+            recovery: 0.008
+        }
+    },
+
     // M67 手雷 - 投掷物
     m67: {
         id: 'm67',

@@ -73,6 +73,12 @@ export const CollisionSystem = {
                 const { col, row } = map.worldToTile(bullet.x, bullet.y);
                 const tile = map.getTile(col, row);
                 if (tile === Terrain.HOUSE || tile === Terrain.MOUNTAIN) {
+                    // 爆炸弹命中墙壁触发爆炸
+                    if (bullet.explosion) {
+                        window.dispatchEvent(new CustomEvent('grenade_explode', {
+                            detail: { x: bullet.x, y: bullet.y, radius: bullet.explosion.radius, damage: bullet.explosion.damage }
+                        }));
+                    }
                     bullet.alive = false;
                     bullets.splice(i, 1);
                     continue;
@@ -203,6 +209,12 @@ export const CollisionSystem = {
             }
 
             if (bulletUsed) {
+                // 爆炸弹命中实体后触发爆炸
+                if (bullet.explosion) {
+                    window.dispatchEvent(new CustomEvent('grenade_explode', {
+                        detail: { x: bullet.x, y: bullet.y, radius: bullet.explosion.radius, damage: bullet.explosion.damage }
+                    }));
+                }
                 bullets.splice(i, 1);
             }
         }
