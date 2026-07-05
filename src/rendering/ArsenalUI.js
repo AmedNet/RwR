@@ -102,6 +102,8 @@ export function drawArsenalShop(ctx, renderer) {
             typeText = `弹容量 ${config.magSize} | 霰弹枪`;
         } else if (config.type === 'sniper') {
             typeText = `弹容量 ${config.magSize} | 狙击枪`;
+        } else if (config.type === 'launcher') {
+            typeText = `堆叠上限 ${config.maxStack} | 重武器`;
         } else {
             typeText = `弹容量 ${config.magSize} | 步枪`;
         }
@@ -185,6 +187,12 @@ export function drawArsenalShop(ctx, renderer) {
             ctx.fillStyle = '#aaa';
             ctx.font = '12px sans-serif';
             ctx.fillText(weapon.config.name, sx + slotSize / 2, slotStartY + slotSize - 15);
+            // 堆叠武器显示堆叠数
+            if (weapon.config.maxStack && weapon.config.maxStack > 1) {
+                ctx.fillStyle = '#FFD700';
+                ctx.font = 'bold 11px sans-serif';
+                ctx.fillText(`${weapon.stackCount}/${weapon.config.maxStack}`, sx + slotSize - 12, slotStartY + 15);
+            }
         } else {
             ctx.fillStyle = 'rgba(255,255,255,0.2)';
             ctx.font = '14px sans-serif';

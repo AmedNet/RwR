@@ -9,7 +9,8 @@ export const ParticleType = {
     CAPTURE: 4,   // 占领据点
     GRENADE_BLAST: 5, // 手雷爆炸
     SMOKE: 6,    // 烟雾
-    HEAL: 7      // 治疗
+    HEAL: 7,     // 治疗
+    ROCKET_TRAIL: 8 // 火箭拖尾
 };
 
 export const EffectsManager = {
@@ -141,6 +142,36 @@ export const EffectsManager = {
             life: 50,
             maxLife: 50,
             vy: -1.5 // 向上飘
+        });
+    },
+
+    // 生成火箭弹拖尾特效
+    spawnRocketTrail(x, y) {
+        // 火焰粒子（橙色/黄色）
+        for (let i = 0; i < 3; i++) {
+            this.particles.push({
+                x: x + (Math.random() - 0.5) * 4,
+                y: y + (Math.random() - 0.5) * 4,
+                vx: (Math.random() - 0.5) * 1.5,
+                vy: (Math.random() - 0.5) * 1.5,
+                life: 12 + Math.random() * 8,
+                maxLife: 20,
+                color: ['#ff6d00', '#ffab00', '#ff9100'][i % 3],
+                size: 2.5 + Math.random() * 2,
+                type: ParticleType.ROCKET_TRAIL
+            });
+        }
+        // 烟雾粒子
+        this.particles.push({
+            x: x + (Math.random() - 0.5) * 6,
+            y: y + (Math.random() - 0.5) * 6,
+            vx: (Math.random() - 0.5) * 0.8,
+            vy: -0.3 - Math.random() * 0.5,
+            life: 25 + Math.random() * 15,
+            maxLife: 40,
+            color: '#555',
+            size: 3 + Math.random() * 3,
+            type: ParticleType.SMOKE
         });
     },
 

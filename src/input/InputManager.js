@@ -83,12 +83,22 @@ if (GameState.arsenalOpen && key === 'arrowdown') {
                     GameState.rp -= config.buyPrice;
                     console.log(`💰 购买 ${config.name}！`);
                 } else if (GameState.inventory[slot].id === selectedId) {
-                    // 已有同类武器：补充弹药
-                    const maxAmmo = config.magSize;
-                    if (GameState.inventory[slot].ammo < maxAmmo) {
-                        GameState.inventory[slot].ammo = maxAmmo;
-                        GameState.rp -= config.buyPrice;
-                        console.log(`💰 补充 ${config.name} 弹药！`);
+                    const weapon = GameState.inventory[slot];
+                    // 堆叠武器（如火箭筒）：增加堆叠数
+                    if (config.maxStack && config.maxStack > 1) {
+                        if (weapon.stackCount < config.maxStack) {
+                            weapon.addStack(1); // 每次+1
+                            GameState.rp -= config.buyPrice;
+                            console.log(`💰 补充 ${config.name} 弹药（${weapon.stackCount}/${config.maxStack}）！`);
+                        }
+                    } else {
+                        // 普通武器：补充弹药
+                        const maxAmmo = config.magSize;
+                        if (weapon.ammo < maxAmmo) {
+                            weapon.ammo = maxAmmo;
+                            GameState.rp -= config.buyPrice;
+                            console.log(`💰 补充 ${config.name} 弹药！`);
+                        }
                     }
                 }
                 // 刷新HUD的RP显示

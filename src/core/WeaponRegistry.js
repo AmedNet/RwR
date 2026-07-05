@@ -8,7 +8,8 @@ export const WeaponType = {
     SHOTGUN: 'shotgun',  // 霰弹枪
     SNIPER: 'sniper',    // 狙击枪
     GRENADE: 'grenade',  // 手雷
-    MEDICAL: 'medical'   // 医疗包
+    MEDICAL: 'medical',  // 医疗包
+    LAUNCHER: 'launcher' // 重武器/发射器
 };
 
 // 射击模式
@@ -289,6 +290,39 @@ export const WeaponRegistry = {
         fuseTime: 120,
         explosionRadius: 120,
         fireMode: FireMode.SEMI
+    },
+
+    // AT4 火箭筒 - 一次性重武器，堆叠机制
+    at4: {
+        id: 'at4',
+        name: 'AT4',
+        type: WeaponType.LAUNCHER,
+        damage: 300,              // 直接命中伤害
+        shootDelay: 90,           // 1.5秒射击间隔
+        bulletSpeed: 8,           // 慢速可见弹道
+        magSize: 1,               // 每次装填1发
+        maxStack: 2,              // 最多持有2发
+        reloadTime: { min: 300, max: 420 }, // 换弹时间
+        buyPrice: 300,
+        sellPrice: 150,
+        icon: 'src/pkg/weapon/at4/at4.png',
+        imagePath: 'src/pkg/weapon/at4/at4.png',
+        range: Infinity,
+        fireMode: FireMode.SEMI,
+        knockback: 100,           // 大范围击退
+
+        // 爆炸配置
+        explosionRadius: 150,     // 爆炸半径（像素）
+        explosionDamage: 2000,    // 爆炸中心伤害
+
+        // 后坐力（极大）
+        recoil: {
+            maxAngle: 0.5,
+            recoverySpeed: 0.003
+        },
+
+        // 拖尾特效
+        hasTrail: true
     },
 
     // 医疗包 - 恢复血量

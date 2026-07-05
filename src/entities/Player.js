@@ -41,6 +41,7 @@ export class Player extends Entity {
         this.loadWeaponImage('sa28'); // 霰弹枪
         this.loadWeaponImage('awp'); // 狙击枪
         this.loadWeaponImage('m82'); // 反器材狙击枪
+        this.loadWeaponImage('at4'); // 火箭筒
     }
 
     loadWeaponImage(weaponId) {
@@ -208,7 +209,10 @@ export class Player extends Entity {
             const len = Math.sqrt(dx*dx + dy*dy);
             dx /= len; dy /= len;
             const speedFactor = GameState.map ? GameState.map.getSpeedFactor(this.x, this.y) : 1;
-            const finalSpeed = this.speed * speedFactor;
+            // 持有火箭筒时减速（类似沙地）
+            const heldWeapon = GameState.getActiveWeapon();
+            const launcherSlowdown = (heldWeapon && heldWeapon.config.type === 'launcher') ? 0.5 : 1;
+            const finalSpeed = this.speed * speedFactor * launcherSlowdown;
             const newX = this.x + dx * finalSpeed;
             const newY = this.y + dy * finalSpeed;
             if (GameState.map && !GameState.map.isWalkable(newX, newY, this.radius)) {
@@ -373,21 +377,36 @@ export class Player extends Entity {
         } else {
             // 获取穿透配置（狙击枪用）
             const penetration = weapon.config.penetration || null;
-            // 获取爆炸配置（M82用）
+            // 获取爆炸配置（M82/AT4用）
             const explosion = (weapon.config.explosionRadius && weapon.config.explosionDamage) 
                 ? { radius: weapon.config.explosionRadius, damage: weapon.config.explosionDamage }
                 : null;
+            // 获取拖尾配置（AT4用）
+            const hasTrail = weapon.config.hasTrail === true;
             GameState.bullets.push(new Bullet(
                 this.x + Math.cos(baseAngle) * this.radius,
                 this.y + Math.sin(baseAngle) * this.radius,
                 Math.cos(baseAngle) * speed, Math.sin(baseAngle) * speed,
                 false, weapon.config.damage, true,
-                knockback, null, null, penetration, explosion
+                knockback, null, null, penetration, explosion, hasTrail
             ));
         }
         weapon.consumeAmmo();
         weapon.applyRecoilAndSpread(); // 射击后增加后坐力和散布
         this.shootCooldown = weapon.config.shootDelay;
+
+        // 火箭筒等一次性堆叠武器：射击后消耗堆叠，用完销毁
+        if (weapon.config.type === 'launcher') {
+            weapon.consumeStack();
+            if (weapon.stackCount <= 0) {
+                // 用完销毁，类似医疗包
+                GameState.inventory[GameState.activeWeaponSlot] = null;
+                this.autoSwitchToNextWeapon();
+            } else {
+                // 还有堆叠，自动装填下一发
+                weapon.startReload();
+            }
+        }
     }
 
     // 使用医疗包

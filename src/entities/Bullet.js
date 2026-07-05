@@ -1,9 +1,10 @@
 // src/entities/Bullet.js
 import { Entity } from './Entity.js';
 import { GameState } from '../core/GameState.js';
+import { EffectsManager } from '../utils/EffectsManager.js';
 
 export class Bullet extends Entity {
-    constructor(x, y, vx, vy, isEnemy, damage, isPlayer = false, knockback = 0, bulletRadius = null, maxRange = null, penetration = null, explosion = null) {
+    constructor(x, y, vx, vy, isEnemy, damage, isPlayer = false, knockback = 0, bulletRadius = null, maxRange = null, penetration = null, explosion = null, hasTrail = false) {
         const config = GameState.config.bullet;
         super(x, y, {
             radius: bulletRadius || config.radius,
@@ -27,14 +28,26 @@ export class Bullet extends Entity {
         this.hitTargets = new Set();    // 已击中目标集合
         this.remainingPenetration = penetration ? penetration.maxTargets : 0;
         
-        // 爆炸弹属性（M82用）
+        // 爆炸弹属性（M82/AT4用）
         this.explosion = explosion; // { radius, damage }
+        
+        // 火箭弹拖尾（AT4用）
+        this.hasTrail = hasTrail;
+        this.trailTimer = 0;
     }
 
     update() {
         this.x += this.vx;
         this.y += this.vy;
         this.life--;
+
+        // 火箭弹拖尾特效
+        if (this.hasTrail && this.alive) {
+            this.trailTimer++;
+            if (this.trailTimer % 2 === 0) {
+                EffectsManager.spawnRocketTrail(this.x, this.y);
+            }
+        }
 
         // 检查最大射程（霰弹枪用）
         if (this.maxRange) {
@@ -54,12 +67,22 @@ export class Bullet extends Entity {
 
     draw(ctx) {
         ctx.save();
-        ctx.beginPath();
-        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
-        ctx.fillStyle = this.isEnemy ? '#ff5252' : '#FFD740';
-        ctx.shadowColor = this.isEnemy ? '#ff1744' : '#ffab00';
-        ctx.shadowBlur = 15;
-        ctx.fill();
+        if (this.hasTrail) {
+            // 火箭弹：更大、橙色
+            ctx.beginPath();
+            ctx.arc(0, 0, this.radius * 1.5, 0, Math.PI * 2);
+            ctx.fillStyle = '#ff6d00';
+            ctx.shadowColor = '#ff3d00';
+            ctx.shadowBlur = 20;
+            ctx.fill();
+        } else {
+            ctx.beginPath();
+            ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+            ctx.fillStyle = this.isEnemy ? '#ff5252' : '#FFD740';
+            ctx.shadowColor = this.isEnemy ? '#ff1744' : '#ffab00';
+            ctx.shadowBlur = 15;
+            ctx.fill();
+        }
         ctx.restore();
     }
 }
