@@ -161,6 +161,7 @@ export const WeaponRegistry = {
         spreadAngle: 0.35,    // 20度锥角（总角度，弧度）
         shootDelay: 32,       // 半自动射速较慢
         bulletSpeed: 10,
+        canChamberedReload: true, // 支持空仓挂机
         magSize: 8,
         reloadTime: { min: 180, max: 240 },
         buyPrice: 400,

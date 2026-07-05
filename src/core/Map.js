@@ -52,23 +52,37 @@ export class Map {
         return { col, row };
     }
 
-    // 判断世界坐标是否可通行，考虑了半径
+    // 判断世界坐标是否可通行，使用精确的圆-矩形碰撞检测
     isWalkable(wx, wy, radius = 0) {
-        // 检查以 (wx, wy) 为中心，半径为 radius 的所有格子
-        const half = Math.ceil(radius / this.tileSize);
-        const centerCol = Math.floor(wx / this.tileSize);
-        const centerRow = Math.floor(wy / this.tileSize);
-        const startCol = Math.max(0, centerCol - half);
-        const endCol = Math.min(this.cols - 1, centerCol + half);
-        const startRow = Math.max(0, centerRow - half);
-        const endRow = Math.min(this.rows - 1, centerRow + half);
-
-        for (let r = startRow; r <= endRow; r++) {
-            for (let c = startCol; c <= endCol; c++) {
-                const tile = this.getTile(c, r);
+        const tileSize = this.tileSize;
+        
+        // 计算圆形边界覆盖的格子范围
+        const minCol = Math.floor((wx - radius) / tileSize);
+        const maxCol = Math.floor((wx + radius) / tileSize);
+        const minRow = Math.floor((wy - radius) / tileSize);
+        const maxRow = Math.floor((wy + radius) / tileSize);
+        
+        for (let row = minRow; row <= maxRow; row++) {
+            for (let col = minCol; col <= maxCol; col++) {
+                const tile = this.getTile(col, row);
                 if (tile === -1 || tile === Terrain.HOUSE || tile === Terrain.MOUNTAIN) {
-                    // 房屋和山地完全不可通行
-                    return false;
+                    // 计算格子矩形上离圆心最近的点
+                    const tileLeft = col * tileSize;
+                    const tileRight = tileLeft + tileSize;
+                    const tileTop = row * tileSize;
+                    const tileBottom = tileTop + tileSize;
+                    
+                    const closestX = Math.max(tileLeft, Math.min(wx, tileRight));
+                    const closestY = Math.max(tileTop, Math.min(wy, tileBottom));
+                    
+                    const dx = wx - closestX;
+                    const dy = wy - closestY;
+                    const distSq = dx * dx + dy * dy;
+                    
+                    // 如果距离小于半径，说明碰撞
+                    if (distSq < radius * radius) {
+                        return false;
+                    }
                 }
             }
         }

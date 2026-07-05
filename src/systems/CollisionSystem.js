@@ -10,27 +10,47 @@ export const CollisionSystem = {
         const map = GameState.map;
         if (!map) return;
         const radius = entity.radius;
-        // 检查实体中心及上下左右四个点
-        const margin = radius * 0.5;
-        const checkPoints = [
-            { dx: 0, dy: 0 },
-            { dx: margin, dy: 0 },
-            { dx: -margin, dy: 0 },
-            { dx: 0, dy: margin },
-            { dx: 0, dy: -margin }
-        ];
-        for (const pt of checkPoints) {
-            const wx = entity.x + pt.dx;
-            const wy = entity.y + pt.dy;
-            const { col, row } = map.worldToTile(wx, wy);
-            const tile = map.getTile(col, row);
-            if (tile === Terrain.HOUSE) {
-                // 向反方向推一点
-                const overlap = radius * 0.3;
-                const angle = Math.atan2(wy - entity.y, wx - entity.x);
-                entity.x -= Math.cos(angle) * overlap;
-                entity.y -= Math.sin(angle) * overlap;
-                break;
+        const tileSize = map.tileSize;
+        
+        // 检查实体周围的地图格子
+        const minCol = Math.floor((entity.x - radius) / tileSize);
+        const maxCol = Math.floor((entity.x + radius) / tileSize);
+        const minRow = Math.floor((entity.y - radius) / tileSize);
+        const maxRow = Math.floor((entity.y + radius) / tileSize);
+        
+        for (let row = minRow; row <= maxRow; row++) {
+            for (let col = minCol; col <= maxCol; col++) {
+                const tile = map.getTile(col, row);
+                if (tile === Terrain.HOUSE || tile === Terrain.MOUNTAIN) {
+                    // 计算方格的世界坐标边界
+                    const tileLeft = col * tileSize;
+                    const tileRight = tileLeft + tileSize;
+                    const tileTop = row * tileSize;
+                    const tileBottom = tileTop + tileSize;
+                    
+                    // 找到方格上离实体中心最近的点
+                    const closestX = Math.max(tileLeft, Math.min(entity.x, tileRight));
+                    const closestY = Math.max(tileTop, Math.min(entity.y, tileBottom));
+                    
+                    // 计算距离
+                    const dx = entity.x - closestX;
+                    const dy = entity.y - closestY;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    
+                    // 如果距离小于半径，说明发生碰撞
+                    if (dist < radius) {
+                        // 计算重叠量并推开
+                        const overlap = radius - dist;
+                        if (dist > 0) {
+                            entity.x += (dx / dist) * overlap;
+                            entity.y += (dy / dist) * overlap;
+                        } else {
+                            // 实体中心在方格内，向任意方向推开
+                            entity.x += radius;
+                        }
+                        return;
+                    }
+                }
             }
         }
     },
@@ -52,7 +72,7 @@ export const CollisionSystem = {
             if (map) {
                 const { col, row } = map.worldToTile(bullet.x, bullet.y);
                 const tile = map.getTile(col, row);
-                if (tile === Terrain.HOUSE) {
+                if (tile === Terrain.HOUSE || tile === Terrain.MOUNTAIN) {
                     bullet.alive = false;
                     bullets.splice(i, 1);
                     continue;

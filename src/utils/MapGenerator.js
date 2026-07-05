@@ -351,10 +351,38 @@ function generateRoads(map) {
         // 用A*找路径
         const path = aStarPath(map, villages[bestI].r, villages[bestI].c, villages[bestJ].r, villages[bestJ].c);
         if (path) {
-            for (const p of path) {
+            for (let pi = 0; pi < path.length; pi++) {
+                const p = path[pi];
+                // 铺设中心点
                 const tile = map.getTile(p.c, p.r);
                 if (tile !== Terrain.RIVER && tile !== Terrain.HOUSE) {
                     map.setTile(p.c, p.r, Terrain.ROAD);
+                }
+                // 向一侧扩展1格（2格宽道路）
+                // 使用固定方向扩展，保持道路一致性
+                let expandC = 0, expandR = 1; // 默认向下扩展
+                if (pi < path.length - 1) {
+                    const next = path[pi + 1];
+                    const dc = next.c - p.c;
+                    const dr = next.r - p.r;
+                    // 根据主要移动方向决定扩展方向（固定向一侧）
+                    if (Math.abs(dc) >= Math.abs(dr)) {
+                        // 主要水平移动 -> 向下方扩展
+                        expandC = 0;
+                        expandR = 1;
+                    } else {
+                        // 主要垂直移动 -> 向右方扩展
+                        expandC = 1;
+                        expandR = 0;
+                    }
+                }
+                const nc = p.c + expandC;
+                const nr = p.r + expandR;
+                if (nc >= 0 && nc < map.cols && nr >= 0 && nr < map.rows) {
+                    const ntile = map.getTile(nc, nr);
+                    if (ntile !== Terrain.RIVER && ntile !== Terrain.HOUSE && ntile !== Terrain.MOUNTAIN) {
+                        map.setTile(nc, nr, Terrain.ROAD);
+                    }
                 }
             }
         }
