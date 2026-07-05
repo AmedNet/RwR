@@ -3,7 +3,7 @@ import { Entity } from './Entity.js';
 import { GameState } from '../core/GameState.js';
 
 export class Bullet extends Entity {
-    constructor(x, y, vx, vy, isEnemy, damage, isPlayer = false, knockback = 0, bulletRadius = null, maxRange = null) {
+    constructor(x, y, vx, vy, isEnemy, damage, isPlayer = false, knockback = 0, bulletRadius = null, maxRange = null, penetration = null) {
         const config = GameState.config.bullet;
         super(x, y, {
             radius: bulletRadius || config.radius,
@@ -18,9 +18,14 @@ export class Bullet extends Entity {
         this.isPlayer = isPlayer;
         this.damage = damage;
         this.knockback = knockback;
-        this.maxRange = maxRange; // 最大射程（像素），超过后消失
+        this.maxRange = maxRange; // 最大射程（像素），超过则消失
         this.life = config.life;
         this.alive = true;
+        
+        // 穿透属性（狙击枪用）
+        this.penetration = penetration; // { maxTargets, damageDecay }
+        this.hitTargets = new Set();    // 已击中目标集合
+        this.remainingPenetration = penetration ? penetration.maxTargets : 0;
     }
 
     update() {

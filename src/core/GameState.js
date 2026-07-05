@@ -20,7 +20,13 @@ export const GameState = {
     score: 0,
     gameOver: false,
     spawnTimer: 0,
-    camera: { x: 0, y: 0 },
+    camera: { x: 0, y: 0, zoom: 1, targetZoom: 1, offsetX: 0, offsetY: 0, targetOffsetX: 0, targetOffsetY: 0 },
+    // 倍镜状态
+    scopeState: {
+        isScoped: false,      // 是否正在开镜
+        idleTimer: 0,         // 静止计时器
+        lastMovingFrame: 0    // 上一帧是否在移动
+    },
     config: null,
     isEditing: false,
     respawnSelection: false, // 是否在选择复活据点

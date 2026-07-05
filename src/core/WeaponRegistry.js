@@ -1,25 +1,25 @@
 // src/core/WeaponRegistry.js
-// 武器注册表 - 添加新武器只需在这里加一条配置
+// 武器注册表 - 添加新武器只在这里添加配置
 
 export const WeaponType = {
     MELEE: 'melee',      // 近战
     PISTOL: 'pistol',    // 手枪
-    RIFLE: 'rifle',      // 步枪（预留）
-    SHOTGUN: 'shotgun',  // 霰弹枪（预留）
-    SNIPER: 'sniper',    // 狙击枪（预留）
+    RIFLE: 'rifle',      // 步枪
+    SHOTGUN: 'shotgun',  // 霰弹枪
+    SNIPER: 'sniper',    // 狙击枪
     GRENADE: 'grenade',  // 手雷
-    MEDICAL: 'medical'   // 医疗用品
+    MEDICAL: 'medical'   // 医疗包
 };
 
 // 射击模式
 export const FireMode = {
-    SEMI: 'semi',    // 半自动（单发，需松开再按）
+    SEMI: 'semi',    // 半自动（单发，需释放再按下）
     AUTO: 'auto',    // 全自动（长按连发）
-    BURST: 'burst'   // 三连射（按一次打3发）
+    BURST: 'burst'   // 三连发（按一次打3发）
 };
 
 export const WeaponRegistry = {
-    // 匕首 919 - 不占背包，自动装备
+    // 匕首 919 - 近战武器
     knife: {
         id: 'knife',
         name: '匕首 919',
@@ -55,19 +55,19 @@ export const WeaponRegistry = {
         range: Infinity,
         fireMode: FireMode.SEMI,
         canChamberedReload: true,
-        // 后坐力配置（手枪后坐力小）
+        // 后坐力配置：手枪后坐力较小
         recoil: {
             maxAngle: 0.15,         // 最大后坐力角度偏移（弧度）
             recoverySpeed: 0.008    // 每帧恢复速度
         },
-        // 子弹散布配置（手枪精度较好）
+        // 子弹散布配置：手枪精度较好
         spread: {
-            base: 0.04,         // 基础散布角度（弧度） 
-            max: 0.15,          // 最大散布角度（连续射击时）
+            base: 0.04,         // 基础散布角度（弧度）
+            max: 0.15,          // 最大散布角度，连续射击时
             increase: 0.012,     // 每次开火增加的散布量
             recovery: 0.008      // 每秒恢复的散布量
         },
-        // 连续开火散布递增
+        // 连续射击散布增加
         sustainedFire: {
             threshold: 3,
             bonusPerShot: 0.008
@@ -75,7 +75,7 @@ export const WeaponRegistry = {
         knockback: 2
     },
 
-    // AK-47 突击步枪 - 连射武器
+    // AK-47 突击步枪 - 进阶武器
     ak47: {
         id: 'ak47',
         name: 'AK-47',
@@ -93,19 +93,19 @@ export const WeaponRegistry = {
         range: Infinity,
         fireMode: FireMode.AUTO,
         canChamberedReload: true,
-        // 后坐力配置（步枪后坐力大）
+        // 后坐力配置：步枪后坐力较大
         recoil: {
             maxAngle: 0.30,
             recoverySpeed: 0.005
         },
-        // 子弹散布配置（步枪散布较大）
+        // 子弹散布配置：步枪散布较大
         spread: {
             base: 0.06,
             max: 0.25,
             increase: 0.018,
             recovery: 0.005
         },
-        // 连续开火散布递增
+        // 连续射击散布增加
         sustainedFire: {
             threshold: 3,
             bonusPerShot: 0.012
@@ -131,19 +131,19 @@ export const WeaponRegistry = {
         range: Infinity,
         fireMode: FireMode.BURST,
         canChamberedReload: true,
-        // 后坐力配置（卡宾枪后坐力适中）
+        // 后坐力配置：卡宾枪后坐力适中
         recoil: {
             maxAngle: 0.18,
             recoverySpeed: 0.008
         },
-        // 子弹散布配置（卡宾枪精度较好）
+        // 子弹散布配置：卡宾枪精度较好
         spread: {
             base: 0.05,
             max: 0.18,
             increase: 0.015,
             recovery: 0.008
         },
-        // 连续开火散布递增
+        // 连续射击散布增加
         sustainedFire: {
             threshold: 3,
             bonusPerShot: 0.010
@@ -154,7 +154,7 @@ export const WeaponRegistry = {
     // SA28 霰弹枪 - 半自动，多弹丸
     sa28: {
         id: 'sa28',
-        name: 'SA28 霰弹枪',
+        name: 'SA28',
         type: WeaponType.SHOTGUN,
         damage: 33,           // 每颗弹丸伤害
         pellets: 8,           // 每次射击弹丸数
@@ -167,7 +167,7 @@ export const WeaponRegistry = {
         sellPrice: 150,
         icon: 'src/pkg/weapon/SA28/SA28.png',
         imagePath: 'src/pkg/weapon/SA28/SA28.png',
-        range: 550,           // 有效射程（像素）
+        range: 550,           // 最大射程（像素）
         fireMode: FireMode.SEMI,
         knockback: 8,         // 击退力度大
         recoil: {
@@ -176,7 +176,55 @@ export const WeaponRegistry = {
         }
     },
 
-    // M67 手雷 - 投掷爆炸物
+    // AWP 狙击枪 - 栓动，高伤害，穿透，倍镜
+    awp: {
+        id: 'awp',
+        name: 'AWP',
+        type: WeaponType.SNIPER,
+        damage: 150,
+        shootDelay: 60,           // 栓动，约1秒
+        bulletSpeed: 50,          // 子弹速度极快
+        magSize: 5,
+        reloadTime: { min: 240, max: 360 },
+        buyPrice: 500,
+        sellPrice: 400,
+        icon: 'src/pkg/weapon/AWP/AWP.png',
+        imagePath: 'src/pkg/weapon/AWP/AWPd.png',
+        reloadImagePath: 'src/pkg/weapon/AWP/AWP_Reload.png',
+        range: Infinity,
+        fireMode: FireMode.SEMI,
+        canChamberedReload: true, // 支持空仓挂机
+        knockback: 15,
+        
+        // 穿透配置
+        penetration: {
+            maxTargets: 4,        // 最多穿透3个敌人
+            damageDecay: 0.7      // 每次穿透伤害×0.5
+        },
+        
+        // 倍镜配置（动态视野 - 仅使用offset偏移）
+        scope: {
+            activateDelay: 30,    // 停止移动后30帧进入瞄准状态
+            maxOffset: 600,       // 最大偏移距离（像素）
+            offsetSensitivity: 300 // 鼠标距离中心多远时达到最大偏移
+        },
+        
+        // 后坐力（大）
+        recoil: {
+            maxAngle: 0.35,
+            recoverySpeed: 0.004
+        },
+        
+        // 精度（极高）
+        spread: {
+            base: 0.01,
+            max: 0.08,
+            increase: 0.02,
+            recovery: 0.01
+        }
+    },
+
+    // M67 手雷 - 投掷物
     m67: {
         id: 'm67',
         name: 'M67 手雷',

@@ -85,24 +85,42 @@ export class Map {
     }
 
     draw(ctx, camera) {
-        const { x: camX, y: camY } = camera;
-        const startCol = Math.floor(camX / this.tileSize);
-        const startRow = Math.floor(camY / this.tileSize);
-        const endCol = Math.ceil((camX + ctx.canvas.width) / this.tileSize) + 1;
-        const endRow = Math.ceil((camY + ctx.canvas.height) / this.tileSize) + 1;
+        const zoom = camera.zoom || 1;
+        const offsetX = camera.offsetX || 0;
+        const offsetY = camera.offsetY || 0;
+        const camX = camera.x;
+        const camY = camera.y;
+        const logicalW = ctx.canvas.clientWidth || ctx.canvas.width;
+        const logicalH = ctx.canvas.clientHeight || ctx.canvas.height;
+        const cx = logicalW / 2;
+        const cy = logicalH / 2;
 
-        for (let r = startRow; r < endRow && r < this.rows; r++) {
-            if (r < 0) continue;
-            for (let c = startCol; c < endCol && c < this.cols; c++) {
-                if (c < 0) continue;
+        // 计算可见区域的世界坐标范围（反向推导 toScreen 公式）
+        const worldLeft = (0 - cx * (1 - zoom) + offsetX) / zoom + camX;
+        const worldTop = (0 - cy * (1 - zoom) + offsetY) / zoom + camY;
+        const worldRight = (logicalW - cx * (1 - zoom) + offsetX) / zoom + camX;
+        const worldBottom = (logicalH - cy * (1 - zoom) + offsetY) / zoom + camY;
+
+        const startCol = Math.max(0, Math.floor(worldLeft / this.tileSize) - 1);
+        const startRow = Math.max(0, Math.floor(worldTop / this.tileSize) - 1);
+        const endCol = Math.min(this.cols - 1, Math.ceil(worldRight / this.tileSize) + 1);
+        const endRow = Math.min(this.rows - 1, Math.ceil(worldBottom / this.tileSize) + 1);
+
+        const scaledTile = this.tileSize * zoom;
+
+        for (let r = startRow; r <= endRow; r++) {
+            for (let c = startCol; c <= endCol; c++) {
                 const tile = this.data[r][c];
-                const x = c * this.tileSize - camX;
-                const y = r * this.tileSize - camY;
+                // 使用与 Renderer.toScreen() 相同的变换
+                const worldX = c * this.tileSize;
+                const worldY = r * this.tileSize;
+                const screenX = (worldX - camX) * zoom + cx * (1 - zoom) - offsetX;
+                const screenY = (worldY - camY) * zoom + cy * (1 - zoom) - offsetY;
                 ctx.fillStyle = TERRAIN_COLORS[tile] || '#4CAF50';
-                ctx.fillRect(x, y, this.tileSize, this.tileSize);
+                ctx.fillRect(screenX, screenY, scaledTile, scaledTile);
                 ctx.strokeStyle = 'rgba(0,0,0,0.1)';
                 ctx.lineWidth = 1;
-                ctx.strokeRect(x, y, this.tileSize, this.tileSize);
+                ctx.strokeRect(screenX, screenY, scaledTile, scaledTile);
             }
         }
     }

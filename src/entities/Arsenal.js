@@ -23,8 +23,16 @@ export class Arsenal {
 
     draw(ctx) {
         const cam = GameState.camera;
-        const sx = this.x - cam.x;
-        const sy = this.y - cam.y;
+        const zoom = cam.zoom || 1;
+        const offsetX = cam.offsetX || 0;
+        const offsetY = cam.offsetY || 0;
+        const logicalW = ctx.canvas.clientWidth || ctx.canvas.width;
+        const logicalH = ctx.canvas.clientHeight || ctx.canvas.height;
+        const cx = logicalW / 2;
+        const cy = logicalH / 2;
+        // 使用与 Renderer.toScreen() 相同的转换公式
+        const sx = (this.x - cam.x) * zoom + cx * (1 - zoom) - offsetX;
+        const sy = (this.y - cam.y) * zoom + cy * (1 - zoom) - offsetY;
 
         ctx.save();
 

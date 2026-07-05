@@ -81,7 +81,15 @@ export const Renderer = {
     },
 
     toScreen(wx, wy) {
-        return { x: wx - GameState.camera.x, y: wy - GameState.camera.y };
+        const zoom = GameState.camera.zoom || 1;
+        const offsetX = GameState.camera.offsetX || 0;
+        const offsetY = GameState.camera.offsetY || 0;
+        const cx = this.logicalWidth / 2;
+        const cy = this.logicalHeight / 2;
+        return {
+            x: (wx - GameState.camera.x) * zoom + cx * (1 - zoom) - offsetX,
+            y: (wy - GameState.camera.y) * zoom + cy * (1 - zoom) - offsetY
+        };
     },
 
     render() {

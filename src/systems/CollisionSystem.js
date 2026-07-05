@@ -134,11 +134,15 @@ export const CollisionSystem = {
                 for (let j = enemies.length - 1; j >= 0; j--) {
                     const enemy = enemies[j];
                     if (!enemy.alive) continue;
+                    
+                    // 穿透子弹跳过已击中目标
+                    if (bullet.penetration && bullet.hitTargets.has(enemy)) continue;
+                    
                     const dx = bullet.x - enemy.x;
                     const dy = bullet.y - enemy.y;
                     if (dx*dx + dy*dy < (bullet.radius + enemy.radius) ** 2) {
                         enemy.takeDamage(bullet.damage);
-                        bulletUsed = true;
+                        
                         // 击退效果
                         if (bullet.knockback > 0) {
                             const kbAngle = Math.atan2(bullet.vy, bullet.vx);
@@ -162,7 +166,18 @@ export const CollisionSystem = {
                             // 立即移除（最后移除，确保特效用到了 enemy 坐标）
                             enemies.splice(j, 1);
                         }
-                        break;
+                        
+                        // 穿透逻辑
+                        if (bullet.penetration && bullet.remainingPenetration > 0) {
+                            // 记录已击中，减少穿透次数，衰减伤害
+                            bullet.hitTargets.add(enemy);
+                            bullet.remainingPenetration--;
+                            bullet.damage *= bullet.penetration.damageDecay;
+                            // 不设置 bulletUsed，子弹继续飞行
+                        } else {
+                            bulletUsed = true;
+                            break;
+                        }
                     }
                 }
             }

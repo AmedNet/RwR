@@ -207,10 +207,25 @@ export const EffectsManager = {
 
     // 绘制所有特效
     draw(ctx, camera) {
+        const zoom = camera.zoom || 1;
+        const offsetX = camera.offsetX || 0;
+        const offsetY = camera.offsetY || 0;
+        const logicalW = ctx.canvas.clientWidth || ctx.canvas.width;
+        const logicalH = ctx.canvas.clientHeight || ctx.canvas.height;
+        const cx = logicalW / 2;
+        const cy = logicalH / 2;
+        
+        // 辅助函数：世界坐标转屏幕坐标
+        const toScreen = (wx, wy) => ({
+            x: (wx - camera.x) * zoom + cx * (1 - zoom) - offsetX,
+            y: (wy - camera.y) * zoom + cy * (1 - zoom) - offsetY
+        });
+
         // 绘制爆炸效果（在粒子前绘制，确保可见）
         for (const e of this.explosions) {
-            const sx = e.x - camera.x + this.screenShake.x;
-            const sy = e.y - camera.y + this.screenShake.y;
+            const pos = toScreen(e.x, e.y);
+            const sx = pos.x + this.screenShake.x;
+            const sy = pos.y + this.screenShake.y;
             const alpha = e.life / e.maxLife;
             
             ctx.save();
@@ -233,28 +248,30 @@ export const EffectsManager = {
 
         // 绘制粒子
         for (const p of this.particles) {
-            const sx = p.x - camera.x + this.screenShake.x;
-            const sy = p.y - camera.y + this.screenShake.y;
+            const pos = toScreen(p.x, p.y);
+            const sx = pos.x + this.screenShake.x;
+            const sy = pos.y + this.screenShake.y;
             const alpha = p.life / p.maxLife;
             ctx.save();
             ctx.globalAlpha = alpha;
             ctx.fillStyle = p.color;
             ctx.beginPath();
-            ctx.arc(sx, sy, p.size * alpha, 0, Math.PI * 2);
+            ctx.arc(sx, sy, p.size * alpha * zoom, 0, Math.PI * 2);
             ctx.fill();
             ctx.restore();
         }
 
         // 绘制伤害数字
         for (const d of this.damageNumbers) {
-            const sx = d.x - camera.x + this.screenShake.x;
-            const sy = d.y - camera.y + this.screenShake.y;
+            const pos = toScreen(d.x, d.y);
+            const sx = pos.x + this.screenShake.x;
+            const sy = pos.y + this.screenShake.y;
             const alpha = d.life / d.maxLife;
             const scale = 1 + (1 - alpha) * 0.3; // 放大效果
             ctx.save();
             ctx.globalAlpha = alpha;
             ctx.translate(sx, sy);
-            ctx.scale(scale, scale);
+            ctx.scale(scale * zoom, scale * zoom);
             ctx.font = 'bold 16px sans-serif';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';

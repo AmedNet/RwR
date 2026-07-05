@@ -39,6 +39,7 @@ export class Player extends Entity {
         this.loadWeaponImage('m4a1');
         this.loadWeaponImage('cat'); // 医疗包
         this.loadWeaponImage('sa28'); // 霰弹枪
+        this.loadWeaponImage('awp'); // 狙击枪
     }
 
     loadWeaponImage(weaponId) {
@@ -105,6 +106,16 @@ export class Player extends Entity {
         this.switchAnimTimer = this.switchAnimDuration;
         this.switchFromSlot = GameState.activeWeaponSlot;
         GameState.activeWeaponSlot = slot;
+        
+        // 切换到非狙击枪时，立即重置瞄准状态
+        const newWeapon = GameState.inventory[slot];
+        if (newWeapon && !newWeapon.config.scope) {
+            GameState.scopeState.idleTimer = 0;
+            GameState.scopeState.isScoped = false;
+            GameState.camera.targetZoom = 1;
+            GameState.camera.targetOffsetX = 0;
+            GameState.camera.targetOffsetY = 0;
+        }
     }
 
     reload() {
@@ -124,12 +135,25 @@ export class Player extends Entity {
 
         const config = weapon.config;
         const mouse = GameState.mouse;
-        const screenX = this.x - GameState.camera.x;
-        const screenY = this.y - GameState.camera.y;
-        const targetX = this.x + (mouse.x - screenX);
-        const targetY = this.y + (mouse.y - screenY);
+        const cam = GameState.camera;
+        const zoom = cam.zoom || 1;
+        const offsetX = cam.offsetX || 0;
+        const offsetY = cam.offsetY || 0;
+        const canvas = document.getElementById('gameCanvas');
+        const logicalW = canvas ? canvas.clientWidth : 800;
+        const logicalH = canvas ? canvas.clientHeight : 600;
+        const cx = logicalW / 2;
+        const cy = logicalH / 2;
+        
+        // 使用与 Renderer.toScreen() 相同的转换公式
+        const screenX = (this.x - cam.x) * zoom + cx * (1 - zoom) - offsetX;
+        const screenY = (this.y - cam.y) * zoom + cy * (1 - zoom) - offsetY;
+        
+        // 反向计算世界坐标：从屏幕坐标还原目标位置
+        const targetWorldX = (mouse.x - cx * (1 - zoom) + offsetX) / zoom + cam.x;
+        const targetWorldY = (mouse.y - cy * (1 - zoom) + offsetY) / zoom + cam.y;
 
-        const grenade = new Grenade(this.x, this.y, targetX, targetY, config);
+        const grenade = new Grenade(this.x, this.y, targetWorldX, targetWorldY, config);
         GameState.grenades.push(grenade);
 
         weapon.ammo--;
@@ -195,6 +219,56 @@ export class Player extends Entity {
         this.x = Math.max(this.radius, Math.min(world.width - this.radius, this.x));
         this.y = Math.max(this.radius, Math.min(world.height - this.radius, this.y));
         if (this.shootCooldown > 0) this.shootCooldown--;
+
+        // 开镜逻辑（狙击枪）- 只使用offset偏移，不使用zoom放大
+        const isMoving = dx !== 0 || dy !== 0;
+        if (weapon && weapon.config.scope) {
+            if (!isMoving) {
+                GameState.scopeState.idleTimer++;
+                if (GameState.scopeState.idleTimer >= weapon.config.scope.activateDelay) {
+                    GameState.scopeState.isScoped = true;
+                }
+            } else {
+                // 移动时立即退出瞄准状态
+                GameState.scopeState.idleTimer = 0;
+                GameState.scopeState.isScoped = false;
+            }
+            
+            // 只在isScoped状态下计算offset
+            if (GameState.scopeState.isScoped) {
+                const mouse = GameState.mouse;
+                const canvas = document.getElementById('gameCanvas');
+                const screenCX = (canvas ? canvas.clientWidth : 800) / 2;
+                const screenCY = (canvas ? canvas.clientHeight : 600) / 2;
+                const mdx = mouse.x - screenCX;
+                const mdy = mouse.y - screenCY;
+                const mdist = Math.hypot(mdx, mdy);
+                if (mdist > 0) {
+                    // 从武器配置读取偏移参数
+                    const maxOffset = weapon.config.scope.maxOffset || 200;
+                    const sensitivity = weapon.config.scope.offsetSensitivity || 300;
+                    const factor = Math.min(mdist / sensitivity, 1);
+                    GameState.camera.targetOffsetX = (mdx / mdist) * maxOffset * factor;
+                    GameState.camera.targetOffsetY = (mdy / mdist) * maxOffset * factor;
+                }
+            } else {
+                // 未开镜时重置偏移
+                GameState.camera.targetOffsetX = 0;
+                GameState.camera.targetOffsetY = 0;
+            }
+        } else {
+            // 没有瞄准镜的武器，重置所有状态
+            GameState.scopeState.idleTimer = 0;
+            GameState.scopeState.isScoped = false;
+            GameState.camera.targetOffsetX = 0;
+            GameState.camera.targetOffsetY = 0;
+        }
+        // zoom始终为1（不使用缩放）
+        GameState.camera.zoom = 1;
+        GameState.camera.targetZoom = 1;
+        // 平滑过渡偏移
+        GameState.camera.offsetX += (GameState.camera.targetOffsetX - GameState.camera.offsetX) * 0.1;
+        GameState.camera.offsetY += (GameState.camera.targetOffsetY - GameState.camera.offsetY) * 0.1;
 
         // 处理三连射
         if (this.burstCount > 0) {
@@ -296,12 +370,14 @@ export class Player extends Entity {
                 ));
             }
         } else {
+            // 获取穿透配置（狙击枪用）
+            const penetration = weapon.config.penetration || null;
             GameState.bullets.push(new Bullet(
                 this.x + Math.cos(baseAngle) * this.radius,
                 this.y + Math.sin(baseAngle) * this.radius,
                 Math.cos(baseAngle) * speed, Math.sin(baseAngle) * speed,
                 false, weapon.config.damage, true,
-                knockback
+                knockback, null, null, penetration
             ));
         }
         weapon.consumeAmmo();

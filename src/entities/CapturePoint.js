@@ -97,35 +97,45 @@ export class CapturePoint {
 
     draw(ctx) {
         const cam = GameState.camera;
-        const sx = this.x - cam.x;
-        const sy = this.y - cam.y;
+        const zoom = cam.zoom || 1;
+        const offsetX = cam.offsetX || 0;
+        const offsetY = cam.offsetY || 0;
+        const logicalW = ctx.canvas.clientWidth || ctx.canvas.width;
+        const logicalH = ctx.canvas.clientHeight || ctx.canvas.height;
+        const cx = logicalW / 2;
+        const cy = logicalH / 2;
+        
+        // 使用与 Renderer.toScreen() 相同的变换
+        const sx = (this.x - cam.x) * zoom + cx * (1 - zoom) - offsetX;
+        const sy = (this.y - cam.y) * zoom + cy * (1 - zoom) - offsetY;
+        const scaledRadius = this.radius * zoom;
 
         ctx.save();
         // 据点光圈
         ctx.beginPath();
-        ctx.arc(sx, sy, this.radius, 0, Math.PI * 2);
+        ctx.arc(sx, sy, scaledRadius, 0, Math.PI * 2);
         ctx.fillStyle = 'rgba(255,255,255,0.1)';
         ctx.fill();
         ctx.strokeStyle = this.flagColor;
-        ctx.lineWidth = 3;
-        ctx.setLineDash([8, 8]);
+        ctx.lineWidth = 3 * zoom;
+        ctx.setLineDash([8 * zoom, 8 * zoom]);
         ctx.stroke();
         ctx.setLineDash([]);
 
         // 进度条（环绕）
         const progress = this.captureProgress / 100;
         ctx.beginPath();
-        ctx.arc(sx, sy, this.radius - 10, -Math.PI/2, -Math.PI/2 + 2 * Math.PI * progress);
+        ctx.arc(sx, sy, scaledRadius - 10 * zoom, -Math.PI/2, -Math.PI/2 + 2 * Math.PI * progress);
         ctx.strokeStyle = this.flagColor;
-        ctx.lineWidth = 6;
+        ctx.lineWidth = 6 * zoom;
         ctx.stroke();
 
         // 旗帜图标
         ctx.fillStyle = '#fff';
-        ctx.font = '30px sans-serif';
+        ctx.font = `${30 * zoom}px sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('🚩', sx, sy - 5);
+        ctx.fillText('🚩', sx, sy - 5 * zoom);
         ctx.restore();
     }
 }
