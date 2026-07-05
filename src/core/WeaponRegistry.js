@@ -134,8 +134,8 @@ export const WeaponRegistry = {
         canChamberedReload: true,
         // 后坐力配置：卡宾枪后坐力适中
         recoil: {
-            maxAngle: 0.18,
-            recoverySpeed: 0.008
+            maxAngle: 0.30,
+            recoverySpeed: 0.005
         },
         // 子弹散布配置：卡宾枪精度较好
         spread: {

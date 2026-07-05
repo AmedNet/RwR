@@ -13,11 +13,20 @@ export const ParticleType = {
     ROCKET_TRAIL: 8 // 火箭拖尾
 };
 
+// 弹壳形态配置（按武器类型）
+const ShellConfig = {
+    pistol:  { w: 3, h: 5,  color: '#D4A017' },
+    rifle:   { w: 3, h: 7,  color: '#C5960C' },
+    shotgun: { w: 5, h: 8,  color: '#B22222' },
+    sniper:  { w: 3, h: 10, color: '#B8860B' }
+};
+
 export const EffectsManager = {
     particles: [],
     screenShake: { x: 0, y: 0, timer: 0, intensity: 0 },
     damageNumbers: [],
     explosions: [], // 爆炸效果数组
+    shellCasings: [], // 弹壳数组
 
     // 生成粒子
     spawnParticles(x, y, type, count = 8) {
@@ -175,6 +184,32 @@ export const EffectsManager = {
         });
     },
 
+    // 生成抛壳效果
+    spawnShellCasing(x, y, weaponType) {
+        const cfg = ShellConfig[weaponType] || ShellConfig.rifle;
+        // 随机抛出方向（偏上方±60°范围）
+        const angle = -Math.PI / 2 + (Math.random() - 0.5) * (Math.PI * 2 / 3);
+        const speed = 2 + Math.random() * 2;
+        this.shellCasings.push({
+            x, y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed - 1.5,
+            rotation: Math.random() * Math.PI * 2,
+            rotationSpeed: (Math.random() - 0.5) * 0.4,
+            w: cfg.w,
+            h: cfg.h,
+            color: cfg.color,
+            bounceCount: 0,
+            maxBounces: 2 + Math.floor(Math.random() * 2), // 2-3次弹跳
+            groundY: y + 15 + Math.random() * 30, // 落地点（更大随机范围，避免同一水平线）
+            state: 'flying', // flying | stopped
+            stopTimer: 0,
+            maxStopTime: 180, // 停留3秒(180帧)
+            fadeAlpha: 1,
+            trailTimer: 0
+        });
+    },
+
     // 触发屏幕震动
     triggerShake(intensity = 8, duration = 12) {
         this.screenShake.intensity = intensity;
@@ -217,6 +252,57 @@ export const EffectsManager = {
             }
             if (e.life <= 0) {
                 this.explosions.splice(i, 1);
+            }
+        }
+
+        // 更新弹壳
+        for (let i = this.shellCasings.length - 1; i >= 0; i--) {
+            const s = this.shellCasings[i];
+            if (s.state === 'flying') {
+                s.x += s.vx;
+                s.y += s.vy;
+                s.vy += 0.15; // 重力
+                s.vx *= 0.98;
+                s.rotation += s.rotationSpeed;
+                // 飞行中拖尾火花
+                s.trailTimer++;
+                if (s.trailTimer % 3 === 0) {
+                    this.particles.push({
+                        x: s.x, y: s.y,
+                        vx: (Math.random() - 0.5) * 0.5,
+                        vy: (Math.random() - 0.5) * 0.5,
+                        life: 8 + Math.random() * 6,
+                        maxLife: 14,
+                        color: '#FFD740',
+                        size: 1 + Math.random(),
+                        type: ParticleType.SPARK
+                    });
+                }
+                // 落地检测
+                if (s.y >= s.groundY) {
+                    s.y = s.groundY;
+                    s.bounceCount++;
+                    if (s.bounceCount >= s.maxBounces) {
+                        s.state = 'stopped';
+                        s.vx = 0;
+                        s.vy = 0;
+                        s.rotationSpeed *= 0.2;
+                    } else {
+                        // 弹跳衰减
+                        s.vy = -Math.abs(s.vy) * 0.4;
+                        s.vx *= 0.6;
+                        s.rotationSpeed *= 0.5;
+                    }
+                }
+            } else {
+                // stopped状态：淡出
+                s.stopTimer++;
+                if (s.stopTimer > s.maxStopTime * 0.6) {
+                    s.fadeAlpha = Math.max(0, 1 - (s.stopTimer - s.maxStopTime * 0.6) / (s.maxStopTime * 0.4));
+                }
+                if (s.stopTimer >= s.maxStopTime) {
+                    this.shellCasings.splice(i, 1);
+                }
             }
         }
 
@@ -292,6 +378,25 @@ export const EffectsManager = {
             ctx.restore();
         }
 
+        // 绘制弹壳
+        for (const s of this.shellCasings) {
+            const pos = toScreen(s.x, s.y);
+            const sx = pos.x + this.screenShake.x;
+            const sy = pos.y + this.screenShake.y;
+            ctx.save();
+            ctx.globalAlpha = s.fadeAlpha;
+            ctx.translate(sx, sy);
+            ctx.rotate(s.rotation);
+            ctx.scale(zoom, zoom);
+            ctx.fillStyle = s.color;
+            ctx.fillRect(-s.w / 2, -s.h / 2, s.w, s.h);
+            // 弹壳高光边
+            ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+            ctx.lineWidth = 0.5;
+            ctx.strokeRect(-s.w / 2, -s.h / 2, s.w, s.h);
+            ctx.restore();
+        }
+
         // 绘制伤害数字
         for (const d of this.damageNumbers) {
             const pos = toScreen(d.x, d.y);
@@ -324,6 +429,7 @@ export const EffectsManager = {
     clear() {
         this.particles.length = 0;
         this.damageNumbers.length = 0;
+        this.shellCasings.length = 0;
         this.screenShake.timer = 0;
         this.screenShake.x = 0;
         this.screenShake.y = 0;

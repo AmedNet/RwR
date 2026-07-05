@@ -126,21 +126,21 @@ export class Weapon {
     applyRecoilAndSpread() {
         const recoil = this.config.recoil;
         const spread = this.config.spread;
-        // 三连发模式：完全不增加后坐力和散布（三发子弹完全重合）
+        // 三连发模式：仍然有视觉后坐力，但不累积散布（三发子弹紧密）
         const isBurstMode = this.config.fireMode === 'burst';
-        if (!isBurstMode) {
-            if (recoil) {
-                this.currentRecoil = Math.min(this.currentRecoil + recoil.maxAngle * 0.5, recoil.maxAngle);
-            }
-            if (spread) {
-                this.currentSpread = Math.min(this.currentSpread + spread.increase, spread.max);
-                // 连续开火散布递增（三连发不算）
-                this.consecutiveShots++;
-                const sustained = this.config.sustainedFire;
-                if (sustained && this.consecutiveShots > sustained.threshold) {
-                    const bonus = (this.consecutiveShots - sustained.threshold) * sustained.bonusPerShot;
-                    this.currentSpread = Math.min(this.currentSpread + bonus, spread.max);
-                }
+        // 后坐力：所有模式都应用
+        if (recoil) {
+            this.currentRecoil = Math.min(this.currentRecoil + recoil.maxAngle * 0.5, recoil.maxAngle);
+        }
+        // 散布：三连发模式不累积
+        if (!isBurstMode && spread) {
+            this.currentSpread = Math.min(this.currentSpread + spread.increase, spread.max);
+            // 连续开火散布递增
+            this.consecutiveShots++;
+            const sustained = this.config.sustainedFire;
+            if (sustained && this.consecutiveShots > sustained.threshold) {
+                const bonus = (this.consecutiveShots - sustained.threshold) * sustained.bonusPerShot;
+                this.currentSpread = Math.min(this.currentSpread + bonus, spread.max);
             }
         }
     }
@@ -163,7 +163,7 @@ export class Weapon {
 
     // 获取射击角度偏移（后坐力 + 随机散布）
     getShotAngleOffset() {
-        // 三连射模式：使用较小的固定散布，三发子弹紧密但非完全一个点
+        // 三连射模式：每发有不同的偏移，弹着点分散但仍在可控范围
         const isBurstMode = this.config.fireMode === 'burst';
         if (isBurstMode) {
             const spread = this.config.spread;

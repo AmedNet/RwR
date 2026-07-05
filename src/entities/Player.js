@@ -395,6 +395,12 @@ export class Player extends Entity {
         weapon.applyRecoilAndSpread(); // 射击后增加后坐力和散布
         this.shootCooldown = weapon.config.shootDelay;
 
+        // 抛壳效果（排除不抛壳的武器类型）
+        const noShellTypes = ['melee', 'grenade', 'medical', 'launcher'];
+        if (!noShellTypes.includes(weapon.config.type)) {
+            EffectsManager.spawnShellCasing(this.x, this.y, weapon.config.type);
+        }
+
         // 火箭筒等一次性堆叠武器：射击后消耗堆叠，用完销毁
         if (weapon.config.type === 'launcher') {
             weapon.consumeStack();
