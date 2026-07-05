@@ -25,7 +25,13 @@ export class Weapon {
     }
 
     canShoot() {
-        if (this.isReloading) return false;
+        // 换弹期间：支持空仓挂机的武器且有弹药时可以开火一次
+        if (this.isReloading) {
+            if (this.isChamberedReload && this.ammo > 0 && !this.firedDuringReload) {
+                return true;
+            }
+            return false;
+        }
         if (this.config.type === 'melee') return true;
         // 火箭筒检查堆叠数
         if (this.config.type === 'launcher') return this.stackCount > 0 && this.ammo > 0;
@@ -36,6 +42,11 @@ export class Weapon {
         if (this.config.type === 'melee') return;
         if (this.ammo > 0) this.ammo--;
         if (this.ammo === 0) this.justEmptied = true;
+        // 换弹期间开火：标记并取消空仓挂机的额外弹药
+        if (this.isReloading && this.isChamberedReload) {
+            this.firedDuringReload = true;
+            this.isChamberedReload = false;
+        }
     }
 
     // 堆叠武器：增加持有数量
@@ -59,6 +70,7 @@ export class Weapon {
         if (this.config.type === 'medical') return;
         if (this.config.type === 'grenade') return;
         if (this.isReloading) return;
+        this.firedDuringReload = false;
         // 火箭筒：有备弹才能换弹
         if (this.config.type === 'launcher') {
             if (this.ammo > 0) return; // 弹膛还有弹，不需要换
