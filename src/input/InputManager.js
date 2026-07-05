@@ -52,27 +52,46 @@ export const InputManager = {
                     e.preventDefault();
                     return;
                 }
-// 军械库：↑/W 键选择上一个商品
-if (GameState.arsenalOpen && (key === 'arrowup' || key === 'w')) {
-    const items = Object.entries(WeaponRegistry).filter(([,c]) => c.buyPrice > 0);
-    GameState.arsenalSelectedIndex = (GameState.arsenalSelectedIndex - 1 + items.length) % items.length;
-    // 自动滚动到选中项
-    InputManager._scrollToSelected(80, 15, 190, 280);
+// 军械库：↑ 键切换上一个分类
+if (GameState.arsenalOpen && key === 'arrowup') {
+    GameState.arsenalCategory = (GameState.arsenalCategory + 6) % 7;
+    GameState.arsenalSelectedIndex = 0;
+    GameState.arsenalScrollOffset = 0;
     e.preventDefault();
     return;
 }
-// 军械库：↓ 键选择下一个商品
+// 军械库：↓ 键切换下一个分类
 if (GameState.arsenalOpen && key === 'arrowdown') {
-    const items = Object.entries(WeaponRegistry).filter(([,c]) => c.buyPrice > 0);
-    GameState.arsenalSelectedIndex = (GameState.arsenalSelectedIndex + 1) % items.length;
-    // 自动滚动到选中项
-    InputManager._scrollToSelected(80, 15, 190, 280);
+    GameState.arsenalCategory = (GameState.arsenalCategory + 1) % 7;
+    GameState.arsenalSelectedIndex = 0;
+    GameState.arsenalScrollOffset = 0;
+    e.preventDefault();
+    return;
+}
+// 军械库：W 键选择上一个商品（当前分类内）
+if (GameState.arsenalOpen && key === 'w') {
+    const items = InputManager._getCategoryItems();
+    if (items.length > 0) {
+        GameState.arsenalSelectedIndex = (GameState.arsenalSelectedIndex - 1 + items.length) % items.length;
+        InputManager._scrollToSelected(68, 6, 8, 320);
+    }
+    e.preventDefault();
+    return;
+}
+// 军械库：S 键选择下一个商品（当前分类内）
+if (GameState.arsenalOpen && key === 's') {
+    const items = InputManager._getCategoryItems();
+    if (items.length > 0) {
+        GameState.arsenalSelectedIndex = (GameState.arsenalSelectedIndex + 1) % items.length;
+        InputManager._scrollToSelected(68, 6, 8, 320);
+    }
     e.preventDefault();
     return;
 }
         // 军械库购买：B 键购买选中商品
         if (GameState.arsenalOpen && key === 'b') {
-            const items = Object.entries(WeaponRegistry).filter(([,c]) => c.buyPrice > 0);
+            const items = InputManager._getCategoryItems();
+            if (items.length === 0) { e.preventDefault(); return; }
             const [selectedId, config] = items[GameState.arsenalSelectedIndex];
             const slot = GameState.arsenalSelectedSlot;
             
@@ -87,7 +106,7 @@ if (GameState.arsenalOpen && key === 'arrowdown') {
                     // 堆叠武器（如火箭筒）：增加堆叠数
                     if (config.maxStack && config.maxStack > 1) {
                         if (weapon.stackCount < config.maxStack) {
-                            weapon.addStack(1); // 每次+1
+                            weapon.addStack(1);
                             GameState.rp -= config.buyPrice;
                             console.log(`💰 补充 ${config.name} 弹药（${weapon.stackCount}/${config.maxStack}）！`);
                         }
@@ -101,14 +120,13 @@ if (GameState.arsenalOpen && key === 'arrowdown') {
                         }
                     }
                 }
-                // 刷新HUD的RP显示
                 UIManager.updateAll(GameState);
             }
             e.preventDefault();
             return;
         }
-                // 军械库出售：S 键出售选中武器
-                if (GameState.arsenalOpen && key === 's') {
+                // 军械库出售：X 键出售选中武器
+                if (GameState.arsenalOpen && key === 'x') {
                     const slot = GameState.arsenalSelectedSlot;
                     const weapon = GameState.inventory[slot];
                     if (weapon && weapon.config.sellPrice > 0) {
@@ -340,6 +358,23 @@ canvas.addEventListener('mousedown', (e) => {
                 e.preventDefault();
             }
         }, { passive: false });
+    },
+
+    // 军械库：获取当前分类的商品列表（7个细分分类）
+    _getCategoryItems() {
+        const categories = [
+            { types: ['pistol'] },                          // 手枪
+            { types: ['rifle'] },                           // 步枪
+            { types: ['smg'] },                             // 冲锋枪
+            { types: ['shotgun'] },                         // 霰弹枪
+            { types: ['sniper'] },                          // 狙击枪
+            { types: ['launcher'] },                        // 重武器
+            { types: ['melee', 'grenade', 'medical'] }      // 其他
+        ];
+        const cat = categories[GameState.arsenalCategory] || categories[0];
+        return Object.entries(WeaponRegistry).filter(([, config]) =>
+            config.buyPrice >= 0 && cat.types.includes(config.type)
+        );
     },
 
     // 军械库自动滚动到选中项

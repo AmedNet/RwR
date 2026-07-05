@@ -37,6 +37,7 @@ export const GameState = {
     activeWeaponSlot: 0, // 当前装备的背包位置 (0-6)
     arsenalSelectedSlot: 0, // 军械库中选中的背包位置
     arsenalSelectedIndex: 0, // 军械库中选中的商品索引
+    arsenalCategory: 0,      // 军械库当前分类索引 (0=重武器, 1=轻武器, 2=其他, 3=副武器)
 
     // 军械库滚动
     arsenalScrollOffset: 0, // 军械库列表滚动偏移量

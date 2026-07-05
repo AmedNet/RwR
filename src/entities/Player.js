@@ -94,8 +94,7 @@ export class Player extends Entity {
     }
 
     getCurrentWeapon() {
-        const weapon = GameState.inventory[GameState.activeWeaponSlot];
-        return weapon || new Weapon('knife');
+        return GameState.inventory[GameState.activeWeaponSlot];
     }
 
     switchWeapon(slot) {
@@ -518,6 +517,18 @@ export class Player extends Entity {
         ctx.stroke();
 
         const weapon = this.getCurrentWeapon();
+        if (!weapon) {
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(Math.cos(angle) * 30, Math.sin(angle) * 30);
+            ctx.strokeStyle = '#333'; ctx.lineWidth = 6; ctx.stroke();
+            ctx.fillStyle = '#FFD700';
+            ctx.font = '16px sans-serif';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText('★'.repeat(Math.min(this.rank + 1, 4)), 0, -28);
+            ctx.restore();
+            return;
+        }
         const weaponImage = this.getWeaponImage(weapon.id, weapon.isReloading);
         const weaponLoaded = weaponImage !== null;
 

@@ -32,7 +32,7 @@ export const WeaponRegistry = {
         magSize: null,
         reloadTime: 0,
         buyPrice: 0,
-        sellPrice: 0,
+        sellPrice: 10,
         icon: '🗡️',
         imagePath: 'src/pkg/weapon/919/919.png',
         range: 80,
