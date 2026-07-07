@@ -2,6 +2,7 @@
 import { Entity } from './Entity.js';
 import { GameState } from '../core/GameState.js';
 import { EffectsManager } from '../utils/EffectsManager.js';
+import * as SoundManager from '../utils/SoundManager.js';
 
 export class Bullet extends Entity {
     constructor(x, y, vx, vy, isEnemy, damage, isPlayer = false, knockback = 0, bulletRadius = null, maxRange = null, penetration = null, explosion = null, hasTrail = false) {
@@ -63,6 +64,8 @@ export class Bullet extends Entity {
             this.y < -20 || this.y > world.height + 20) {
             this.alive = false;
         }
+
+        // 注意：碰撞检测由 CollisionSystem.js 统一处理，不在这里重复
     }
 
     draw(ctx) {

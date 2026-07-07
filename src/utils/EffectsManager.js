@@ -1,5 +1,7 @@
 // src/utils/EffectsManager.js
 
+import { playShellLand } from './SoundManager.js';
+
 // 粒子类型
 export const ParticleType = {
     SPARK: 0,    // 子弹击中
@@ -199,6 +201,7 @@ export const EffectsManager = {
             w: cfg.w,
             h: cfg.h,
             color: cfg.color,
+            weaponType: weaponType, // 存储武器类型用于音效
             bounceCount: 0,
             maxBounces: 2 + Math.floor(Math.random() * 2), // 2-3次弹跳
             groundY: y + 15 + Math.random() * 30, // 落地点（更大随机范围，避免同一水平线）
@@ -281,6 +284,8 @@ export const EffectsManager = {
                 // 落地检测
                 if (s.y >= s.groundY) {
                     s.y = s.groundY;
+                    // 触发弹壳落地音效
+                    playShellLand(s.weaponType, s.bounceCount, 0);
                     s.bounceCount++;
                     if (s.bounceCount >= s.maxBounces) {
                         s.state = 'stopped';

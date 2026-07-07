@@ -1,5 +1,6 @@
 // src/entities/Grenade.js
 import { GameState } from '../core/GameState.js';
+import { playExplosion } from '../utils/SoundManager.js';
 
 export class Grenade {
     constructor(x, y, targetX, targetY, config) {
@@ -76,6 +77,15 @@ export class Grenade {
     explode() {
         if (!this.alive) return;
         this.alive = false;
+        
+        // 计算与玩家的距离用于音效衰减
+        const player = GameState.player;
+        let distance = 0;
+        if (player) {
+            distance = Math.hypot(this.x - player.x, this.y - player.y);
+        }
+        
+        playExplosion(distance);
         window.dispatchEvent(new CustomEvent('grenade_explode', {
             detail: { x: this.x, y: this.y, radius: this.explosionRadius, damage: this.damage }
         }));

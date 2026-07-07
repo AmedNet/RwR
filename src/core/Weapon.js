@@ -62,19 +62,20 @@ export class Weapon {
 
     clearJustEmptied() {
         this.justEmptied = false;
+        return true;
     }
 
     startReload() {
         // 近战、医疗用品、手雷不能换弹
-        if (this.config.type === 'melee') return;
-        if (this.config.type === 'medical') return;
-        if (this.config.type === 'grenade') return;
-        if (this.isReloading) return;
+        if (this.config.type === 'melee') return false;
+        if (this.config.type === 'medical') return false;
+        if (this.config.type === 'grenade') return false;
+        if (this.isReloading) return false;
         this.firedDuringReload = false;
         // 火箭筒：有备弹才能换弹
         if (this.config.type === 'launcher') {
-            if (this.ammo > 0) return; // 弹膛还有弹，不需要换
-            if (this.stackCount <= 0) return; // 没有备弹
+            if (this.ammo > 0) return false; // 弹膛还有弹，不需要换
+            if (this.stackCount <= 0) return false; // 没有备弹
             this.isReloading = true;
             const rt = this.config.reloadTime;
             if (typeof rt === 'object' && rt.min !== undefined) {
@@ -83,9 +84,9 @@ export class Weapon {
                 this.reloadTimer = rt || 60;
             }
             this.reloadTimeTotal = this.reloadTimer;
-            return;
+            return true;
         }
-        if (this.ammo >= this.config.magSize) return;
+        if (this.ammo >= this.config.magSize) return false;
         this.isReloading = true;
         this.isChamberedReload = (this.ammo >= 1 && this.config.canChamberedReload === true);
         const rt = this.config.reloadTime;
@@ -105,6 +106,7 @@ export class Weapon {
             this.reloadTimeTotal = this.reloadTimer;
         }
         this.justEmptied = false;
+        return true;
     }
 
     updateReload() {

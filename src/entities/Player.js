@@ -7,6 +7,7 @@ import { Grenade } from './Grenade.js';
 import { WeaponRegistry, FireMode } from '../core/WeaponRegistry.js';
 import { Weapon } from '../core/Weapon.js';
 import { EffectsManager } from '../utils/EffectsManager.js';
+import * as SoundManager from '../utils/SoundManager.js';
 
 export class Player extends Entity {
     constructor(x, y, config) {
@@ -122,7 +123,17 @@ export class Player extends Entity {
 
     reload() {
         const weapon = GameState.getActiveWeapon();
-        if (weapon) weapon.startReload();
+        if (weapon) {
+            // startReload 返回 true 表示换弹成功开始
+            const reloadStarted = weapon.startReload();
+            if (reloadStarted) {
+                // 只有真正开始换弹时才播放音效
+                const weaponType = weapon.config.type;
+                if (['pistol', 'rifle', 'smg', 'shotgun', 'sniper', 'launcher'].includes(weaponType)) {
+                    SoundManager.playReload(weaponType);
+                }
+            }
+        }
     }
 
     throwGrenade() {
@@ -175,7 +186,7 @@ export class Player extends Entity {
             if (d < nearestDist) { nearestDist = d; nearestEnemy = enemy; }
         }
         if (nearestEnemy) {
-            nearestEnemy.takeDamage(knifeConfig.damage);
+            nearestEnemy.takeDamage(knifeConfig.damage, this.x, this.y);
             const angle = Math.atan2(nearestEnemy.y - this.y, nearestEnemy.x - this.x);
             nearestEnemy.x += Math.cos(angle) * 30;
             nearestEnemy.y += Math.sin(angle) * 30;
@@ -184,6 +195,8 @@ export class Player extends Entity {
                 if (GameState.player && GameState.player.alive) { this.addKill(); GameState.rp += 10; }
             }
         }
+        // 播放近战音效
+        SoundManager.playMelee();
     }
 
     update() {
@@ -323,6 +336,8 @@ export class Player extends Entity {
 
     shoot() {
         if (GameState.gameOver || this.shootCooldown > 0 || this.isSwitching) return;
+        // UI界面打开时禁止开火
+        if (GameState.arsenalOpen || GameState.inventoryOpen || GameState.debugOpen) return;
         const weapon = GameState.getActiveWeapon();
         if (!weapon || !weapon.canShoot()) return;
 
@@ -396,15 +411,27 @@ export class Player extends Entity {
                 knockback, bulletRadius, null, penetration, explosion, hasTrail
             ));
         }
+        // 播放枪声音效
+        const weaponType = weapon.config.type;
+        if (['pistol', 'rifle', 'smg', 'shotgun', 'sniper', 'launcher'].includes(weaponType)) {
+            SoundManager.playShoot(weaponType);
+        }
+
         weapon.consumeAmmo();
         weapon.applyRecoilAndSpread(); // 射击后增加后坐力和散布
         this.shootCooldown = weapon.config.shootDelay;
 
-        // 抛壳效果（排除不抛壳的武器类型）
+        // 检查是否打空，播放空仓音效
+        if (weapon.ammo === 0 && weapon.config.type !== 'melee') {
+            SoundManager.playEmpty();
+        }
+
+        // 抛壳效果 + 抛壳音效（排除不抛壳的武器类型）
         const noShellTypes = ['melee', 'grenade', 'medical', 'launcher'];
         if (!noShellTypes.includes(weapon.config.type)) {
             const shellType = weapon.config.shellType || weapon.config.type;
             EffectsManager.spawnShellCasing(this.x, this.y, shellType);
+            SoundManager.playShellEject(shellType, 0);
         }
 
         // 火箭筒等一次性堆叠武器：射击后消耗堆叠，用完销毁
@@ -500,6 +527,21 @@ export class Player extends Entity {
         }
         // 如果没有武器，切换到空槽位（会使用匕首）
         GameState.activeWeaponSlot = 0;
+    }
+
+    // 重写父类的 takeDamage 方法以播放音效
+    takeDamage(amount) {
+        this.health -= amount;
+        if (this.health <= 0) {
+            this.health = 0;
+            this.alive = false;
+            GameState.gameOver = true;
+            EventBus.emit('game_over', { reason: 'player_died' });
+            SoundManager.playDie();
+        } else {
+            SoundManager.playHurt();
+        }
+        EventBus.emit('player_hurt', { health: this.health });
     }
 
     draw(ctx) {

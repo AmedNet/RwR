@@ -3,6 +3,7 @@ import { Entity } from './Entity.js';
 import { GameState } from '../core/GameState.js';
 import { Bullet } from './Bullet.js';
 import { MovementSystem } from '../utils/MovementSystem.js';
+import * as SoundManager from '../utils/SoundManager.js';
 
 export class Enemy extends Entity {
     constructor(x, y, config) {
@@ -281,5 +282,23 @@ export class Enemy extends Entity {
         const icons = ['◆', '▲', '●']; // 防守/突击/游击
         ctx.fillText(icons[this.role] || '✧', 0, 0);
         ctx.restore();
+    }
+
+    // 重写父类的 takeDamage 方法以播放音效
+    takeDamage(amount, sourceX, sourceY) {
+        this.health -= amount;
+        // 计算与声源的距离
+        const distance = (sourceX !== undefined && sourceY !== undefined)
+            ? Math.hypot(this.x - sourceX, this.y - sourceY)
+            : 0;
+        if (this.health <= 0) {
+            this.health = 0;
+            this.alive = false;
+            // 播放死亡音效
+            SoundManager.playDie(distance);
+        } else {
+            // 播放受伤音效
+            SoundManager.playHurt(distance);
+        }
     }
 }
