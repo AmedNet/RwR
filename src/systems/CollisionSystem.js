@@ -3,6 +3,7 @@ import { GameState } from '../core/GameState.js';
 import { EventBus } from '../core/EventBus.js';
 import { Terrain } from '../core/Map.js';
 import { EffectsManager, ParticleType } from '../utils/EffectsManager.js';
+import { playExplosion } from '../utils/SoundManager.js';
 
 export const CollisionSystem = {
     // 圆与矩形碰撞解决（用于地图房屋）
@@ -75,6 +76,7 @@ export const CollisionSystem = {
                 if (tile === Terrain.HOUSE || tile === Terrain.MOUNTAIN) {
                     // 爆炸弹命中墙壁触发爆炸
                     if (bullet.explosion) {
+                        playExplosion(bullet);
                         window.dispatchEvent(new CustomEvent('grenade_explode', {
                             detail: { x: bullet.x, y: bullet.y, radius: bullet.explosion.radius, damage: bullet.explosion.damage }
                         }));
@@ -121,7 +123,7 @@ export const CollisionSystem = {
                 let dx = bullet.x - player.x;
                 let dy = bullet.y - player.y;
                 if (dx*dx + dy*dy < (bullet.radius + player.radius) ** 2) {
-                    player.takeDamage(bullet.damage);
+                    player.takeDamage(bullet.damage, bullet.x, bullet.y);
                     bulletUsed = true;
                     // 特效：玩家受伤
                     EffectsManager.spawnParticles(bullet.x, bullet.y, ParticleType.HIT, 6);
@@ -141,7 +143,7 @@ export const CollisionSystem = {
                         dx = bullet.x - teammate.x;
                         dy = bullet.y - teammate.y;
                         if (dx*dx + dy*dy < (bullet.radius + teammate.radius) ** 2) {
-                            teammate.takeDamage(bullet.damage);
+                            teammate.takeDamage(bullet.damage, bullet.x, bullet.y);
                             bulletUsed = true;
                             if (!teammate.alive) {
                                 console.log('💔 队友阵亡，加入重生队列');
@@ -167,7 +169,7 @@ export const CollisionSystem = {
                     const dx = bullet.x - enemy.x;
                     const dy = bullet.y - enemy.y;
                     if (dx*dx + dy*dy < (bullet.radius + enemy.radius) ** 2) {
-                        enemy.takeDamage(bullet.damage);
+                        enemy.takeDamage(bullet.damage, bullet.x, bullet.y);
                         
                         // 击退效果
                         if (bullet.knockback > 0) {
@@ -182,8 +184,8 @@ export const CollisionSystem = {
                             // 特效：敌人死亡爆炸
                             EffectsManager.spawnParticles(enemy.x, enemy.y, ParticleType.EXPLOSION, 15);
                             EffectsManager.triggerShake(5, 6);
-                            // 只有玩家子弹击杀才计分
-                            if (bullet.isPlayer && player && player.alive) {
+                            // 只有玩家本人击杀才计分（排除队友击杀）
+                            if (bullet.shooter === player && player.alive) {
                                 player.addKill();
                                 // 增加RP（金钱）
                                 GameState.rp += 10;
@@ -211,6 +213,7 @@ export const CollisionSystem = {
             if (bulletUsed) {
                 // 爆炸弹命中实体后触发爆炸
                 if (bullet.explosion) {
+                    playExplosion(bullet);
                     window.dispatchEvent(new CustomEvent('grenade_explode', {
                         detail: { x: bullet.x, y: bullet.y, radius: bullet.explosion.radius, damage: bullet.explosion.damage }
                     }));

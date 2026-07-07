@@ -22,6 +22,8 @@ export class Weapon {
         this.consecutiveShots = 0;
         // 堆叠计数（火箭筒等一次性武器）
         this.stackCount = config.maxStack ? 1 : 0;
+        // AI无限备弹标记（枪械类AI武器换弹自动补满，不需要捡弹药包）
+        this.isInfiniteAmmo = false;
     }
 
     canShoot() {

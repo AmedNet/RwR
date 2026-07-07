@@ -160,6 +160,12 @@ export const Renderer = {
             GameState.arsenal.draw(this.ctx);
         }
 
+        // 绘制地面武器
+        for (const pickup of GameState.weaponPickups) {
+            if (!pickup.alive) continue;
+            pickup.draw(this.ctx, GameState.camera);
+        }
+
         // 绘制手雷
         for (const g of GameState.grenades) {
             g.draw(this.ctx);

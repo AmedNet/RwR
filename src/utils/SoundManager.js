@@ -4,6 +4,7 @@
 let actx = null;
 let masterGain = null;
 let audioUnlocked = false;
+let listenerProvider = null;
 
 // 初始化 AudioContext（立即创建，而不是延迟创建）
 function initAudio() {
@@ -50,6 +51,25 @@ function getCtx() {
 
 export function setVolume(vol) {
   if (masterGain) masterGain.gain.value = vol;
+}
+
+export function setListenerProvider(provider) {
+  listenerProvider = provider;
+}
+
+function getListenerDistance(sourceOrDistance = 0) {
+  if (typeof sourceOrDistance === 'number') return Math.max(0, sourceOrDistance);
+  if (sourceOrDistance && typeof sourceOrDistance.x === 'number' && typeof sourceOrDistance.y === 'number') {
+    const player = listenerProvider ? listenerProvider() : null;
+    if (player) return Math.hypot(sourceOrDistance.x - player.x, sourceOrDistance.y - player.y);
+  }
+  return 0;
+}
+
+function getDistanceVolume(sourceOrDistance = 0, maxDist = 1000, curve = 1.5) {
+  const distance = getListenerDistance(sourceOrDistance);
+  if (distance >= maxDist) return 0;
+  return Math.pow(1 - distance / maxDist, curve);
 }
 
 // 辅助：创建带随机音调偏移的 BufferSource（0.92~1.08），让重复音效更自然
@@ -108,17 +128,16 @@ function playScrapeRaw(c, time, duration, freq, gainVal) {
 }
 
 // 播放枪声 (重构：完美集成 M82 与 AT4 火箭筒，加强瞬态打击感与枪管共鸣尾音)
-export function playShoot(type, distance = 0) {
+export function playShoot(type, source = 0) {
   const c = getCtx(), n = c.currentTime;
-  // 距离衰减：最大衰减距离 1200 像素
-  const maxDist = 1200;
-  const vol = Math.max(0.1, 1 - distance / maxDist);
+  const vol = getDistanceVolume(source, 1200, 1.5);
+  if (vol <= 0) return;
   
   // 枪声的核心物理参数字典
   const C = {
     pistol:   { nD: 0.10, nF: 2600, nQ: 1.5, tF: 220, tD: 0.03, tV: 0.4, nV: 0.7, lF: 110, lV: 0.4,  ring: false },
     smg:      { nD: 0.08, nF: 3000, nQ: 2.0, tF: 260, tD: 0.02, tV: 0.3, nV: 0.6, lF: 130, lV: 0.3,  ring: false },
-    rifle:    { nD: 0.15, nF: 1600, nQ: 1.2, tF: 160, tD: 0.05, tV: 0.5, nV: 0.8, lF: 85,  lV: 0.5,  ring: true,  rF: 750,  rD: 0.12 },
+    rifle:    { nD: 0.12, nF: 2200, nQ: 1.8, tF: 200, tD: 0.03, tV: 0.65, nV: 0.9, lF: 70,  lV: 0.65, ring: true,  rF: 620,  rD: 0.15 },
     shotgun:  { nD: 0.22, nF: 1000, nQ: 0.8, tF: 100, tD: 0.08, tV: 0.6, nV: 0.9, lF: 55,  lV: 0.6,  ring: true,  rF: 450,  rD: 0.18 },
     sniper:   { nD: 0.25, nF: 1300, nQ: 1.0, tF: 120, tD: 0.08, tV: 0.7, nV: 0.9, lF: 45,  lV: 0.7,  ring: true,  rF: 900,  rD: 0.25 }, // AWP
     m82:      { nD: 0.35, nF: 900,  nQ: 0.7, tF: 80,  tD: 0.12, tV: 0.8, nV: 1.0, lF: 35,  lV: 0.9,  ring: true,  rF: 520,  rD: 0.40 }, // M82反器材加猛
@@ -173,10 +192,10 @@ export function playShoot(type, distance = 0) {
 }
 
 // 播放换弹音效 (重构：抛弃无规律的for循环，改为严格的时间轴机械动作序列编排！)
-export function playReload(type) {
-  console.log(`🔊 playReload called with type: ${type}`);
+export function playReload(type, source = 0) {
   const c = getCtx(), n = c.currentTime;
-  console.log(`🔊 AudioContext state: ${c.state}, currentTime: ${n}`);
+  const vol = getDistanceVolume(source, 700, 1.4);
+  if (vol <= 0) return;
   
   // 每种枪械的换弹战术节点时间轴（单位：秒）
   // t1: 卸下弹匣, t2: 摸索新弹匣摩擦, t3: 插入新弹匣主撞击, t4: 拉机柄/枪栓复位上膛
@@ -193,47 +212,49 @@ export function playReload(type) {
   const t = Timeline[type] || Timeline.rifle;
 
   // ===== 步骤 1：卡榫释放，旧弹匣脱离离体 =====
-  playClickRaw(c, n, 2600, 0.012, 0.4);
-  playScrapeRaw(c, n + t.t1, 0.05, 1800, 0.35); // 脱离摩擦
+  playClickRaw(c, n, 2600, 0.012, 0.4 * vol);
+  playScrapeRaw(c, n + t.t1, 0.05, 1800, 0.35 * vol); // 脱离摩擦
   
   // ===== 步骤 2：掏出新弹匣，战术背心装备布料擦碰 =====
-  playScrapeRaw(c, n + t.t2, 0.10, 900, 0.15);
+  playScrapeRaw(c, n + t.t2, 0.10, 900, 0.15 * vol);
 
   // ===== 步骤 3：新弹匣撞入井口（全枪受力，沉闷双重撞击+咬合） =====
   const t_ins = n + t.t3;
   const oscSine = c.createOscillator(), gSine = c.createGain(); // 沉闷撞击主音
   oscSine.type = 'sine'; oscSine.frequency.setValueAtTime(130, t_ins);
-  gSine.gain.setValueAtTime(0.8, t_ins); gSine.gain.exponentialRampToValueAtTime(0.001, t_ins + 0.08);
+  gSine.gain.setValueAtTime(0.8 * vol, t_ins); gSine.gain.exponentialRampToValueAtTime(0.001, t_ins + 0.08);
   oscSine.connect(gSine).connect(masterGain); oscSine.start(t_ins); oscSine.stop(t_ins + 0.08);
   
   // 补一声枪身内部的低频回响空腔
   const oscSine2 = c.createOscillator(), gSine2 = c.createGain();
   oscSine2.type = 'sine'; oscSine2.frequency.setValueAtTime(65, t_ins);
-  gSine2.gain.setValueAtTime(0.5, t_ins); gSine2.gain.exponentialRampToValueAtTime(0.001, t_ins + 0.14);
+  gSine2.gain.setValueAtTime(0.5 * vol, t_ins); gSine2.gain.exponentialRampToValueAtTime(0.001, t_ins + 0.14);
   oscSine2.connect(gSine2).connect(masterGain); oscSine2.start(t_ins); oscSine2.stop(t_ins + 0.14);
 
-  playClickRaw(c, t_ins, 1400, 0.015, 0.4); // 咬合脆响
-  playScrapeRaw(c, t_ins, 0.04, 2800, 0.35); // 撞击瞬间金属小碎渣音
+  playClickRaw(c, t_ins, 1400, 0.015, 0.4 * vol); // 咬合脆响
+  playScrapeRaw(c, t_ins, 0.04, 2800, 0.35 * vol); // 撞击瞬间金属小碎渣音
 
   // ===== 步骤 4：枪栓暴虐拉动并推弹复位（拉栓-闭锁双声） =====
   const t_bolt = n + t.t4;
-  playScrapeRaw(c, t_bolt, 0.10, 2200, 0.45); // 枪栓后退并回弹的急促摩擦声
+  playScrapeRaw(c, t_bolt, 0.10, 2200, 0.45 * vol); // 枪栓后退并回弹的急促摩擦声
   
   // 枪栓闭锁一瞬间的钢铁颤音（解决“差点意思”的终极法宝：非整数倍双三角波共振）
   const t_lock = t_bolt + 0.08;
   const oscSine3 = c.createOscillator(), gSine3 = c.createGain();
   oscSine3.type = 'sine'; oscSine3.frequency.setValueAtTime(150, t_lock);
-  gSine3.gain.setValueAtTime(0.8, t_lock); gSine3.gain.exponentialRampToValueAtTime(0.001, t_lock + 0.05);
+  gSine3.gain.setValueAtTime(0.8 * vol, t_lock); gSine3.gain.exponentialRampToValueAtTime(0.001, t_lock + 0.05);
   oscSine3.connect(gSine3).connect(masterGain); oscSine3.start(t_lock); oscSine3.stop(t_lock + 0.05);
 
-  playRingRaw(c, t_lock, 680, 0.25, 0.35, 'triangle'); // 机匣低频回响
-  playRingRaw(c, t_lock, 1120, 0.18, 0.20, 'triangle'); // 弹簧高频余震
-  playClickRaw(c, t_lock + 0.005, 3500, 0.008, 0.45);  // 卡榫死死闭锁
+  playRingRaw(c, t_lock, 680, 0.25, 0.35 * vol, 'triangle'); // 机匣低频回响
+  playRingRaw(c, t_lock, 1120, 0.18, 0.20 * vol, 'triangle'); // 弹簧高频余震
+  playClickRaw(c, t_lock + 0.005, 3500, 0.008, 0.45 * vol);  // 卡榫死死闭锁
 }
 
 // 播放近战音效 (保持你优雅的扫频，略微微调包络让划空感更顺畅)
-export function playMelee() {
+export function playMelee(source = 0) {
   const c = getCtx(), n = c.currentTime;
+  const vol = getDistanceVolume(source, 500, 1.5);
+  if (vol <= 0) return;
   const nb = mkNoise(c, .15, 'pink'), ns = createSrc(c, nb);
   const f = c.createBiquadFilter();
   f.type = 'bandpass';
@@ -243,7 +264,7 @@ export function playMelee() {
   f.Q.value = 2.5;
   const g = c.createGain();
   g.gain.setValueAtTime(.001, n);
-  g.gain.linearRampToValueAtTime(.6, n + .04);
+  g.gain.linearRampToValueAtTime(.6 * vol, n + .04);
   g.gain.exponentialRampToValueAtTime(.001, n + .15);
   ns.connect(f); f.connect(g); g.connect(masterGain);
   ns.start(n); ns.stop(n + .15);
@@ -254,18 +275,17 @@ export function playMelee() {
   o.frequency.exponentialRampToValueAtTime(1200, n + .12);
   const og = c.createGain();
   og.gain.setValueAtTime(.001, n);
-  og.gain.linearRampToValueAtTime(.25, n + .06);
+  og.gain.linearRampToValueAtTime(.25 * vol, n + .06);
   og.gain.exponentialRampToValueAtTime(.001, n + .12);
   o.connect(og); og.connect(masterGain);
   o.start(n); o.stop(n + .13);
 }
 
 // 播放爆炸音效 (保持原本出色的爆破分层)
-export function playExplosion(distance = 0) {
+export function playExplosion(source = 0) {
   const c = getCtx(), n = c.currentTime;
-  // 距离衰减：最大衰减距离 1500 像素（爆炸声传播更远）
-  const maxDist = 1500;
-  const vol = Math.max(0.15, 1 - distance / maxDist);
+  const vol = getDistanceVolume(source, 1500, 1.3);
+  if (vol <= 0) return;
   
   const nb = mkNoise(c, .9, 'brown'), ns = createSrc(c, nb);
   const lf = c.createBiquadFilter();
@@ -300,14 +320,16 @@ export function playExplosion(distance = 0) {
 }
 
 // 播放空仓咔嗒声
-export function playEmpty() {
+export function playEmpty(source = 0) {
   const c = getCtx(), n = c.currentTime;
+  const vol = getDistanceVolume(source, 500, 1.5);
+  if (vol <= 0) return;
   const o = c.createOscillator();
   o.type = 'square';
   o.frequency.setValueAtTime(1400, n);
   o.frequency.exponentialRampToValueAtTime(450, n + .035);
   const og = c.createGain();
-  og.gain.setValueAtTime(.25, n);
+  og.gain.setValueAtTime(.25 * vol, n);
   og.gain.exponentialRampToValueAtTime(.001, n + .035);
   o.connect(og); og.connect(masterGain);
   o.start(n); o.stop(n + .04);
@@ -317,15 +339,17 @@ export function playEmpty() {
   const f = c.createBiquadFilter();
   f.type = 'highpass'; f.frequency.value = 4500;
   const g = c.createGain();
-  g.gain.setValueAtTime(.15, n);
+  g.gain.setValueAtTime(.15 * vol, n);
   g.gain.exponentialRampToValueAtTime(.001, n + .015);
   ns.connect(f); f.connect(g); g.connect(masterGain);
   ns.start(n); ns.stop(n + .015);
 }
 
 // 播放脚步声
-export function playFootstep(type = 'concrete') {
+export function playFootstep(type = 'concrete', source = 0) {
   const c = getCtx(), n = c.currentTime;
+  const vol = getDistanceVolume(source, 550, 1.5);
+  if (vol <= 0) return;
   const C = {
     concrete: { iD: .03, iV: .35, iF: 1100, sD: .13, sV: .12, sF: 850 },
     grass:    { iD: .05, iV: .18, iF: 550,  sD: .22, sV: .08, sF: 450 },
@@ -339,7 +363,7 @@ export function playFootstep(type = 'concrete') {
   impOsc.frequency.setValueAtTime(x.iF, n);
   impOsc.frequency.exponentialRampToValueAtTime(90, n + x.iD);
   const impGain = c.createGain();
-  impGain.gain.setValueAtTime(x.iV, n);
+  impGain.gain.setValueAtTime(x.iV * vol, n);
   impGain.gain.exponentialRampToValueAtTime(.001, n + x.iD);
   impOsc.connect(impGain); impGain.connect(masterGain);
   impOsc.start(n); impOsc.stop(n + x.iD);
@@ -350,17 +374,16 @@ export function playFootstep(type = 'concrete') {
   const scFilter = c.createBiquadFilter();
   scFilter.type = 'bandpass'; scFilter.frequency.setValueAtTime(x.sF, n); scFilter.Q.value = 1.2;
   const scGain = c.createGain();
-  scGain.gain.setValueAtTime(x.sV, n);
+  scGain.gain.setValueAtTime(x.sV * vol, n);
   scGain.gain.exponentialRampToValueAtTime(.001, n + x.sD);
   scSource.connect(scFilter); scFilter.connect(scGain); scGain.connect(masterGain);
   scSource.start(n); scSource.stop(n + x.sD);
 }
 
 // 播放受伤音效
-export function playHurt(distance = 0) {
+export function playHurt(source = 0) {
   const c = getCtx(), n = c.currentTime;
-  const maxDist = 1000;
-  const vol = Math.max(0, 1 - distance / maxDist);
+  const vol = getDistanceVolume(source, 1000, 1.5);
   if (vol <= 0) return;
 
   const impOsc = c.createOscillator();
@@ -385,10 +408,9 @@ export function playHurt(distance = 0) {
 }
 
 // 播放死亡音效
-export function playDie(distance = 0) {
+export function playDie(source = 0) {
   const c = getCtx(), n = c.currentTime;
-  const maxDist = 1000;
-  const vol = Math.max(0, 1 - distance / maxDist);
+  const vol = getDistanceVolume(source, 1000, 1.5);
   if (vol <= 0) return;
 
   const o = c.createOscillator();
@@ -412,13 +434,15 @@ export function playDie(distance = 0) {
 }
 
 // 播放拾取音效
-export function playPickup() {
+export function playPickup(source = 0) {
   const c = getCtx(), n = c.currentTime;
+  const vol = getDistanceVolume(source, 450, 1.5);
+  if (vol <= 0) return;
   const o = c.createOscillator();
   o.type = 'sine'; o.frequency.setValueAtTime(1100, n);
   o.frequency.exponentialRampToValueAtTime(1700, n + .09);
   const og = c.createGain();
-  og.gain.setValueAtTime(.25, n);
+  og.gain.setValueAtTime(.25 * vol, n);
   og.gain.exponentialRampToValueAtTime(.001, n + .09);
   o.connect(og); og.connect(masterGain);
   o.start(n); o.stop(n + .09);
@@ -428,10 +452,58 @@ export function playPickup() {
   const f = c.createBiquadFilter();
   f.type = 'highpass'; f.frequency.value = 2200;
   const g = c.createGain();
-  g.gain.setValueAtTime(.15, n);
+  g.gain.setValueAtTime(.15 * vol, n);
   g.gain.exponentialRampToValueAtTime(.001, n + .12);
   ns.connect(f); f.connect(g); g.connect(masterGain);
   ns.start(n); ns.stop(n + .12);
+}
+
+// 播放切换武器音效
+export function playWeaponSwitch(type = 'pistol', source = 0) {
+  const c = getCtx(), n = c.currentTime;
+  const vol = getDistanceVolume(source, 450, 1.5);
+  if (vol <= 0) return;
+  const C = {
+    melee: { f1: 900, f2: 1700, v: .12 },
+    grenade: { f1: 650, f2: 1200, v: .13 },
+    medical: { f1: 780, f2: 1050, v: .10 },
+    launcher: { f1: 260, f2: 620, v: .18 },
+    shotgun: { f1: 420, f2: 900, v: .16 },
+    sniper: { f1: 360, f2: 820, v: .15 },
+    rifle: { f1: 520, f2: 1300, v: .14 },
+    smg: { f1: 760, f2: 1500, v: .12 },
+    pistol: { f1: 950, f2: 1800, v: .11 }
+  };
+  const x = C[type] || C.pistol;
+
+  const nb = mkNoise(c, .06, 'white'), ns = createSrc(c, nb);
+  const f = c.createBiquadFilter();
+  f.type = 'bandpass'; f.frequency.setValueAtTime(x.f1, n); f.Q.value = 2.2;
+  const g = c.createGain();
+  g.gain.setValueAtTime(x.v * vol, n);
+  g.gain.exponentialRampToValueAtTime(.001, n + .06);
+  ns.connect(f); f.connect(g); g.connect(masterGain);
+  ns.start(n); ns.stop(n + .06);
+
+  playClickRaw(c, n + .035, x.f2, .018, x.v * 1.3 * vol);
+}
+
+// 播放投掷音效
+export function playThrow(source = 0) {
+  const c = getCtx(), n = c.currentTime;
+  const vol = getDistanceVolume(source, 500, 1.5);
+  if (vol <= 0) return;
+  const nb = mkNoise(c, .16, 'pink'), ns = createSrc(c, nb);
+  const f = c.createBiquadFilter();
+  f.type = 'bandpass';
+  f.frequency.setValueAtTime(450, n);
+  f.frequency.exponentialRampToValueAtTime(1700, n + .08);
+  const g = c.createGain();
+  g.gain.setValueAtTime(.001, n);
+  g.gain.linearRampToValueAtTime(.22 * vol, n + .035);
+  g.gain.exponentialRampToValueAtTime(.001, n + .16);
+  ns.connect(f); f.connect(g); g.connect(masterGain);
+  ns.start(n); ns.stop(n + .16);
 }
 
 // 播放UI音效
@@ -454,10 +526,9 @@ export function playUISound(type = 'click') {
 }
 
 // 播放弹壳落地弹跳音效
-export function playShellEject(type = 'pistol', distance = 0) {
+export function playShellEject(type = 'pistol', source = 0) {
   const c = getCtx(), n = c.currentTime;
-  const maxDist = 800;
-  const vol = Math.max(0, 1 - distance / maxDist);
+  const vol = getDistanceVolume(source, 800, 1.5);
   if (vol <= 0) return;
 
   // 根据武器类型调整基频：大弹壳低频，小弹壳高频
@@ -503,10 +574,9 @@ export function playShellEject(type = 'pistol', distance = 0) {
 }
 
 // 播放弹壳单次落地撞击音效（每次弹跳触发一次）
-export function playShellLand(type = 'pistol', bounceIndex = 0, distance = 0) {
+export function playShellLand(type = 'pistol', bounceIndex = 0, source = 0) {
   const c = getCtx(), n = c.currentTime;
-  const maxDist = 800;
-  const vol = Math.max(0, 1 - distance / maxDist);
+  const vol = getDistanceVolume(source, 800, 1.5);
   if (vol <= 0) return;
 
   const freqMap = { shotgun: 700, sniper: 800, rifle: 1200, launcher: 900, smg: 1600, pistol: 1800 };

@@ -285,7 +285,7 @@ export const EffectsManager = {
                 if (s.y >= s.groundY) {
                     s.y = s.groundY;
                     // 触发弹壳落地音效
-                    playShellLand(s.weaponType, s.bounceCount, 0);
+                    playShellLand(s.weaponType, s.bounceCount, s);
                     s.bounceCount++;
                     if (s.bounceCount >= s.maxBounces) {
                         s.state = 'stopped';

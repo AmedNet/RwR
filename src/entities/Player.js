@@ -99,7 +99,7 @@ export class Player extends Entity {
     }
 
     switchWeapon(slot) {
-        if (slot < 0 || slot > 6 || slot === GameState.activeWeaponSlot || !GameState.inventory[slot]) return;
+        if (slot < 0 || slot > 6 || slot === GameState.activeWeaponSlot || !GameState.inventory[slot]) return false;
         const current = GameState.getActiveWeapon();
         if (current) {
             current.isReloading = false;
@@ -109,6 +109,7 @@ export class Player extends Entity {
         this.switchAnimTimer = this.switchAnimDuration;
         this.switchFromSlot = GameState.activeWeaponSlot;
         GameState.activeWeaponSlot = slot;
+        SoundManager.playWeaponSwitch(GameState.inventory[slot].config.type, this);
         
         // 切换到非狙击枪时，立即重置瞄准状态
         const newWeapon = GameState.inventory[slot];
@@ -119,6 +120,7 @@ export class Player extends Entity {
             GameState.camera.targetOffsetX = 0;
             GameState.camera.targetOffsetY = 0;
         }
+        return true;
     }
 
     reload() {
@@ -130,7 +132,7 @@ export class Player extends Entity {
                 // 只有真正开始换弹时才播放音效
                 const weaponType = weapon.config.type;
                 if (['pistol', 'rifle', 'smg', 'shotgun', 'sniper', 'launcher'].includes(weaponType)) {
-                    SoundManager.playReload(weaponType);
+                    SoundManager.playReload(weaponType, this);
                 }
             }
         }
@@ -168,6 +170,7 @@ export class Player extends Entity {
 
         const grenade = new Grenade(this.x, this.y, targetWorldX, targetWorldY, config);
         GameState.grenades.push(grenade);
+        SoundManager.playThrow(this);
 
         weapon.ammo--;
         if (weapon.ammo <= 0) GameState.inventory[grenadeSlot] = null;
@@ -196,11 +199,13 @@ export class Player extends Entity {
             }
         }
         // 播放近战音效
-        SoundManager.playMelee();
+        SoundManager.playMelee(this);
     }
 
     update() {
         if (GameState.gameOver) return;
+        // 保存上一帧位置用于AI预测瞄准
+        this.savePrevPosition();
         if (this.isSwitching) {
             this.switchAnimTimer--;
             if (this.switchAnimTimer <= 0) this.isSwitching = false;
@@ -386,7 +391,10 @@ export class Player extends Entity {
                     Math.cos(pelletAngle) * speed,
                     Math.sin(pelletAngle) * speed,
                     false, weapon.config.damage, true,
-                    knockback, pelletRadius, maxRange
+                    knockback, pelletRadius, maxRange,
+                    null, null, false,
+                    weapon.config.bulletColor, weapon.config.bulletGlow,
+                    this
                 ));
             }
         } else {
@@ -408,13 +416,15 @@ export class Player extends Entity {
                 this.y + Math.sin(baseAngle) * this.radius,
                 Math.cos(baseAngle) * speed, Math.sin(baseAngle) * speed,
                 false, weapon.config.damage, true,
-                knockback, bulletRadius, null, penetration, explosion, hasTrail
+                knockback, bulletRadius, null, penetration, explosion, hasTrail,
+                weapon.config.bulletColor, weapon.config.bulletGlow,
+                this
             ));
         }
         // 播放枪声音效
         const weaponType = weapon.config.type;
         if (['pistol', 'rifle', 'smg', 'shotgun', 'sniper', 'launcher'].includes(weaponType)) {
-            SoundManager.playShoot(weaponType);
+            SoundManager.playShoot(weaponType, this);
         }
 
         weapon.consumeAmmo();
@@ -423,7 +433,7 @@ export class Player extends Entity {
 
         // 检查是否打空，播放空仓音效
         if (weapon.ammo === 0 && weapon.config.type !== 'melee') {
-            SoundManager.playEmpty();
+            SoundManager.playEmpty(this);
         }
 
         // 抛壳效果 + 抛壳音效（排除不抛壳的武器类型）
@@ -431,7 +441,7 @@ export class Player extends Entity {
         if (!noShellTypes.includes(weapon.config.type)) {
             const shellType = weapon.config.shellType || weapon.config.type;
             EffectsManager.spawnShellCasing(this.x, this.y, shellType);
-            SoundManager.playShellEject(shellType, 0);
+            SoundManager.playShellEject(shellType, this);
         }
 
         // 火箭筒等一次性堆叠武器：射击后消耗堆叠，用完销毁
@@ -521,7 +531,7 @@ export class Player extends Entity {
     autoSwitchToNextWeapon() {
         for (let i = 0; i < GameState.inventory.length; i++) {
             if (GameState.inventory[i]) {
-                GameState.activeWeaponSlot = i;
+                this.switchWeapon(i);
                 return;
             }
         }

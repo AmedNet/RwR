@@ -8,6 +8,7 @@ export const GameState = {
     bullets: [],
     grenades: [],
     capturePoints: [],
+    weaponPickups: [], // 地面掉落的武器
     arsenal: null, // 军械库实例
     arsenalOpen: false, // 军械库界面是否打开
     inventory: [null, null, null, null, null, null, null], // 背包，7个位置，存储 Weapon 实例或 null
@@ -66,6 +67,7 @@ export const GameState = {
         this.enemies = [];
         this.teammates = [];
         this.bullets = [];
+        this.weaponPickups = [];
         // 据点不重置，它们是地图的一部分，由 initCapturePoints 一次性生成
         this.kills = 0;
         this.score = 0;

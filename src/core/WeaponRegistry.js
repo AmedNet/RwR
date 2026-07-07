@@ -57,6 +57,9 @@ export const WeaponRegistry = {
         range: Infinity,
         fireMode: FireMode.SEMI,
         canChamberedReload: true,
+        bulletColor: '#FFD740',      // 金黄色子弹
+        bulletGlow: '#ffab00',       // 发光颜色
+        aiWeight: 30,                // AI持有概率权重（越高越常见）
         // 后坐力配置：手枪后坐力较小
         recoil: {
             maxAngle: 0.15,         // 最大后坐力角度偏移（弧度）
@@ -95,6 +98,9 @@ export const WeaponRegistry = {
         range: Infinity,
         fireMode: FireMode.AUTO,
         canChamberedReload: true,
+        bulletColor: '#FF6D00',      // 橙色子弹
+        bulletGlow: '#FF3D00',       // 发光颜色
+        aiWeight: 20,                // AI持有概率权重
         // 后坐力配置：步枪后坐力较大
         recoil: {
             maxAngle: 0.30,
@@ -133,6 +139,9 @@ export const WeaponRegistry = {
         range: Infinity,
         fireMode: FireMode.BURST,
         canChamberedReload: true,
+        bulletColor: '#FFEB3B',      // 亮黄色子弹
+        bulletGlow: '#FFC107',       // 发光颜色
+        aiWeight: 20,                // AI持有概率权重
         // 后坐力配置：卡宾枪后坐力适中
         recoil: {
             maxAngle: 0.30,
@@ -173,6 +182,9 @@ export const WeaponRegistry = {
         range: 550,           // 最大射程（像素）
         fireMode: FireMode.SEMI,
         knockback: 8,         // 击退力度大
+        bulletColor: '#FF9800',      // 橙色弹丸
+        bulletGlow: '#FF5722',       // 发光颜色
+        aiWeight: 10,                // AI持有概率权重（霰弹枪较少）
         recoil: {
             maxAngle: 0.25,
             recoverySpeed: 0.008
@@ -198,6 +210,9 @@ export const WeaponRegistry = {
         fireMode: FireMode.SEMI,
         canChamberedReload: true, // 支持空仓挂机
         knockback: 15,
+        bulletColor: '#00E676',      // 绿色子弹
+        bulletGlow: '#00C853',       // 发光颜色
+        aiWeight: 5,                 // AI持有概率权重（狙击枪稀有）
         
         // 穿透配置
         penetration: {
@@ -246,6 +261,9 @@ export const WeaponRegistry = {
         fireMode: FireMode.SEMI,
         canChamberedReload: true, // 支持空仓挂机
         knockback: 60,            // 同手雷击退
+        bulletColor: '#F44336',      // 红色爆炸弹
+        bulletGlow: '#D32F2F',       // 发光颜色
+        aiWeight: 2,                 // AI持有概率权重（反器材极稀有）
         
         // 爆炸弹配置
         explosionRadius: 70,      // 爆炸半径（像素）
@@ -287,6 +305,7 @@ export const WeaponRegistry = {
         sellPrice: 35,
         icon: 'src/pkg/weapon/M67/M67.png',
         imagePath: 'src/pkg/weapon/M67/M67.png',
+        aiWeight: 8,                 // AI持有概率权重
         range: 400,
         fuseTime: 120,
         explosionRadius: 120,
@@ -308,9 +327,12 @@ export const WeaponRegistry = {
         sellPrice: 150,
         icon: 'src/pkg/weapon/at4/at4.png',
         imagePath: 'src/pkg/weapon/at4/at4.png',
+        aiWeight: 3,                 // AI持有概率权重（火箭筒稀有）
         range: Infinity,
         fireMode: FireMode.SEMI,
         knockback: 100,           // 大范围击退
+        bulletColor: '#FF6D00',      // 火箭弹橙色
+        bulletGlow: '#FF3D00',       // 发光颜色
 
         // 爆炸配置
         explosionRadius: 150,     // 爆炸半径（像素）
@@ -349,6 +371,9 @@ export const WeaponRegistry = {
         canChamberedReload: true,
         bulletRadiusMultiplier: 0.6, // 子弹大小同霰弹枪弹丸
         shellType: 'pistol',         // 抛壳复用手枪配置
+        bulletColor: '#FFEB3B',      // 亮黄色子弹
+        bulletGlow: '#FFC107',       // 发光颜色
+        aiWeight: 25,                // AI持有概率权重
         // 后坐力：介于手枪和步枪之间
         recoil: {
             maxAngle: 0.20,
@@ -380,6 +405,7 @@ export const WeaponRegistry = {
         sellPrice: 15,
         icon: 'src/pkg/weapon/CAT/CAT.png',
         imagePath: 'src/pkg/weapon/CAT/CAT.png',
+        aiWeight: 12,                // AI持有概率权重
         fireMode: FireMode.SEMI
     }
 };

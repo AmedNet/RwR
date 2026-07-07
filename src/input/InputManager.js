@@ -4,6 +4,8 @@ import { Weapon } from '../core/Weapon.js';
 import { WeaponRegistry } from '../core/WeaponRegistry.js';
 import { UIManager } from '../rendering/UIManager.js';
 import { Renderer } from '../rendering/Renderer.js';
+import { WeaponPickup } from '../entities/WeaponPickup.js';
+import { playPickup, playUISound } from '../utils/SoundManager.js';
 
 export const InputManager = {
     setup() {
@@ -234,12 +236,70 @@ if (GameState.arsenalOpen && key === 's') {
                 return;
             }
 
+            // F 键：拾取地面武器
+            if (key === 'f') {
+                if (GameState.player && GameState.player.alive) {
+                    const player = GameState.player;
+                    let nearestPickup = null;
+                    let nearestDist = Infinity;
+
+                    for (const pickup of GameState.weaponPickups) {
+                        if (!pickup.alive) continue;
+                        if (pickup.canPickup(player)) {
+                            const dist = Math.hypot(pickup.x - player.x, pickup.y - player.y);
+                            if (dist < nearestDist) {
+                                nearestDist = dist;
+                                nearestPickup = pickup;
+                            }
+                        }
+                    }
+
+                    if (nearestPickup) {
+                        // 找到空背包槽位
+                        let targetSlot = -1;
+                        for (let i = 0; i < GameState.inventory.length; i++) {
+                            if (!GameState.inventory[i]) {
+                                targetSlot = i;
+                                break;
+                            }
+                        }
+
+                        if (targetSlot >= 0) {
+                            // 放入空槽位
+                            GameState.inventory[targetSlot] = nearestPickup.weapon;
+                            console.log(`🔫 拾取 ${nearestPickup.weapon.config.name} 到槽位 ${targetSlot + 1}`);
+                        } else {
+                            // 背包满了，替换当前武器
+                            const currentSlot = GameState.activeWeaponSlot;
+                            const oldWeapon = GameState.inventory[currentSlot];
+
+                            // 丢弃当前武器到地面
+                            if (oldWeapon) {
+                                const droppedPickup = new WeaponPickup(player.x, player.y, oldWeapon);
+                                GameState.weaponPickups.push(droppedPickup);
+                                console.log(`🔄 丢弃 ${oldWeapon.config.name}`);
+                            }
+
+                            GameState.inventory[currentSlot] = nearestPickup.weapon;
+                            console.log(`🔫 拾取 ${nearestPickup.weapon.config.name} 替换当前武器`);
+                        }
+
+                        nearestPickup.alive = false;
+                        playPickup(player);
+                        UIManager.updateAll(GameState);
+                    }
+                }
+                e.preventDefault();
+                return;
+            }
+
             // E 键：打开/关闭军械库
             if (key === 'e') {
                 const arsenal = GameState.arsenal;
                 const player = GameState.player;
                 if (arsenal && player && arsenal.contains(player)) {
                     GameState.arsenalOpen = !GameState.arsenalOpen;
+                    playUISound(GameState.arsenalOpen ? 'click' : 'hover');
                     console.log(GameState.arsenalOpen ? '🔫 打开军械库' : '🔫 关闭军械库');
                 }
                 e.preventDefault();
@@ -249,6 +309,7 @@ if (GameState.arsenalOpen && key === 's') {
             // Q 键：打开/关闭背包
             if (key === 'q') {
                 GameState.inventoryOpen = !GameState.inventoryOpen;
+                playUISound(GameState.inventoryOpen ? 'click' : 'hover');
                 console.log(GameState.inventoryOpen ? '🎒 打开背包' : '🎒 关闭背包');
                 e.preventDefault();
                 return;

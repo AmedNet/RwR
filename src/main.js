@@ -15,6 +15,7 @@ import { Minimap } from './rendering/Minimap.js';
 import { MapGenerator } from './utils/MapGenerator.js';
 import { Arsenal } from './entities/Arsenal.js';
 import { EffectsManager } from './utils/EffectsManager.js';
+import { setListenerProvider } from './utils/SoundManager.js';
 
 // ---------- 配置 ----------
 const CONFIG = {
@@ -292,7 +293,10 @@ function resetGame() {
         // 轮流在各个据点生成，保持250像素最小距离
         const spawnPoint = playerPoints.length > 0 ? playerPoints[i % playerPoints.length] : null;
         const t = spawnTeammate(spawnPoint, 250);
-        if (t) GameState.teammates.push(t);
+        if (t) {
+            SpawnSystem.equipTeammate(t);
+            GameState.teammates.push(t);
+        }
     }
 
     // 初始敌人
@@ -335,20 +339,22 @@ function gameLoop() {
         for (const teammate of GameState.teammates) teammate.update();
         for (const bullet of GameState.bullets) bullet.update();
         for (const grenade of GameState.grenades) grenade.update();
+        for (const pickup of GameState.weaponPickups) pickup.update();
         CollisionSystem.checkAll();
         
         // ---- 过滤死亡实体 ----
         GameState.enemies = GameState.enemies.filter(e => e.alive);
         GameState.bullets = GameState.bullets.filter(b => b.alive);
         GameState.grenades = GameState.grenades.filter(g => g.alive);
-
+        GameState.weaponPickups = GameState.weaponPickups.filter(p => p.alive);
         // ---- 队友重生逻辑 ----
         updateTeammateRespawns();
     } else {
-        // 死亡状态下检查战败条件：没有己方据点 = 真正失败
+        // 死亡状态下检查战败条件：没有己方据点 + 玩家死亡 = 真正失败
         const hasFriendly = GameState.capturePoints.some(p => p.owner === 'player');
-        if (!hasFriendly && GameState.gameOver && !GameState.permanentDefeat) {
-            // 已经是 gameOver 状态且无己方据点 -> 永久战败，不允许复活
+        const playerDead = !GameState.player || !GameState.player.alive;
+        if (!hasFriendly && playerDead && !GameState.permanentDefeat) {
+            // 所有己方据点失守 + 玩家已死亡 -> 永久战败
             GameState.permanentDefeat = true;
             console.log('💀 战败！所有据点已失守，游戏结束');
         }
@@ -365,6 +371,7 @@ function gameLoop() {
 function init() {
     console.log('🚀 初始化游戏...');
     GameState.config = CONFIG;
+    setListenerProvider(() => GameState.player);
 
     // 显式初始化渲染器
     Renderer.init();
@@ -393,6 +400,7 @@ function init() {
                 : null;
             const t = spawnTeammate(spawnPoint, 200);
             if (t) {
+                SpawnSystem.equipTeammate(t);
                 GameState.teammates.push(t);
                 console.log(`🎖️ 军衔提升！新增一名队友在据点，当前 ${GameState.teammates.length} 人`);
             }
@@ -440,8 +448,14 @@ function init() {
                 // 距离衰减伤害
                 const dmg = Math.floor(damage * (1 - d / radius));
                 if (dmg > 0) {
-                    entity.takeDamage(dmg);
+                    const wasAlive = entity.alive;
+                    entity.takeDamage(dmg, x, y);
                     EffectsManager.addDamageNumber(entity.x, entity.y, dmg, entity === GameState.player);
+                    if (wasAlive && !entity.alive && GameState.teammates.includes(entity)) {
+                        GameState.teammateRespawnQueue.push({
+                            timer: GameState.config.teammate.respawnDelay
+                        });
+                    }
                     // 击退效果
                     const angle = Math.atan2(entity.y - y, entity.x - x);
                     const knockback = 60 * (1 - d / radius);
@@ -505,6 +519,7 @@ function updateTeammateRespawns() {
             // 确保不超过最大数量
             if (GameState.teammates.length < config.maxCount) {
                 const t = new Teammate(spawnX, spawnY, config);
+                SpawnSystem.equipTeammate(t);
                 GameState.teammates.push(t);
                 console.log('🔄 队友在据点重生');
             }
@@ -543,7 +558,7 @@ function respawnPlayer(pointIndex) {
     // 非自杀死亡：清空背包，只保留初始手枪
     if (!GameState.suicideDeath) {
         console.log('💔 阵亡损失：背包物品已清空');
-        GameState.inventory = [new Weapon('beretta92'), null, null, null];
+        GameState.inventory = [new Weapon('beretta92'), null, null, null, null, null, null];
         GameState.activeWeaponSlot = 0;
     } else {
         console.log('✅ 自杀：保留背包物品');
