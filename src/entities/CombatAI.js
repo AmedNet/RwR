@@ -78,6 +78,7 @@ export class CombatAI extends Entity {
         this.reloadImagesLoaded = {};
         this.dying = false;
         this.deathTimer = 0;
+        this.healSwitchTimer = 0;
     }
 
     setWeapons(weapons) {
@@ -316,6 +317,12 @@ export class CombatAI extends Entity {
         this.savePrevPosition();
         this.updateRole();
 
+        if (this.healSwitchTimer > 0) {
+            this.healSwitchTimer--;
+            if (this.healSwitchTimer === 0 && this.weapons[1]) {
+                this.activeWeaponSlot = 1;
+            }
+        }
         const { target: closestTarget, distance: closestDist } = this.getClosestTarget();
         const { target: captureTarget } = this.getClosestTargetPoint();
         const targetMove = this.chooseMoveTarget(closestTarget, closestDist, captureTarget);
@@ -433,16 +440,19 @@ export class CombatAI extends Entity {
         return this.wanderTarget;
     }
 
-    getCombatPosition(target, distance, wide = false) {
-        const angle = Math.atan2(target.y - this.y, target.x - this.x);
-        // 用连续正弦值做侧向偏移，避免二值跳变导致抖动
-        const side = wide
-            ? Math.sin(this.cycleTimer * 0.003) * Math.PI * 0.7
-            : Math.sin(this.cycleTimer * 0.02) * Math.PI * 0.25;
-        const moveAngle = angle + side;
+   getCombatPosition(target, distance, wide = false) {
+       const angle = Math.atan2(target.y - this.y, target.x - this.x);
+        // 垂直方向像素偏移代替角度偏移，避免位置反馈导致抖动
+        const perpX = -Math.sin(angle);
+        const perpY = Math.cos(angle);
+        const offset = wide
+            ? Math.sin(this.cycleTimer * 0.015) * 50
+            : Math.sin(this.cycleTimer * 0.025) * 25;
+        const baseX = target.x + Math.cos(angle) * distance;
+        const baseY = target.y + Math.sin(angle) * distance;
         return {
-            x: target.x + Math.cos(moveAngle) * distance,
-            y: target.y + Math.sin(moveAngle) * distance
+            x: baseX + perpX * offset,
+            y: baseY + perpY * offset
         };
     }
 
@@ -573,7 +583,7 @@ export class CombatAI extends Entity {
                 weapon.consumeAmmo();
                 if (weapon.ammo <= 0) this.weapons[this.activeWeaponSlot] = null;
                 this.shootCooldown = 20;
-            }
+                this.healSwitchTimer = 60;            }
             return;
         }
 
@@ -684,6 +694,10 @@ export class CombatAI extends Entity {
 
             const oldWeapon = this.weapons[targetSlot];
             this.weapons[targetSlot] = pickupWeapon;
+            // 加载武器贴图
+            if (pickupWeapon.config && pickupWeapon.config.imagePath) {
+                this.loadWeaponImage(pickupWeapon.id, pickupWeapon.config.imagePath, pickupWeapon.config.reloadImagePath);
+            }
             pickup.alive = false;
             if (oldWeapon && oldWeapon.id !== 'knife') {
                 GameState.weaponPickups.push(new WeaponPickup(this.x, this.y, oldWeapon));

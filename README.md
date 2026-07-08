@@ -34,7 +34,6 @@
 RwR/
 ├── index.html                 # 游戏入口页面
 ├── README.md                  # 项目说明文档
-├── .gitignore                 # Git 忽略配置
 │
 └── src/
     ├── main.js                # 游戏主循环和初始化
@@ -84,18 +83,7 @@ RwR/
     │   └── WeaponAI.js        # AI 武器选择逻辑
     │
     └── pkg/                   # 资源文件
-        └── weapon/            # 武器贴图
-            ├── Beretta92/
-            ├── ak47/
-            ├── m4a1/
-            ├── hkmp5/
-            ├── SA28/
-            ├── AWP/
-            ├── M82/
-            ├── at4/
-            ├── 919/
-            ├── CAT/
-            └── M67/
+        └── weapon/ ...        # 武器贴图
 ```
 
 ## 运行方式

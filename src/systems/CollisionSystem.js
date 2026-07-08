@@ -223,7 +223,6 @@ export const CollisionSystem = {
         if (!teammate.alive) {
             console.log('💔 队友阵亡，加入重生队列');
             GameState.teammateRespawnQueue.push({ timer: GameState.config.teammate.respawnDelay });
-            teammates.splice(index, 1);
         }
     },
 

@@ -32,7 +32,7 @@ const CONFIG = {
         health: 100,         // 与友军一致
         speedMin: 1.2,
         speedMax: 2.0,
-        radius: 16,
+        radius: 18,
         shootDelayMin: 40,
         shootDelayMax: 70,
         damage: 17,         // ×1.7
@@ -42,7 +42,7 @@ const CONFIG = {
     teammate: {
         health: 100,
         speed: 2.5,
-        radius: 15,
+        radius: 18,
         shootDelay: 25,
         damage: 26,         // ×1.7
         bulletSpeed: 6,
@@ -371,6 +371,8 @@ function gameLoop() {
     GameState.bullets = GameState.bullets.filter(b => b.alive);
     GameState.grenades = GameState.grenades.filter(g => g.alive);
     GameState.weaponPickups = GameState.weaponPickups.filter(p => p.alive);
+    // 过滤死亡的队友（手雷炸死等场景），确保重生时 length 检查正确
+    GameState.teammates = GameState.teammates.filter(t => t.alive);
 
     // ---- 队友重生逻辑 ----
     updateTeammateRespawns();

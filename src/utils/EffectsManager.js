@@ -411,31 +411,33 @@ export const EffectsManager = {
         // 按伤害量缩放（基准30伤害=1.0倍）
         const dmgScale = Math.min(2.0, Math.max(0.5, damage / FX.BLOOD_BASE_DAMAGE));
 
-        // 生成血滴粒子（带方向，落地后变血迹）
-        const dropCount = Math.floor((FX.BLOOD_DROP_BASE + Math.random() * FX.BLOOD_DROP_RANDOM) * dmgScale);
-        for (let i = 0; i < dropCount; i++) {
-            let angle;
-            if (hasDirection) {
-                angle = bulletAngle + (Math.random() - 0.5) * Math.PI * 1.2;
-            } else {
-                angle = Math.random() * Math.PI * 2;
-            }
-            const speed = (2 + Math.random() * 3) * dmgScale;
-            const bloodColors = ['#8B0000', '#A00000', '#B22222', '#CC0000', '#990000', '#7A0000'];
-            this.particles.push({
-                x: hitX + (Math.random() - 0.5) * 6,
-                y: hitY + (Math.random() - 0.5) * 6,
-                vx: Math.cos(angle) * speed,
-                vy: Math.sin(angle) * speed - 1 - Math.random() * 2,
-                life: 50 + Math.random() * 40,
-                maxLife: 90,
-                color: bloodColors[Math.floor(Math.random() * bloodColors.length)],
-                size: 3 + Math.random() * 4,
-                type: ParticleType.BLOOD_DROP,
-                isBloodDrop: true,
-                groundY: hitY + 15 + Math.random() * 35
-            });
-        }
+       // 生成血滴粒子（带方向，落地后变血迹）
+       const dropCount = Math.floor((FX.BLOOD_DROP_BASE + Math.random() * FX.BLOOD_DROP_RANDOM) * dmgScale);
+       for (let i = 0; i < dropCount; i++) {
+           let angle;
+           if (hasDirection) {
+                angle = bulletAngle + (Math.random() - 0.5) * Math.PI * 1.5;
+           } else {
+               angle = Math.random() * Math.PI * 2;
+           }
+           const speed = (2 + Math.random() * 3) * dmgScale;
+           const bloodColors = ['#8B0000', '#A00000', '#B22222', '#CC0000', '#990000', '#7A0000'];
+            const randomAngle = Math.random() * Math.PI * 2;
+            const randomOffset = Math.random() * 1.5;
+           this.particles.push({
+               x: hitX + (Math.random() - 0.5) * 6,
+               y: hitY + (Math.random() - 0.5) * 6,
+                vx: Math.cos(angle) * speed + Math.cos(randomAngle) * randomOffset,
+                vy: Math.sin(angle) * speed + Math.sin(randomAngle) * randomOffset,
+               life: 50 + Math.random() * 40,
+               maxLife: 90,
+               color: bloodColors[Math.floor(Math.random() * bloodColors.length)],
+               size: 3 + Math.random() * 4,
+               type: ParticleType.BLOOD_DROP,
+               isBloodDrop: true,
+               groundY: hitY + 15 + Math.random() * 35
+           });
+       }
 
         // 大血雾扩散效果（命中瞬间的红色半透明圆）
         this.explosions.push({
