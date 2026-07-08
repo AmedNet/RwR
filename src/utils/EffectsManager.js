@@ -81,6 +81,11 @@ const FX = {
     ROCKET_FIRE_LIFE_RANGE: 8,
     ROCKET_SMOKE_LIFE_BASE: 25,
     ROCKET_SMOKE_LIFE_RANGE: 15,
+    // 枪口火焰
+    MUZZLE_OFFSET: 30,
+    MUZZLE_FLASH_LIFE: 4,
+    MUZZLE_SMOKE_LIFE_BASE: 8,
+    MUZZLE_SMOKE_LIFE_RANGE: 6,
     // 弹壳
     SHELL_BOUNCE_MIN: 2,
     SHELL_BOUNCE_RANDOM: 2,
@@ -269,6 +274,104 @@ export const EffectsManager = {
             size: 3 + Math.random() * 3,
             type: ParticleType.SMOKE
         });
+    },
+
+    // 生成枪口火焰效果
+    // shooterX, shooterY: 射击者位置
+    // angle: 射击方向（弧度）
+    // weaponType: 武器类型字符串
+    spawnMuzzleFlash(shooterX, shooterY, angle, weaponType) {
+        const offset = FX.MUZZLE_OFFSET;
+        const mx = shooterX + Math.cos(angle) * offset;
+        const my = shooterY + Math.sin(angle) * offset;
+
+        // 按武器类型配置火焰大小和颜色
+        let flashSize, flashColors, particleCount, smokeCount;
+        switch (weaponType) {
+            case 'shotgun':
+                flashSize = 12;
+                flashColors = ['#FF6D00', '#FF9100', '#FFAB00', '#FFF176'];
+                particleCount = 8;
+                smokeCount = 3;
+                break;
+            case 'sniper':
+                flashSize = 14;
+                flashColors = ['#FFEB3B', '#FFF176', '#FFFFFF', '#FFD54F'];
+                particleCount = 10;
+                smokeCount = 4;
+                break;
+            case 'launcher':
+                flashSize = 18;
+                flashColors = ['#FF3D00', '#FF6D00', '#FF9100', '#FFAB00'];
+                particleCount = 12;
+                smokeCount = 6;
+                break;
+            case 'rifle':
+                flashSize = 9;
+                flashColors = ['#FF6D00', '#FF9100', '#FFAB00', '#FFD740'];
+                particleCount = 6;
+                smokeCount = 2;
+                break;
+            case 'smg':
+                flashSize = 7;
+                flashColors = ['#FFD740', '#FFAB00', '#FF9100', '#FFF176'];
+                particleCount = 5;
+                smokeCount = 1;
+                break;
+            case 'pistol':
+            default:
+                flashSize = 8;
+                flashColors = ['#FFD740', '#FFAB00', '#FF9100', '#FFF176'];
+                particleCount = 5;
+                smokeCount = 2;
+                break;
+        }
+
+        // 中心闪光（用爆炸效果数组渲染径向渐变）
+        this.explosions.push({
+            x: mx, y: my,
+            radius: flashSize,
+            life: FX.MUZZLE_FLASH_LIFE,
+            maxLife: FX.MUZZLE_FLASH_LIFE,
+            type: 'muzzle_flash',
+            color: flashColors[0]
+        });
+
+        // 火焰粒子（沿射击方向扇形喷射）
+        for (let i = 0; i < particleCount; i++) {
+            const spread = (Math.random() - 0.5) * 0.8; // ±0.4弧度扇形
+            const pAngle = angle + spread;
+            const speed = 2 + Math.random() * 3;
+            this.particles.push({
+                x: mx + (Math.random() - 0.5) * 3,
+                y: my + (Math.random() - 0.5) * 3,
+                vx: Math.cos(pAngle) * speed,
+                vy: Math.sin(pAngle) * speed,
+                life: FX.MUZZLE_FLASH_LIFE + Math.random() * 3,
+                maxLife: FX.MUZZLE_FLASH_LIFE + 3,
+                color: flashColors[Math.floor(Math.random() * flashColors.length)],
+                size: 2 + Math.random() * 3,
+                type: ParticleType.SPARK
+            });
+        }
+
+        // 枪口烟雾（缓慢扩散）
+        for (let i = 0; i < smokeCount; i++) {
+            const spread = (Math.random() - 0.5) * 1.2;
+            const pAngle = angle + spread;
+            const speed = 0.3 + Math.random() * 0.8;
+            this.particles.push({
+                x: mx + Math.cos(pAngle) * 4,
+                y: my + Math.sin(pAngle) * 4,
+                vx: Math.cos(pAngle) * speed,
+                vy: Math.sin(pAngle) * speed - 0.3,
+                life: FX.MUZZLE_SMOKE_LIFE_BASE + Math.random() * FX.MUZZLE_SMOKE_LIFE_RANGE,
+                maxLife: FX.MUZZLE_SMOKE_LIFE_BASE + FX.MUZZLE_SMOKE_LIFE_RANGE,
+                color: '#888',
+                size: 2 + Math.random() * 2,
+                type: ParticleType.SMOKE
+            });
+        }
     },
 
     // 生成抛壳效果
@@ -571,6 +674,17 @@ export const EffectsManager = {
                 ctx.beginPath();
                 ctx.arc(sx, sy, e.radius, 0, Math.PI * 2);
                 ctx.fillStyle = `rgba(255, 200, 100, ${alpha})`;
+                ctx.fill();
+            } else if (e.type === 'muzzle_flash') {
+                // 枪口火焰 - 明亮的径向渐变闪光
+                const flashRadius = e.radius * (1 + (1 - alpha) * 0.5);
+                const gradient = ctx.createRadialGradient(sx, sy, 0, sx, sy, flashRadius);
+                gradient.addColorStop(0, `rgba(255, 255, 200, ${alpha})`);
+                gradient.addColorStop(0.3, `rgba(255, 180, 0, ${alpha * 0.8})`);
+                gradient.addColorStop(1, `rgba(255, 80, 0, 0)`);
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(sx, sy, flashRadius, 0, Math.PI * 2);
                 ctx.fill();
             } else if (e.type === 'blood_mist') {
                 // 血雾扩散效果 - 红色渐变圆

@@ -424,10 +424,11 @@ export class Player extends Entity {
                 this
             ));
         }
-        // 播放枪声音效
+        // 播放枪声音效 + 枪口火焰
         const weaponType = weapon.config.type;
         if (['pistol', 'rifle', 'smg', 'shotgun', 'sniper', 'launcher'].includes(weaponType)) {
             SoundManager.playShoot(weaponType, this);
+            EffectsManager.spawnMuzzleFlash(this.x, this.y, baseAngle, weaponType);
         }
 
         weapon.consumeAmmo();

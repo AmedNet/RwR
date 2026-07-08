@@ -598,6 +598,7 @@ export class CombatAI extends Entity {
 
         if (['pistol', 'rifle', 'smg', 'shotgun', 'sniper', 'launcher'].includes(weaponType)) {
             SoundManager.playShoot(weaponType, this);
+            EffectsManager.spawnMuzzleFlash(this.x, this.y, baseAngle, weaponType);
         }
 
         weapon.consumeAmmo();
