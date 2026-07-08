@@ -10,6 +10,7 @@ export class Entity {
         this.maxHealth = this.health;
         this.speed = config.speed || 2;
         this.alive = true;
+        this.statusEffects = [];
     }
 
     savePrevPosition() {
@@ -24,6 +25,38 @@ export class Entity {
             this.alive = false;
         }
         return this.alive;
+    }
+
+    addStatusEffect(effect) {
+        const existing = this.statusEffects.find(e => e.name === effect.name);
+        if (existing) {
+            existing.remaining = Math.max(existing.remaining, effect.duration);
+        } else {
+            this.statusEffects.push(effect);
+        }
+    }
+
+    updateStatusEffects() {
+        for (let i = this.statusEffects.length - 1; i >= 0; i--) {
+            this.statusEffects[i].update(this);
+            if (this.statusEffects[i].isExpired()) {
+                this.statusEffects.splice(i, 1);
+            }
+        }
+    }
+
+    getSpeedMultiplier() {
+        let multiplier = 1;
+        for (const effect of this.statusEffects) {
+            multiplier *= effect.getSpeedMultiplier();
+        }
+        return multiplier;
+    }
+
+    drawStatusEffects(ctx) {
+        for (const effect of this.statusEffects) {
+            effect.draw(ctx, this);
+        }
     }
 
     // 子类重写

@@ -45,6 +45,8 @@ export class Bullet extends Entity {
     }
 
     update() {
+        this.prevX = this.x;
+        this.prevY = this.y;
         this.x += this.vx;
         this.y += this.vy;
         this.life--;

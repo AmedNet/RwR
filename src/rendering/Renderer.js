@@ -163,7 +163,11 @@ export const Renderer = {
         // 绘制地面武器
         for (const pickup of GameState.weaponPickups) {
             if (!pickup.alive) continue;
-            pickup.draw(this.ctx, GameState.camera);
+            const pos = this.toScreen(pickup.x, pickup.y);
+            this.ctx.save();
+            this.ctx.translate(pos.x, pos.y);
+            pickup.draw(this.ctx);
+            this.ctx.restore();
         }
 
         // 绘制手雷
@@ -218,5 +222,46 @@ for (const b of bullets) {
 
         // 绘制武器 HUD（不再菜单或 GameOver 时显示）
         drawWeaponHUD(this.ctx, this);
+
+       // 绘制状态效果 HUD（左上角）
+       if (player && player.alive && player.statusEffects && player.statusEffects.length > 0) {
+           this.drawStatusEffectsHUD(this.ctx, player);
+       }
+    },
+
+   drawStatusEffectsHUD(ctx, player) {
+        const effects = player.statusEffects;
+        const startX = 20;
+        const startY = 80;
+        const iconSize = 32;
+        const spacing = 8;
+
+        for (let i = 0; i < effects.length; i++) {
+            const effect = effects[i];
+            const x = startX;
+            const y = startY + i * (iconSize + spacing);
+
+            // 背景
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+            ctx.fillRect(x, y, iconSize, iconSize);
+
+            // 边框
+            ctx.strokeStyle = effect.color;
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x, y, iconSize, iconSize);
+
+            // 图标
+            ctx.fillStyle = effect.color;
+            ctx.font = '20px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(effect.icon, x + iconSize / 2, y + iconSize / 2 - 2);
+
+            // 持续时间（秒）
+            const seconds = Math.ceil(effect.remaining / 60);
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 11px sans-serif';
+            ctx.fillText(seconds + 's', x + iconSize / 2, y + iconSize - 6);
+        }
     }
 };

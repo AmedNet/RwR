@@ -16,6 +16,7 @@ import { MapGenerator } from './utils/MapGenerator.js';
 import { Arsenal } from './entities/Arsenal.js';
 import { EffectsManager } from './utils/EffectsManager.js';
 import { setListenerProvider } from './utils/SoundManager.js';
+import { BurnEffect, STATUS_EFFECT_CONFIG } from './utils/StatusEffects.js';
 
 // ---------- 配置 ----------
 const CONFIG = {
@@ -461,6 +462,12 @@ function init() {
                     const knockback = 60 * (1 - d / radius);
                     entity.x += Math.cos(angle) * knockback;
                     entity.y += Math.sin(angle) * knockback;
+                }
+                // 触发燃烧效果（使用配置常量）
+                if (entity.alive && Math.random() < STATUS_EFFECT_CONFIG.BURN.TRIGGER_CHANCE) {
+                    const { MIN_DURATION, MAX_DURATION } = STATUS_EFFECT_CONFIG.BURN;
+                    const burnDuration = MIN_DURATION + Math.floor(Math.random() * (MAX_DURATION - MIN_DURATION + 1));
+                    entity.addStatusEffect(new BurnEffect(burnDuration));
                 }
             }
         }

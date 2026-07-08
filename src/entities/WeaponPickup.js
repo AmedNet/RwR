@@ -34,11 +34,8 @@ export class WeaponPickup {
         return dist < this.pickupRadius + (entity.radius || 15);
     }
 
-    draw(ctx, camera) {
+    draw(ctx) {
         if (!this.alive) return;
-
-        const screenX = this.x - camera.x;
-        const screenY = this.y - camera.y;
 
         // 闪烁效果（即将消失时）
         if (this.isBlinking() && Math.floor(this.lifetime / 10) % 2 === 0) {
@@ -49,7 +46,7 @@ export class WeaponPickup {
         const bobOffset = Math.sin(this.bobTimer) * 3;
 
         ctx.save();
-        ctx.translate(screenX, screenY + bobOffset);
+        ctx.translate(0, bobOffset);
 
         // 绘制光晕
         const gradient = ctx.createRadialGradient(0, 0, 5, 0, 0, 25);

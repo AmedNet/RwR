@@ -9,6 +9,7 @@ import { Grenade } from './Grenade.js';
 import { EffectsManager } from '../utils/EffectsManager.js';
 import * as SoundManager from '../utils/SoundManager.js';
 import { WEAPON_VALUE, evaluateWeaponChoice } from '../utils/WeaponAI.js';
+import { SlowEffect, STATUS_EFFECT_CONFIG } from '../utils/StatusEffects.js';
 
 export class CombatAI extends Entity {
     constructor(x, y, entityConfig, aiConfig) {
@@ -263,6 +264,7 @@ export class CombatAI extends Entity {
 
     update() {
         if (GameState.gameOver || !this.alive) return;
+        this.updateStatusEffects();
         this.savePrevPosition();
         this.updateRole();
 
@@ -272,7 +274,10 @@ export class CombatAI extends Entity {
 
         if (targetMove) {
             const moveTarget = this.getMoveTargetAroundObstacles(targetMove);
+            const originalSpeed = this.speed;
+            this.speed *= this.getSpeedMultiplier();
             MovementSystem.moveToward(this, moveTarget.x, moveTarget.y, this.stuckState);
+            this.speed = originalSpeed;
         }
 
         if (closestTarget) this.switchWeaponBasedOnCombat(closestTarget, closestDist);
@@ -623,6 +628,7 @@ export class CombatAI extends Entity {
     draw(ctx) {
         this.drawBody(ctx);
         this.drawWeapon(ctx);
+        this.drawStatusEffects(ctx);
     }
 
     drawBody(ctx) {
@@ -692,6 +698,9 @@ export class CombatAI extends Entity {
 
     takeDamage(amount) {
         this.health -= amount;
+        // 受到伤害时添加缓慢效果（使用配置常量）
+        const slowDuration = STATUS_EFFECT_CONFIG.SLOW.DEFAULT_DURATION;
+        this.addStatusEffect(new SlowEffect(slowDuration));
         const distance = GameState.player ? Math.hypot(this.x - GameState.player.x, this.y - GameState.player.y) : 0;
         if (this.health <= 0) {
             this.health = 0;

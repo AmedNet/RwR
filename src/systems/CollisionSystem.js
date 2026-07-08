@@ -6,6 +6,27 @@ import { EffectsManager, ParticleType } from '../utils/EffectsManager.js';
 import { playExplosion } from '../utils/SoundManager.js';
 
 export const CollisionSystem = {
+    // 线段与圆的碰撞检测（防止高速子弹穿透）
+    lineCircleCollision(x1, y1, x2, y2, cx, cy, radius) {
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        const fx = x1 - cx;
+        const fy = y1 - cy;
+        const a = dx * dx + dy * dy;
+        if (a === 0) {
+            // 子弹没有移动（首帧），退化为点检测
+            return (fx * fx + fy * fy) < radius * radius;
+        }
+        const b = 2 * (fx * dx + fy * dy);
+        const c = fx * fx + fy * fy - radius * radius;
+        let discriminant = b * b - 4 * a * c;
+        if (discriminant < 0) return false;
+        discriminant = Math.sqrt(discriminant);
+        const t1 = (-b - discriminant) / (2 * a);
+        const t2 = (-b + discriminant) / (2 * a);
+        return (t1 >= 0 && t1 <= 1) || (t2 >= 0 && t2 <= 1) || (t1 < 0 && t2 > 1);
+    },
+
     // 圆与矩形碰撞解决（用于地图房屋）
     resolveCircleMap(entity) {
         const map = GameState.map;
@@ -120,9 +141,8 @@ export const CollisionSystem = {
             if (bullet.isEnemy) {
                 // 敌人子弹 -> 玩家和队友
                 // 玩家
-                let dx = bullet.x - player.x;
-                let dy = bullet.y - player.y;
-                if (dx*dx + dy*dy < (bullet.radius + player.radius) ** 2) {
+                const hitRadiusPlayer = bullet.radius + player.radius;
+                if (this.lineCircleCollision(bullet.prevX ?? bullet.x, bullet.prevY ?? bullet.y, bullet.x, bullet.y, player.x, player.y, hitRadiusPlayer)) {
                     player.takeDamage(bullet.damage, bullet.x, bullet.y);
                     bulletUsed = true;
                     // 特效：玩家受伤
@@ -140,9 +160,8 @@ export const CollisionSystem = {
                     for (let j = teammates.length - 1; j >= 0; j--) {
                         const teammate = teammates[j];
                         if (!teammate.alive) continue;
-                        dx = bullet.x - teammate.x;
-                        dy = bullet.y - teammate.y;
-                        if (dx*dx + dy*dy < (bullet.radius + teammate.radius) ** 2) {
+                        const hitRadiusTeammate = bullet.radius + teammate.radius;
+                        if (this.lineCircleCollision(bullet.prevX ?? bullet.x, bullet.prevY ?? bullet.y, bullet.x, bullet.y, teammate.x, teammate.y, hitRadiusTeammate)) {
                             teammate.takeDamage(bullet.damage, bullet.x, bullet.y);
                             bulletUsed = true;
                             if (!teammate.alive) {
@@ -166,9 +185,8 @@ export const CollisionSystem = {
                     // 穿透子弹跳过已击中目标
                     if (bullet.penetration && bullet.hitTargets.has(enemy)) continue;
                     
-                    const dx = bullet.x - enemy.x;
-                    const dy = bullet.y - enemy.y;
-                    if (dx*dx + dy*dy < (bullet.radius + enemy.radius) ** 2) {
+                    const hitRadiusEnemy = bullet.radius + enemy.radius;
+                    if (this.lineCircleCollision(bullet.prevX ?? bullet.x, bullet.prevY ?? bullet.y, bullet.x, bullet.y, enemy.x, enemy.y, hitRadiusEnemy)) {
                         enemy.takeDamage(bullet.damage, bullet.x, bullet.y);
                         
                         // 击退效果

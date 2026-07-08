@@ -8,7 +8,7 @@ import { WeaponRegistry, FireMode } from '../core/WeaponRegistry.js';
 import { Weapon } from '../core/Weapon.js';
 import { EffectsManager } from '../utils/EffectsManager.js';
 import * as SoundManager from '../utils/SoundManager.js';
-
+import { SlowEffect, STATUS_EFFECT_CONFIG } from '../utils/StatusEffects.js';
 export class Player extends Entity {
     constructor(x, y, config) {
         super(x, y, {
@@ -204,6 +204,7 @@ export class Player extends Entity {
 
     update() {
         if (GameState.gameOver) return;
+        this.updateStatusEffects();
         // 保存上一帧位置用于AI预测瞄准
         this.savePrevPosition();
         if (this.isSwitching) {
@@ -230,7 +231,7 @@ export class Player extends Entity {
             // 持有火箭筒时减速（类似沙地）
             const heldWeapon = GameState.getActiveWeapon();
             const launcherSlowdown = (heldWeapon && heldWeapon.config.type === 'launcher') ? 0.5 : 1;
-            const finalSpeed = this.speed * speedFactor * launcherSlowdown;
+            const finalSpeed = this.speed * speedFactor * launcherSlowdown * this.getSpeedMultiplier();
             const newX = this.x + dx * finalSpeed;
             const newY = this.y + dy * finalSpeed;
             if (GameState.map && !GameState.map.isWalkable(newX, newY, this.radius)) {
@@ -542,6 +543,9 @@ export class Player extends Entity {
     // 重写父类的 takeDamage 方法以播放音效
     takeDamage(amount) {
         this.health -= amount;
+        // 受到伤害时添加缓慢效果（使用配置常量）
+        const slowDuration = STATUS_EFFECT_CONFIG.SLOW.DEFAULT_DURATION;
+        this.addStatusEffect(new SlowEffect(slowDuration));
         if (this.health <= 0) {
             this.health = 0;
             this.alive = false;
@@ -621,6 +625,7 @@ export class Player extends Entity {
         ctx.font = '16px sans-serif';
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText('★'.repeat(Math.min(this.rank + 1, 4)), 0, -28);
+        this.drawStatusEffects(ctx);
         ctx.restore();
     }
 }
