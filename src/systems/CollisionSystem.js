@@ -3,7 +3,7 @@ import { GameState } from '../core/GameState.js';
 import { EventBus } from '../core/EventBus.js';
 import { Terrain } from '../core/Map.js';
 import { EffectsManager, ParticleType } from '../utils/EffectsManager.js';
-import { playExplosion } from '../utils/SoundManager.js';
+import { playExplosion, playBulletHit } from '../utils/SoundManager.js';
 
 export const CollisionSystem = {
     // 线段与圆的碰撞检测（防止高速子弹穿透）
@@ -149,6 +149,9 @@ export const CollisionSystem = {
                     EffectsManager.spawnParticles(bullet.x, bullet.y, ParticleType.HIT, 6);
                     EffectsManager.addDamageNumber(bullet.x, bullet.y, bullet.damage, true);
                     EffectsManager.triggerShake(6, 8);
+                    // 血液效果
+                    EffectsManager.spawnBloodSplatter(bullet.x, bullet.y, bullet.vx, bullet.vy, bullet.damage);
+                    playBulletHit(player);
                     // 触发玩家受伤事件
                     EventBus.emit('player_hurt', { health: player.health });
                     if (!player.alive) {
@@ -164,6 +167,9 @@ export const CollisionSystem = {
                         if (this.lineCircleCollision(bullet.prevX ?? bullet.x, bullet.prevY ?? bullet.y, bullet.x, bullet.y, teammate.x, teammate.y, hitRadiusTeammate)) {
                             teammate.takeDamage(bullet.damage, bullet.x, bullet.y);
                             bulletUsed = true;
+                            // 血液效果
+                            EffectsManager.spawnBloodSplatter(bullet.x, bullet.y, bullet.vx, bullet.vy, bullet.damage);
+                            playBulletHit(teammate);
                             if (!teammate.alive) {
                                 console.log('💔 队友阵亡，加入重生队列');
                                 // 加入重生队列
@@ -198,6 +204,9 @@ export const CollisionSystem = {
                         // 特效：子弹击中敌人
                         EffectsManager.spawnParticles(bullet.x, bullet.y, ParticleType.SPARK, 6);
                         EffectsManager.addDamageNumber(enemy.x, enemy.y, bullet.damage, false);
+                        // 血液效果
+                        EffectsManager.spawnBloodSplatter(bullet.x, bullet.y, bullet.vx, bullet.vy, bullet.damage);
+                        playBulletHit(enemy);
                         if (!enemy.alive) {
                             // 特效：敌人死亡爆炸
                             EffectsManager.spawnParticles(enemy.x, enemy.y, ParticleType.EXPLOSION, 15);

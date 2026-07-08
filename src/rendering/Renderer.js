@@ -150,6 +150,9 @@ export const Renderer = {
             this.ctx.fillText('地图加载中...', this.width/2, this.height/2);
         }
 
+        // 绘制地面血迹（地图之上、实体之下）
+        EffectsManager.drawBloodStains(this.ctx, GameState.camera);
+
         // 绘制据点
         for (const point of GameState.capturePoints) {
             point.draw(this.ctx);

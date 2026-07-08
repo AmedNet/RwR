@@ -1,6 +1,7 @@
 // src/utils/StatusEffects.js
-// 状态效果系统 - 可扩展的效果基类与具体效果实现
+// 状态效果系统 - 可挂载到任何角色身上的独立效果实现
 // 时间单位：帧（60fps 下 90 帧 = 1.5 秒）
+import { EffectsManager } from './EffectsManager.js';
 
 // 状态效果配置常量
 export const STATUS_EFFECT_CONFIG = {
@@ -74,6 +75,8 @@ export class BurnEffect extends StatusEffect {
                 const { MIN_DAMAGE, MAX_DAMAGE } = STATUS_EFFECT_CONFIG.BURN;
                 const damageThisTick = MIN_DAMAGE + Math.floor(Math.random() * (MAX_DAMAGE - MIN_DAMAGE + 1));
                 entity.health -= damageThisTick;
+                // 燃烧伤害产生少量血迹
+                EffectsManager.spawnBloodSplatter(entity.x, entity.y, 0, 0, damageThisTick);
                 if (entity.health <= 0) {
                     entity.health = 0;
                     entity.alive = false;

@@ -573,6 +573,54 @@ export function playShellEject(type = 'pistol', source = 0) {
   }
 }
 
+// 命中音效 - 子弹击中肉体的声音
+export function playBulletHit(source) {
+  const c = getCtx(), n = c.currentTime;
+  const vol = getDistanceVolume(source);
+  if (vol <= 0) return;
+
+  // 第一层 - 低频噪声模拟肉体冲击
+  const dur = 0.08;
+  const buf = c.createBuffer(1, c.sampleRate * dur, c.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < data.length; i++) {
+    const t = i / data.length;
+    data[i] = (Math.random() * 2 - 1) * Math.exp(-t * 30) * 0.4;
+    data[i] += Math.sin(2 * Math.PI * 80 * (i / c.sampleRate)) * Math.exp(-t * 20) * 0.3;
+  }
+  const src = c.createBufferSource();
+  src.buffer = buf;
+  const filter = c.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 800;
+  const gain = c.createGain();
+  gain.gain.value = 0.35 * vol;
+  src.connect(filter);
+  filter.connect(gain);
+  gain.connect(masterGain);
+  src.start(n);
+
+  // 第二层 - 高频"啪"声
+  const dur2 = 0.04;
+  const buf2 = c.createBuffer(1, c.sampleRate * dur2, c.sampleRate);
+  const data2 = buf2.getChannelData(0);
+  for (let i = 0; i < data2.length; i++) {
+    const t = i / data2.length;
+    data2[i] = (Math.random() * 2 - 1) * Math.exp(-t * 50) * 0.2;
+  }
+  const src2 = c.createBufferSource();
+  src2.buffer = buf2;
+  const hp = c.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.value = 2000;
+  const gain2 = c.createGain();
+  gain2.gain.value = 0.2 * vol;
+  src2.connect(hp);
+  hp.connect(gain2);
+  gain2.connect(masterGain);
+  src2.start(n);
+}
+
 // 播放弹壳单次落地撞击音效（每次弹跳触发一次）
 export function playShellLand(type = 'pistol', bounceIndex = 0, source = 0) {
   const c = getCtx(), n = c.currentTime;

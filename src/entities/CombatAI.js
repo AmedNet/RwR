@@ -29,6 +29,7 @@ export class CombatAI extends Entity {
         this.wanderTarget = null;
         this.wanderTimer = 0;
         this.stuckState = { timer: 0, lastX: x, lastY: y, fallbackPoints: null };
+        this.cycleTimer = Math.random() * 1000;
         this.weapons = [null, null, null, null];
         this.activeWeaponSlot = 1;
         this.weaponImages = {};
@@ -305,6 +306,7 @@ export class CombatAI extends Entity {
             }
         }
 
+        this.cycleTimer++;
         this.tryPickupWeapon();
     }
 
@@ -373,7 +375,7 @@ export class CombatAI extends Entity {
 
     getCombatPosition(target, distance, wide = false) {
         const angle = Math.atan2(target.y - this.y, target.x - this.x);
-        const side = wide ? Math.sin(Date.now() * 0.003 + this.y * 0.01) * Math.PI * 0.7
+        const side = wide ? Math.sin(this.cycleTimer * 0.003 + this.y * 0.01) * Math.PI * 0.7
             : (Math.sin(this.shootCooldown * 0.1 + this.x * 0.01) > 0 ? Math.PI / 4 : -Math.PI / 4);
         const moveAngle = angle + side;
         return {
@@ -494,6 +496,8 @@ export class CombatAI extends Entity {
                 const angle = Math.atan2(target.y - this.y, target.x - this.x);
                 target.x += Math.cos(angle) * (weapon.config.knockback || 10);
                 target.y += Math.sin(angle) * (weapon.config.knockback || 10);
+                // 近战攻击产生血迹
+                EffectsManager.spawnBloodSplatter(target.x, target.y, Math.cos(angle) * 3, Math.sin(angle) * 3, weapon.config.damage);
                 SoundManager.playMelee(this);
                 this.shootCooldown = weapon.config.shootDelay;
             }

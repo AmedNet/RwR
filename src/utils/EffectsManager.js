@@ -1,6 +1,7 @@
 // src/utils/EffectsManager.js
 
 import { playShellLand } from './SoundManager.js';
+import { GameState } from '../core/GameState.js';
 
 // 粒子类型
 export const ParticleType = {
@@ -12,8 +13,15 @@ export const ParticleType = {
     GRENADE_BLAST: 5, // 手雷爆炸
     SMOKE: 6,    // 烟雾
     HEAL: 7,     // 治疗
-    ROCKET_TRAIL: 8 // 火箭拖尾
+    ROCKET_TRAIL: 8, // 火箭拖尾
+    BLOOD_DROP: 9   // 血滴粒子（带方向，落地变血迹）
 };
+
+// 血迹永久保留，不限制数量（游戏重置时清空）
+// 血迹纹理尺寸
+const BLOOD_TEX_SIZE = 128;
+// 血迹纹理数量
+const BLOOD_TEX_COUNT = 6;
 
 // 弹壳形态配置（按武器类型）
 const ShellConfig = {
@@ -29,6 +37,9 @@ export const EffectsManager = {
     damageNumbers: [],
     explosions: [], // 爆炸效果数组
     shellCasings: [], // 弹壳数组
+    bloodStains: [],  // 血迹数据: { x, y, texIndex, scale, rotation, alpha }
+    bloodTextures: [], // 预渲染的血迹纹理 Canvas 数组
+    bloodTexturesReady: false,
 
     // 生成粒子
     spawnParticles(x, y, type, count = 8) {
@@ -213,6 +224,123 @@ export const EffectsManager = {
         });
     },
 
+    // 生成血液喷溅效果（命中时调用）
+    // hitX, hitY: 命中位置
+    // bulletVx, bulletVy: 子弹速度方向（决定溅射方向）
+    // damage: 伤害值（可选，用于缩放飞溅程度）
+    spawnBloodSplatter(hitX, hitY, bulletVx = 0, bulletVy = 0, damage = 30) {
+        const bulletAngle = Math.atan2(bulletVy, bulletVx);
+        const hasDirection = bulletVx !== 0 || bulletVy !== 0;
+        // 按伤害量缩放（基准30伤害=1.0倍）
+        const dmgScale = Math.min(2.0, Math.max(0.5, damage / 30));
+
+        // 生成血滴粒子（带方向，落地后变血迹）
+        const dropCount = Math.floor((12 + Math.random() * 8) * dmgScale);
+        for (let i = 0; i < dropCount; i++) {
+            let angle;
+            if (hasDirection) {
+                angle = bulletAngle + (Math.random() - 0.5) * Math.PI * 1.2;
+            } else {
+                angle = Math.random() * Math.PI * 2;
+            }
+            const speed = (2 + Math.random() * 3) * dmgScale;
+            const bloodColors = ['#8B0000', '#A00000', '#B22222', '#CC0000', '#990000', '#7A0000'];
+            this.particles.push({
+                x: hitX + (Math.random() - 0.5) * 6,
+                y: hitY + (Math.random() - 0.5) * 6,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed - 1 - Math.random() * 2,
+                life: 50 + Math.random() * 40,
+                maxLife: 90,
+                color: bloodColors[Math.floor(Math.random() * bloodColors.length)],
+                size: 3 + Math.random() * 4,
+                type: ParticleType.BLOOD_DROP,
+                isBloodDrop: true,
+                groundY: hitY + 15 + Math.random() * 35
+            });
+        }
+
+        // 大血雾扩散效果（命中瞬间的红色半透明圆）
+        this.explosions.push({
+            x: hitX, y: hitY,
+            radius: (8 + Math.random() * 6) * dmgScale,
+            life: 12,
+            maxLife: 12,
+            type: 'blood_mist'
+        });
+
+        // 命中瞬间的小血雾粒子
+        const mistCount = Math.floor((4 + Math.random() * 4) * dmgScale);
+        for (let i = 0; i < mistCount; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 0.5 + Math.random() * 2;
+            this.particles.push({
+                x: hitX,
+                y: hitY,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                life: 10 + Math.random() * 8,
+                maxLife: 18,
+                color: 'rgba(139, 0, 0, 0.6)',
+                size: 4 + Math.random() * 5,
+                type: ParticleType.HIT
+            });
+        }
+    },
+
+    // 预渲染血迹纹理（启动时调用一次）
+    initBloodTextures() {
+        if (this.bloodTexturesReady) return;
+        this.bloodTextures = [];
+        const bloodColors = ['#5A0000', '#6B0000', '#4A0000', '#7A0000', '#3D0000', '#550000'];
+        for (let t = 0; t < BLOOD_TEX_COUNT; t++) {
+            const canvas = document.createElement('canvas');
+            canvas.width = BLOOD_TEX_SIZE;
+            canvas.height = BLOOD_TEX_SIZE;
+            const ctx = canvas.getContext('2d');
+            const cx = BLOOD_TEX_SIZE / 2;
+            const cy = BLOOD_TEX_SIZE / 2;
+            const color = bloodColors[t % bloodColors.length];
+            // 主体血斑（多个偏移圆形叠加）
+            const blobCount = 4 + Math.floor(Math.random() * 4);
+            for (let i = 0; i < blobCount; i++) {
+                const ox = (Math.random() - 0.5) * BLOOD_TEX_SIZE * 0.4;
+                const oy = (Math.random() - 0.5) * BLOOD_TEX_SIZE * 0.35;
+                const r = BLOOD_TEX_SIZE * (0.1 + Math.random() * 0.2);
+                ctx.beginPath();
+                ctx.arc(cx + ox, cy + oy, r, 0, Math.PI * 2);
+                ctx.fillStyle = color;
+                ctx.fill();
+            }
+            // 溅射小血滴
+            const splatCount = 3 + Math.floor(Math.random() * 4);
+            for (let i = 0; i < splatCount; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const dist = BLOOD_TEX_SIZE * (0.2 + Math.random() * 0.35);
+                const r = 2 + Math.random() * 4;
+                ctx.beginPath();
+                ctx.arc(cx + Math.cos(angle) * dist, cy + Math.sin(angle) * dist, r, 0, Math.PI * 2);
+                ctx.fillStyle = color;
+                ctx.fill();
+            }
+            this.bloodTextures.push(canvas);
+        }
+        this.bloodTexturesReady = true;
+        console.log(`🩸 血迹纹理预渲染完成: ${BLOOD_TEX_COUNT} 种`);
+    },
+
+    // 添加永久血迹（由血滴粒子落地时调用）— 存储纹理索引，渲染时盖章
+    addBloodStain(x, y, size) {
+        if (!this.bloodTexturesReady) this.initBloodTextures();
+        const texIndex = Math.floor(Math.random() * BLOOD_TEX_COUNT);
+        // scale：纹理实际显示尺寸 = BLOOD_TEX_SIZE * scale
+        // size范围3~7，原血滴实际半径约2~4px，保留相近大小
+        const scale = 0.04 + Math.random() * 0.06;
+        const rotation = Math.random() * Math.PI * 2;
+        const alpha = 0.5 + Math.random() * 0.4;
+        this.bloodStains.push({ x, y, texIndex, scale, rotation, alpha });
+    },
+
     // 触发屏幕震动
     triggerShake(intensity = 8, duration = 12) {
         this.screenShake.intensity = intensity;
@@ -229,6 +357,12 @@ export const EffectsManager = {
             p.vy += 0.12; // 重力
             p.vx *= 0.95; // 阻力
             p.vy *= 0.95;
+            // 血滴粒子落地检测 → 转为永久血迹
+            if (p.isBloodDrop && p.y >= p.groundY) {
+                this.addBloodStain(p.x, p.groundY, p.size);
+                this.particles.splice(i, 1);
+                continue;
+            }
             p.life--;
             if (p.life <= 0) {
                 this.particles.splice(i, 1);
@@ -352,17 +486,28 @@ export const EffectsManager = {
             
             ctx.save();
             if (e.type === 'shockwave') {
-                // 冲击波环
+                // 冲击波圆环
                 ctx.beginPath();
                 ctx.arc(sx, sy, e.currentRadius, 0, Math.PI * 2);
                 ctx.strokeStyle = `rgba(255, 100, 0, ${alpha * 0.8})`;
                 ctx.lineWidth = 3;
                 ctx.stroke();
             } else if (e.type === 'flash') {
-                // 内层闪光
+                // 白色闪光
                 ctx.beginPath();
                 ctx.arc(sx, sy, e.radius, 0, Math.PI * 2);
                 ctx.fillStyle = `rgba(255, 200, 100, ${alpha})`;
+                ctx.fill();
+            } else if (e.type === 'blood_mist') {
+                // 血雾扩散效果 - 红色渐变圆
+                const mistRadius = e.radius * (1 + (1 - alpha) * 1.5);
+                const gradient = ctx.createRadialGradient(sx, sy, 0, sx, sy, mistRadius);
+                gradient.addColorStop(0, `rgba(180, 0, 0, ${alpha * 0.7})`);
+                gradient.addColorStop(0.5, `rgba(139, 0, 0, ${alpha * 0.4})`);
+                gradient.addColorStop(1, `rgba(100, 0, 0, 0)`);
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(sx, sy, mistRadius, 0, Math.PI * 2);
                 ctx.fill();
             }
             ctx.restore();
@@ -430,11 +575,60 @@ export const EffectsManager = {
         }
     },
 
+    // 绘制地面血迹（预渲染纹理 + drawImage盖章 + 视口裁剪）
+    drawBloodStains(ctx, camera) {
+        if (this.bloodStains.length === 0) return;
+        if (!this.bloodTexturesReady) this.initBloodTextures();
+
+        const zoom = camera.zoom || 1;
+        const offsetX = camera.offsetX || 0;
+        const offsetY = camera.offsetY || 0;
+        const logicalW = ctx.canvas.clientWidth || ctx.canvas.width;
+        const logicalH = ctx.canvas.clientHeight || ctx.canvas.height;
+        const cx = logicalW / 2;
+        const cy = logicalH / 2;
+
+        // 使用与 Renderer.toScreen 一致的坐标转换
+        const toScreen = (wx, wy) => ({
+            x: (wx - camera.x) * zoom + cx * (1 - zoom) - offsetX,
+            y: (wy - camera.y) * zoom + cy * (1 - zoom) - offsetY
+        });
+
+        // 计算屏幕边缘对应的世界坐标（用于视口裁剪）
+        // 公式推导: screenX = (wx - camera.x) * zoom + cx*(1-zoom) - offsetX
+        // wx = camera.x + (screenX - cx*(1-zoom) + offsetX) / zoom
+        const viewLeft = camera.x + (0 - cx * (1 - zoom) + offsetX) / zoom;
+        const viewRight = camera.x + (logicalW - cx * (1 - zoom) + offsetX) / zoom;
+        const viewTop = camera.y + (0 - cy * (1 - zoom) + offsetY) / zoom;
+        const viewBottom = camera.y + (logicalH - cy * (1 - zoom) + offsetY) / zoom;
+        const margin = 80;
+
+        for (const stain of this.bloodStains) {
+            // 视口裁剪
+            if (stain.x < viewLeft - margin || stain.x > viewRight + margin ||
+                stain.y < viewTop - margin || stain.y > viewBottom + margin) continue;
+
+            const tex = this.bloodTextures[stain.texIndex];
+            if (!tex) continue;
+            const pos = toScreen(stain.x, stain.y);
+            const drawSize = BLOOD_TEX_SIZE * stain.scale * zoom;
+            const halfSize = drawSize / 2;
+
+            ctx.save();
+            ctx.globalAlpha = stain.alpha;
+            ctx.translate(pos.x, pos.y);
+            ctx.rotate(stain.rotation);
+            ctx.drawImage(tex, -halfSize, -halfSize, drawSize, drawSize);
+            ctx.restore();
+        }
+    },
+
     // 清除所有特效
     clear() {
         this.particles.length = 0;
         this.damageNumbers.length = 0;
         this.shellCasings.length = 0;
+        this.bloodStains.length = 0;
         this.screenShake.timer = 0;
         this.screenShake.x = 0;
         this.screenShake.y = 0;

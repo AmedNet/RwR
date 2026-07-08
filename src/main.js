@@ -452,6 +452,8 @@ function init() {
                     const wasAlive = entity.alive;
                     entity.takeDamage(dmg, x, y);
                     EffectsManager.addDamageNumber(entity.x, entity.y, dmg, entity === GameState.player);
+                    // 爆炸伤害产生血迹
+                    EffectsManager.spawnBloodSplatter(entity.x, entity.y, 0, 0, dmg);
                     if (wasAlive && !entity.alive && GameState.teammates.includes(entity)) {
                         GameState.teammateRespawnQueue.push({
                             timer: GameState.config.teammate.respawnDelay
