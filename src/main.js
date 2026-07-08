@@ -352,34 +352,34 @@ function gameLoop() {
         GameState.camera.y = targetY;
     }
 
-    if (!GameState.gameOver) {
-        // 更新据点
-        for (const point of GameState.capturePoints) {
-            point.update();
-        }
+    // 更新据点（无论是否阵亡都继续）
+    for (const point of GameState.capturePoints) {
+        point.update();
+    }
+    // 玩家仅在存活时更新
+    if (GameState.player && !GameState.gameOver) GameState.player.update();
+    SpawnSystem.update();
+    for (const enemy of GameState.enemies) enemy.update();
+    for (const teammate of GameState.teammates) teammate.update();
+    for (const bullet of GameState.bullets) bullet.update();
+    for (const grenade of GameState.grenades) grenade.update();
+    for (const pickup of GameState.weaponPickups) pickup.update();
+    CollisionSystem.checkAll();
 
-        if (GameState.player) GameState.player.update();
-        SpawnSystem.update();
-        for (const enemy of GameState.enemies) enemy.update();
-        for (const teammate of GameState.teammates) teammate.update();
-        for (const bullet of GameState.bullets) bullet.update();
-        for (const grenade of GameState.grenades) grenade.update();
-        for (const pickup of GameState.weaponPickups) pickup.update();
-        CollisionSystem.checkAll();
-        
-        // ---- 过滤死亡实体 ----
-        GameState.enemies = GameState.enemies.filter(e => e.alive);
-        GameState.bullets = GameState.bullets.filter(b => b.alive);
-        GameState.grenades = GameState.grenades.filter(g => g.alive);
-        GameState.weaponPickups = GameState.weaponPickups.filter(p => p.alive);
-        // ---- 队友重生逻辑 ----
-        updateTeammateRespawns();
-    } else {
-        // 死亡状态下检查战败条件：没有己方据点 + 玩家死亡 = 真正失败
+    // ---- 过滤死亡实体 ----
+    GameState.enemies = GameState.enemies.filter(e => e.alive);
+    GameState.bullets = GameState.bullets.filter(b => b.alive);
+    GameState.grenades = GameState.grenades.filter(g => g.alive);
+    GameState.weaponPickups = GameState.weaponPickups.filter(p => p.alive);
+
+    // ---- 队友重生逻辑 ----
+    updateTeammateRespawns();
+
+    // 死亡状态下检查战败条件
+    if (GameState.gameOver) {
         const hasFriendly = GameState.capturePoints.some(p => p.owner === 'player');
         const playerDead = !GameState.player || !GameState.player.alive;
         if (!hasFriendly && playerDead && !GameState.permanentDefeat) {
-            // 所有己方据点失守 + 玩家已死亡 -> 永久战败
             GameState.permanentDefeat = true;
             console.log('💀 战败！所有据点已失守，游戏结束');
         }

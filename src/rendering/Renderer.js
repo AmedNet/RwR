@@ -183,12 +183,20 @@ export const Renderer = {
         const menuOpen = GameState.inventoryOpen || GameState.arsenalOpen;
         const hud = document.getElementById('hud');
         if (hud) {
-            hud.style.display = menuOpen ? 'none' : 'flex';
+            hud.style.display = (menuOpen || GameState.gameOver) ? 'none' : 'flex';
         }
 
         // Game Over 优先级最高
         if (GameState.gameOver) {
-            this._drawOverlay();
+            if (!GameState.permanentDefeat) {
+                // 非永久战败：渲染世界 + 较轻遮罩，让玩家看到战场
+                this._renderWorld();
+                this._renderEntities();
+                this.ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+                this.ctx.fillRect(0, 0, this.width, this.height);
+            } else {
+                this._drawOverlay();
+            }
             drawGameOver(this.ctx, this);
             return;
         }

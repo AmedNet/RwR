@@ -304,7 +304,7 @@ export class CombatAI extends Entity {
     }
 
     update() {
-        if (GameState.gameOver || !this.alive) return;
+        if (!this.alive) return;
         this.updateStatusEffects();
         this.savePrevPosition();
         this.updateRole();

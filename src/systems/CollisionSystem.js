@@ -79,7 +79,7 @@ export const CollisionSystem = {
 
     checkAll() {
         const { player, enemies, teammates, bullets, map } = GameState;
-        if (!player || GameState.gameOver) return;
+        if (!player) return;
         this._checkEntitiesVsMap(player, enemies, teammates);
         this._checkBulletsVsMap(bullets, map);
         this._checkBulletVsBullet(bullets);

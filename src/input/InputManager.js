@@ -352,6 +352,22 @@ canvas.addEventListener('mousedown', (e) => {
     if (e.button === 0) {
         GameState.mouse.down = true;
 
+        // 死亡界面：点击据点复活
+        if (GameState.gameOver && !GameState.permanentDefeat && GameState.respawnHitAreas) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX2 = canvas.clientWidth / rect.width;
+            const scaleY2 = canvas.clientHeight / rect.height;
+            const clickX = (e.clientX - rect.left) * scaleX2;
+            const clickY = (e.clientY - rect.top) * scaleY2;
+            for (const area of GameState.respawnHitAreas) {
+                if (Math.hypot(clickX - area.x, clickY - area.y) < area.r) {
+                    window.dispatchEvent(new CustomEvent('respawnPlayer', { detail: { pointIndex: area.index } }));
+                    e.preventDefault();
+                    return;
+                }
+            }
+        }
+
         // Debug面板点击处理
         if (GameState.debugOpen) {
             const rect = canvas.getBoundingClientRect();

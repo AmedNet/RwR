@@ -149,7 +149,6 @@ export const SpawnSystem = {
     },
 
     update() {
-        if (GameState.gameOver) return;
         const config = GameState.config.enemy;
         if (GameState.enemies.length >= config.maxEnemies) return;
 

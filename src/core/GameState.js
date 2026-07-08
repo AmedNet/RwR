@@ -49,6 +49,8 @@ export const GameState = {
     // Debug系统
     debugOpen: false, // Debug面板是否打开
     debugKey9Pressed: false, // 追踪9键状态（用于组合键）
+    gameOverSelectedPoint: -1, // 死亡界面当前悬浮的据点索引
+    respawnHitAreas: [], // 死亡界面据点点击热区 [{x, y, r, index}]
 
     // 获取当前装备的武器
     getActiveWeapon() {
@@ -81,5 +83,7 @@ export const GameState = {
         this.inventoryOpen = false;
         this.arsenalOpen = false;
         this.rp = 0;
+        this.gameOverSelectedPoint = -1;
+        this.respawnHitAreas = [];
     }
 };
