@@ -12,6 +12,45 @@ import { WEAPON_VALUE, evaluateWeaponChoice } from '../utils/WeaponAI.js';
 import { SlowEffect, STATUS_EFFECT_CONFIG } from '../utils/StatusEffects.js';
 
 export class CombatAI extends Entity {
+    // AI 角色常量
+    static ROLE_GUARD = 0;
+    static ROLE_ATTACK = 1;
+    static ROLE_WANDER = 2;
+    static GUARD_CHANCE = 0.25;
+    static ATTACK_CHANCE = 0.7;
+    static GUARD_SAFE_RADIUS = 350;
+    static GUARD_DEFENDER_THRESHOLD = 2;
+    static GUARD_RADIUS = 180;
+    static GUARD_ENGAGE_RANGE = 550;
+    static PATROL_OFFSET = 140;
+    static PATROL_FREQ = 0.015;
+    static ATTACK_ENGAGE_RANGE = 650;
+    static WANDER_ENGAGE_RANGE = 500;
+    static WANDER_INTERVAL = 180;
+    static WANDER_CAPTURE_CHANCE = 0.65;
+    static ROLE_SHIFT_CHANCE = 0.005;
+    static ROLE_SHIFT_ATTACK_CHANCE = 0.8;
+    // 感知/射程常量
+    static DEFAULT_AWARENESS = 550;
+    static MEDICAL_HEAL_THRESHOLD = 0.7;
+    static MEDICAL_HEAL_RANGE = 300;
+    // 移动/寻路常量
+    static WANDER_MARGIN = 200;
+    static WANDER_SEARCH_ATTEMPTS = 20;
+    static FLANK_RADII = [180, 240, 320];
+    static FLANK_OFFSETS = [Math.PI / 2, -Math.PI / 2, Math.PI / 3, -Math.PI / 3, Math.PI];
+    static OBSTACLE_DIST_MIN = 100;
+    static OBSTACLE_DIST_MAX = 240;
+    static OBSTACLE_DIST_FACTOR = 0.35;
+    // 武器/射击常量
+    static WEAPON_DRAW_HEIGHT = 40;
+    static MELEE_LINE_LENGTH = 25;
+    static MELEE_LINE_WIDTH = 4;
+    static DROP_CHANCE = 0.05;
+    static HEALTH_BAR_W = 40;
+    static HEALTH_BAR_H = 5;
+    static HEALTH_BAR_Y = -25;
+
     constructor(x, y, entityConfig, aiConfig) {
         super(x, y, entityConfig);
         this.faction = aiConfig.faction;
@@ -21,7 +60,8 @@ export class CombatAI extends Entity {
         this.shootCooldown = 0;
         this.shootDelay = aiConfig.shootDelay || entityConfig.shootDelay || 25;
         this.bulletSpeed = aiConfig.bulletSpeed || entityConfig.bulletSpeed || 6;
-        this.role = Math.random() < 0.25 ? 0 : (Math.random() < 0.7 ? 1 : 2);
+        this.role = Math.random() < CombatAI.GUARD_CHANCE ? CombatAI.ROLE_GUARD
+            : (Math.random() < CombatAI.ATTACK_CHANCE ? CombatAI.ROLE_ATTACK : CombatAI.ROLE_WANDER);
         this.guardPoint = this.assignGuardPoint();
         this.patrolAngle = Math.random() * Math.PI * 2;
         this.patrolTimer = Math.random() * 1000;
@@ -115,7 +155,7 @@ export class CombatAI extends Entity {
         if (!this.guardPoint) return false;
         for (const target of this.getTargets()) {
             if (!target.alive) continue;
-            if (Math.hypot(target.x - this.guardPoint.x, target.y - this.guardPoint.y) < 350) {
+            if (Math.hypot(target.x - this.guardPoint.x, target.y - this.guardPoint.y) < CombatAI.GUARD_SAFE_RADIUS) {
                 return false;
             }
         }
@@ -242,9 +282,9 @@ export class CombatAI extends Entity {
     pickWanderTarget() {
         const world = GameState.config.world;
         const map = GameState.map;
-        for (let i = 0; i < 20; i++) {
-            const x = 200 + Math.random() * (world.width - 400);
-            const y = 200 + Math.random() * (world.height - 400);
+        for (let i = 0; i < CombatAI.WANDER_SEARCH_ATTEMPTS; i++) {
+            const x = CombatAI.WANDER_MARGIN + Math.random() * (world.width - CombatAI.WANDER_MARGIN * 2);
+            const y = CombatAI.WANDER_MARGIN + Math.random() * (world.height - CombatAI.WANDER_MARGIN * 2);
             if (!map || map.isWalkable(x, y, this.radius)) return { x, y };
         }
         return { x: world.width / 2, y: world.height / 2 };
@@ -311,59 +351,71 @@ export class CombatAI extends Entity {
     }
 
     chooseMoveTarget(closestTarget, closestDist, captureTarget) {
-        if (this.role === 0) {
-            if (!this.guardPoint) {
-                this.role = 1;
-            } else {
-                this.stuckState.fallbackPoints = [this.guardPoint];
-                const distToPoint = Math.hypot(this.guardPoint.x - this.x, this.guardPoint.y - this.y);
-                const guardRadius = 180;
-                const pointSafe = this.isPointSafe();
+        if (this.role === CombatAI.ROLE_GUARD) return this.chooseGuardMoveTarget(closestTarget, closestDist, captureTarget);
+        if (this.role === CombatAI.ROLE_ATTACK) return this.chooseAttackMoveTarget(closestTarget, closestDist, captureTarget);
+        return this.chooseWanderMoveTarget(closestTarget, closestDist, captureTarget);
+    }
 
-                if (closestTarget && closestDist < guardRadius + 100) {
-                    return { x: this.guardPoint.x, y: this.guardPoint.y };
-                }
-                if (pointSafe && closestTarget && closestDist < 550) {
-                    if (!this.hasLineOfSight(closestTarget)) return this.getFlankPosition(closestTarget);
-                    return this.getCombatPosition(closestTarget, 180);
-                }
-                if (distToPoint > guardRadius) {
-                    return { x: this.guardPoint.x, y: this.guardPoint.y };
-                }
-
-                this.patrolTimer++;
-                const forwardAngle = captureTarget
-                    ? Math.atan2(captureTarget.y - this.guardPoint.y, captureTarget.x - this.guardPoint.x)
-                    : this.patrolAngle;
-                const patrolAngle = forwardAngle + Math.sin(this.patrolTimer * 0.015 + this.x * 0.01) * Math.PI / 2;
-                return {
-                    x: this.guardPoint.x + Math.cos(patrolAngle) * 140,
-                    y: this.guardPoint.y + Math.sin(patrolAngle) * 140
-                };
-            }
+    chooseGuardMoveTarget(closestTarget, closestDist, captureTarget) {
+        if (!this.guardPoint) {
+            this.role = CombatAI.ROLE_ATTACK;
+            return null;
         }
+        this.stuckState.fallbackPoints = [this.guardPoint];
+        const distToPoint = Math.hypot(this.guardPoint.x - this.x, this.guardPoint.y - this.y);
+        const pointSafe = this.isPointSafe();
 
-        if (this.role === 1) {
-            if (closestTarget && closestDist < 650) {
-                if (!this.hasLineOfSight(closestTarget)) return this.getFlankPosition(closestTarget);
-                return this.getCombatPosition(closestTarget, 180);
-            }
-            if (captureTarget) {
-                this.stuckState.fallbackPoints = this.getTargetPoints();
-                return { x: captureTarget.x, y: captureTarget.y };
-            }
-            if (closestTarget) return { x: closestTarget.x, y: closestTarget.y };
+        // 近距离威胁：回撤到守卫点
+        if (closestTarget && closestDist < CombatAI.GUARD_RADIUS + CombatAI.OBSTACLE_DIST_MIN) {
+            return { x: this.guardPoint.x, y: this.guardPoint.y };
         }
-
-        this.stuckState.fallbackPoints = this.getTargetPoints();
-        if (closestTarget && closestDist < 500) {
+        // 中距离交战
+        if (pointSafe && closestTarget && closestDist < CombatAI.GUARD_ENGAGE_RANGE) {
             if (!this.hasLineOfSight(closestTarget)) return this.getFlankPosition(closestTarget);
-            return this.getCombatPosition(closestTarget, 260, true);
+            return this.getCombatPosition(closestTarget, CombatAI.GUARD_RADIUS);
         }
+        // 超出巡逻半径则返回
+        if (distToPoint > CombatAI.GUARD_RADIUS) {
+            return { x: this.guardPoint.x, y: this.guardPoint.y };
+        }
+        // 巡逻行为
+        return this.getPatrolPosition(captureTarget);
+    }
 
+    getPatrolPosition(captureTarget) {
+        this.patrolTimer++;
+        const forwardAngle = captureTarget
+            ? Math.atan2(captureTarget.y - this.guardPoint.y, captureTarget.x - this.guardPoint.x)
+            : this.patrolAngle;
+        const patrolAngle = forwardAngle + Math.sin(this.patrolTimer * CombatAI.PATROL_FREQ + this.x * 0.01) * Math.PI / 2;
+        return {
+            x: this.guardPoint.x + Math.cos(patrolAngle) * CombatAI.PATROL_OFFSET,
+            y: this.guardPoint.y + Math.sin(patrolAngle) * CombatAI.PATROL_OFFSET
+        };
+    }
+
+    chooseAttackMoveTarget(closestTarget, closestDist, captureTarget) {
+        if (closestTarget && closestDist < CombatAI.ATTACK_ENGAGE_RANGE) {
+            if (!this.hasLineOfSight(closestTarget)) return this.getFlankPosition(closestTarget);
+            return this.getCombatPosition(closestTarget, CombatAI.GUARD_RADIUS);
+        }
+        if (captureTarget) {
+            this.stuckState.fallbackPoints = this.getTargetPoints();
+            return { x: captureTarget.x, y: captureTarget.y };
+        }
+        if (closestTarget) return { x: closestTarget.x, y: closestTarget.y };
+        return null;
+    }
+
+    chooseWanderMoveTarget(closestTarget, closestDist, captureTarget) {
+        this.stuckState.fallbackPoints = this.getTargetPoints();
+        if (closestTarget && closestDist < CombatAI.WANDER_ENGAGE_RANGE) {
+            if (!this.hasLineOfSight(closestTarget)) return this.getFlankPosition(closestTarget);
+            return this.getCombatPosition(closestTarget, CombatAI.FLANK_RADII[2], true);
+        }
         this.wanderTimer++;
-        if (this.wanderTimer > 180 || !this.wanderTarget) {
-            if (captureTarget && Math.random() < 0.65) {
+        if (this.wanderTimer > CombatAI.WANDER_INTERVAL || !this.wanderTarget) {
+            if (captureTarget && Math.random() < CombatAI.WANDER_CAPTURE_CHANCE) {
                 this.wanderTarget = { x: captureTarget.x, y: captureTarget.y };
             } else {
                 this.wanderTarget = this.pickWanderTarget();
@@ -389,8 +441,8 @@ export class CombatAI extends Entity {
         if (!map || !target) return this.getCombatPosition(target, 220, true);
         const baseAngle = Math.atan2(this.y - target.y, this.x - target.x);
         const candidates = [];
-        for (const radius of [180, 240, 320]) {
-            for (const offset of [Math.PI / 2, -Math.PI / 2, Math.PI / 3, -Math.PI / 3, Math.PI]) {
+        for (const radius of CombatAI.FLANK_RADII) {
+            for (const offset of CombatAI.FLANK_OFFSETS) {
                 const angle = baseAngle + offset;
                 candidates.push({
                     x: target.x + Math.cos(angle) * radius,
@@ -417,7 +469,7 @@ export class CombatAI extends Entity {
         if (!map || this.hasLineBetween(this, target)) return target;
 
         const angle = Math.atan2(target.y - this.y, target.x - this.x);
-        const dist = Math.min(240, Math.max(100, Math.hypot(target.x - this.x, target.y - this.y) * 0.35));
+        const dist = Math.min(CombatAI.OBSTACLE_DIST_MAX, Math.max(CombatAI.OBSTACLE_DIST_MIN, Math.hypot(target.x - this.x, target.y - this.y) * CombatAI.OBSTACLE_DIST_FACTOR));
         const candidates = [];
         for (const side of [1, -1]) {
             for (const offset of [Math.PI / 2, Math.PI / 3, Math.PI * 0.72]) {
@@ -644,7 +696,7 @@ export class CombatAI extends Entity {
         ctx.strokeStyle = this.getRoleStroke();
         ctx.lineWidth = 3;
         ctx.stroke();
-        this.drawHealthBar(ctx, -20, -25, 40, 5);
+        this.drawHealthBar(ctx, -20, CombatAI.HEALTH_BAR_Y, CombatAI.HEALTH_BAR_W, CombatAI.HEALTH_BAR_H);
         ctx.fillStyle = '#fff';
         ctx.font = 'bold 12px sans-serif';
         ctx.textAlign = 'center';
@@ -678,7 +730,7 @@ export class CombatAI extends Entity {
         ctx.save();
         if (weaponImage) {
             const facingLeft = Math.cos(weaponAngle) < 0;
-            const targetHeight = 40;
+            const targetHeight = CombatAI.WEAPON_DRAW_HEIGHT;
             const scale = targetHeight / weaponImage.naturalHeight;
             const drawW = weaponImage.naturalWidth * scale;
             const drawH = targetHeight;
@@ -692,9 +744,9 @@ export class CombatAI extends Entity {
         } else {
             ctx.beginPath();
             ctx.moveTo(0, 0);
-            ctx.lineTo(Math.cos(weaponAngle) * 25, Math.sin(weaponAngle) * 25);
+            ctx.lineTo(Math.cos(weaponAngle) * CombatAI.MELEE_LINE_LENGTH, Math.sin(weaponAngle) * CombatAI.MELEE_LINE_LENGTH);
             ctx.strokeStyle = '#555';
-            ctx.lineWidth = 4;
+            ctx.lineWidth = CombatAI.MELEE_LINE_WIDTH;
             ctx.stroke();
         }
         ctx.restore();
@@ -717,7 +769,7 @@ export class CombatAI extends Entity {
     }
 
     dropWeaponOnDeath() {
-        if (Math.random() > 0.05) return;
+        if (Math.random() > CombatAI.DROP_CHANCE) return;
         const dropSlots = [];
         for (let i = 1; i <= 3; i++) {
             if (this.weapons[i]) dropSlots.push(i);

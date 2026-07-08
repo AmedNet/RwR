@@ -17,7 +17,6 @@ export const ParticleType = {
     BLOOD_DROP: 9   // 血滴粒子（带方向，落地变血迹）
 };
 
-// 血迹永久保留，不限制数量（游戏重置时清空）
 // 血迹纹理尺寸
 const BLOOD_TEX_SIZE = 128;
 // 血迹纹理数量
@@ -29,6 +28,82 @@ const ShellConfig = {
     rifle:   { w: 3, h: 7,  color: '#C5960C' },
     shotgun: { w: 5, h: 8,  color: '#B22222' },
     sniper:  { w: 3, h: 10, color: '#B8860B' }
+};
+
+/** 特效系统物理与视觉配置常量 */
+const FX = {
+    // 物理
+    GRAVITY: 0.12,
+    DRAG: 0.95,
+    SHELL_GRAVITY: 0.15,
+    SHELL_DRAG: 0.98,
+    // 粒子
+    PARTICLE_SPEED_MIN: 1.5,
+    PARTICLE_SPEED_RANGE: 4,
+    PARTICLE_LIFE_BASE: 20,
+    PARTICLE_LIFE_RANGE: 20,
+    PARTICLE_SIZE_BASE: 2,
+    PARTICLE_SIZE_RANGE: 4,
+    // 伤害数字
+    DMG_NUM_LIFE: 40,
+    DMG_NUM_VY: -2.5,
+    DMG_NUM_SCALE_FACTOR: 0.3,
+    DMG_NUM_FONT_SIZE: 16,
+    // 屏幕震动
+    SHAKE_DECAY_THRESHOLD: 6,
+    SHAKE_DECAY_FACTOR: 0.6,
+    // 手雷爆炸
+    GRENADE_SHOCKWAVE_LIFE: 20,
+    GRENADE_FLASH_LIFE: 10,
+    GRENADE_FLASH_RADIUS_FACTOR: 0.3,
+    GRENADE_SMOKE_COUNT: 12,
+    GRENADE_SMOKE_LIFE_BASE: 40,
+    GRENADE_SMOKE_LIFE_RANGE: 30,
+    GRENADE_SMOKE_SIZE_BASE: 3,
+    GRENADE_SMOKE_SIZE_RANGE: 5,
+    GRENADE_FRAGMENT_COUNT: 25,
+    GRENADE_FRAGMENT_SPEED_BASE: 3,
+    GRENADE_FRAGMENT_SPEED_RANGE: 5,
+    GRENADE_FRAGMENT_LIFE_BASE: 25,
+    GRENADE_FRAGMENT_LIFE_RANGE: 15,
+    GRENADE_SHAKE_INTENSITY: 20,
+    GRENADE_SHAKE_DURATION: 25,
+    // 治疗效果
+    HEAL_PARTICLE_COUNT: 12,
+    HEAL_LIFE_BASE: 30,
+    HEAL_LIFE_RANGE: 20,
+    HEAL_NUM_LIFE: 50,
+    HEAL_NUM_VY: -1.5,
+    HEAL_NUM_OFFSET_Y: -20,
+    // 火箭拖尾
+    ROCKET_FIRE_COUNT: 3,
+    ROCKET_FIRE_LIFE_BASE: 12,
+    ROCKET_FIRE_LIFE_RANGE: 8,
+    ROCKET_SMOKE_LIFE_BASE: 25,
+    ROCKET_SMOKE_LIFE_RANGE: 15,
+    // 弹壳
+    SHELL_BOUNCE_MIN: 2,
+    SHELL_BOUNCE_RANDOM: 2,
+    SHELL_GROUND_OFFSET: 15,
+    SHELL_GROUND_RANDOM: 30,
+    SHELL_MAX_STOP_TIME: 180,
+    SHELL_BOUNCE_DAMPING: 0.4,
+    SHELL_HORIZ_DAMPING: 0.6,
+    SHELL_ROT_DAMPING: 0.2,
+    SHELL_TRAIL_INTERVAL: 3,
+    // 血液
+    BLOOD_BASE_DAMAGE: 30,
+    BLOOD_DROP_BASE: 12,
+    BLOOD_DROP_RANDOM: 8,
+    BLOOD_MIST_LIFE: 12,
+    BLOOD_MIST_BASE: 8,
+    BLOOD_MIST_RANDOM: 6,
+    BLOOD_MIST_COUNT_BASE: 4,
+    BLOOD_MIST_COUNT_RANDOM: 4,
+    BLOOD_STAIN_SCALE_BASE: 0.04,
+    BLOOD_STAIN_SCALE_RANGE: 0.06,
+    BLOOD_VIEWPORT_MARGIN: 80,
+    BLOOD_MIST_EXPANSION: 1.5
 };
 
 export const EffectsManager = {
@@ -54,15 +129,15 @@ export const EffectsManager = {
 
         for (let i = 0; i < count; i++) {
             const angle = Math.random() * Math.PI * 2;
-            const speed = 1.5 + Math.random() * 4;
+            const speed = FX.PARTICLE_SPEED_MIN + Math.random() * FX.PARTICLE_SPEED_RANGE;
             this.particles.push({
                 x, y,
                 vx: Math.cos(angle) * speed,
                 vy: Math.sin(angle) * speed - 1,
-                life: 20 + Math.random() * 20,
+                life: FX.PARTICLE_LIFE_BASE + Math.random() * FX.PARTICLE_LIFE_RANGE,
                 maxLife: 40,
                 color: palette[Math.floor(Math.random() * palette.length)],
-                size: 2 + Math.random() * 4,
+                size: FX.PARTICLE_SIZE_BASE + Math.random() * FX.PARTICLE_SIZE_RANGE,
                 type
             });
         }
@@ -72,48 +147,47 @@ export const EffectsManager = {
     spawnGrenadeExplosion(x, y, radius) {
         // 冲击波环
         this.explosions.push({
-            x, y,
-            radius,
+            x, y, radius,
             currentRadius: 0,
             maxRadius: radius,
-            life: 20,
-            maxLife: 20,
+            life: FX.GRENADE_SHOCKWAVE_LIFE,
+            maxLife: FX.GRENADE_SHOCKWAVE_LIFE,
             type: 'shockwave'
         });
 
         // 内层闪光
         this.explosions.push({
             x, y,
-            radius: radius * 0.3,
-            life: 10,
-            maxLife: 10,
+            radius: radius * FX.GRENADE_FLASH_RADIUS_FACTOR,
+            life: FX.GRENADE_FLASH_LIFE,
+            maxLife: FX.GRENADE_FLASH_LIFE,
             type: 'flash'
         });
 
         // 外层烟雾
-        for (let i = 0; i < 12; i++) {
+        for (let i = 0; i < FX.GRENADE_SMOKE_COUNT; i++) {
             const angle = Math.random() * Math.PI * 2;
             this.particles.push({
                 x, y,
                 vx: Math.cos(angle) * (1 + Math.random() * 2),
                 vy: Math.sin(angle) * (1 + Math.random() * 2) - 2,
-                life: 40 + Math.random() * 30,
+                life: FX.GRENADE_SMOKE_LIFE_BASE + Math.random() * FX.GRENADE_SMOKE_LIFE_RANGE,
                 maxLife: 70,
                 color: '#333',
-                size: 3 + Math.random() * 5,
+                size: FX.GRENADE_SMOKE_SIZE_BASE + Math.random() * FX.GRENADE_SMOKE_SIZE_RANGE,
                 type: ParticleType.SMOKE
             });
         }
 
         // 碎片粒子
-        for (let i = 0; i < 25; i++) {
+        for (let i = 0; i < FX.GRENADE_FRAGMENT_COUNT; i++) {
             const angle = Math.random() * Math.PI * 2;
-            const speed = 3 + Math.random() * 5;
+            const speed = FX.GRENADE_FRAGMENT_SPEED_BASE + Math.random() * FX.GRENADE_FRAGMENT_SPEED_RANGE;
             this.particles.push({
                 x, y,
                 vx: Math.cos(angle) * speed,
                 vy: Math.sin(angle) * speed - 2,
-                life: 25 + Math.random() * 15,
+                life: FX.GRENADE_FRAGMENT_LIFE_BASE + Math.random() * FX.GRENADE_FRAGMENT_LIFE_RANGE,
                 maxLife: 40,
                 color: ['#ff5252', '#ff1744', '#ff9100'][Math.floor(Math.random() * 3)],
                 size: 2 + Math.random() * 3,
@@ -122,7 +196,7 @@ export const EffectsManager = {
         }
 
         // 屏幕震动
-        this.triggerShake(20, 25);
+        this.triggerShake(FX.GRENADE_SHAKE_INTENSITY, FX.GRENADE_SHAKE_DURATION);
     },
 
     // 添加伤害数字
@@ -131,16 +205,16 @@ export const EffectsManager = {
             x, y,
             text: damage.toString(),
             isPlayer,
-            life: 40,
-            maxLife: 40,
-            vy: -2.5 // 向上飘
+            life: FX.DMG_NUM_LIFE,
+            maxLife: FX.DMG_NUM_LIFE,
+            vy: FX.DMG_NUM_VY
         });
     },
 
     // 生成治疗效果
     spawnHealEffect(x, y, amount) {
         // 绿色粒子向上飘散
-        for (let i = 0; i < 12; i++) {
+        for (let i = 0; i < FX.HEAL_PARTICLE_COUNT; i++) {
             const angle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 0.8;
             const speed = 1.5 + Math.random() * 2.5;
             this.particles.push({
@@ -148,7 +222,7 @@ export const EffectsManager = {
                 y: y + (Math.random() - 0.5) * 10,
                 vx: Math.cos(angle) * speed,
                 vy: Math.sin(angle) * speed,
-                life: 30 + Math.random() * 20,
+                life: FX.HEAL_LIFE_BASE + Math.random() * FX.HEAL_LIFE_RANGE,
                 maxLife: 50,
                 color: ['#4CAF50', '#81C784', '#A5D6A7', '#66BB6A'][Math.floor(Math.random() * 4)],
                 size: 3 + Math.random() * 3,
@@ -158,25 +232,25 @@ export const EffectsManager = {
 
         // 显示治疗数字
         this.damageNumbers.push({
-            x, y: y - 20,
+            x, y: y + FX.HEAL_NUM_OFFSET_Y,
             text: `+${amount}`,
             isHeal: true,
-            life: 50,
-            maxLife: 50,
-            vy: -1.5 // 向上飘
+            life: FX.HEAL_NUM_LIFE,
+            maxLife: FX.HEAL_NUM_LIFE,
+            vy: FX.HEAL_NUM_VY
         });
     },
 
     // 生成火箭弹拖尾特效
     spawnRocketTrail(x, y) {
         // 火焰粒子（橙色/黄色）
-        for (let i = 0; i < 3; i++) {
+        for (let i = 0; i < FX.ROCKET_FIRE_COUNT; i++) {
             this.particles.push({
                 x: x + (Math.random() - 0.5) * 4,
                 y: y + (Math.random() - 0.5) * 4,
                 vx: (Math.random() - 0.5) * 1.5,
                 vy: (Math.random() - 0.5) * 1.5,
-                life: 12 + Math.random() * 8,
+                life: FX.ROCKET_FIRE_LIFE_BASE + Math.random() * FX.ROCKET_FIRE_LIFE_RANGE,
                 maxLife: 20,
                 color: ['#ff6d00', '#ffab00', '#ff9100'][i % 3],
                 size: 2.5 + Math.random() * 2,
@@ -189,7 +263,7 @@ export const EffectsManager = {
             y: y + (Math.random() - 0.5) * 6,
             vx: (Math.random() - 0.5) * 0.8,
             vy: -0.3 - Math.random() * 0.5,
-            life: 25 + Math.random() * 15,
+            life: FX.ROCKET_SMOKE_LIFE_BASE + Math.random() * FX.ROCKET_SMOKE_LIFE_RANGE,
             maxLife: 40,
             color: '#555',
             size: 3 + Math.random() * 3,
@@ -214,11 +288,11 @@ export const EffectsManager = {
             color: cfg.color,
             weaponType: weaponType, // 存储武器类型用于音效
             bounceCount: 0,
-            maxBounces: 2 + Math.floor(Math.random() * 2), // 2-3次弹跳
-            groundY: y + 15 + Math.random() * 30, // 落地点（更大随机范围，避免同一水平线）
+            maxBounces: FX.SHELL_BOUNCE_MIN + Math.floor(Math.random() * FX.SHELL_BOUNCE_RANDOM),
+            groundY: y + FX.SHELL_GROUND_OFFSET + Math.random() * FX.SHELL_GROUND_RANDOM,
             state: 'flying', // flying | stopped
             stopTimer: 0,
-            maxStopTime: 180, // 停留3秒(180帧)
+            maxStopTime: FX.SHELL_MAX_STOP_TIME,
             fadeAlpha: 1,
             trailTimer: 0
         });
@@ -232,10 +306,10 @@ export const EffectsManager = {
         const bulletAngle = Math.atan2(bulletVy, bulletVx);
         const hasDirection = bulletVx !== 0 || bulletVy !== 0;
         // 按伤害量缩放（基准30伤害=1.0倍）
-        const dmgScale = Math.min(2.0, Math.max(0.5, damage / 30));
+        const dmgScale = Math.min(2.0, Math.max(0.5, damage / FX.BLOOD_BASE_DAMAGE));
 
         // 生成血滴粒子（带方向，落地后变血迹）
-        const dropCount = Math.floor((12 + Math.random() * 8) * dmgScale);
+        const dropCount = Math.floor((FX.BLOOD_DROP_BASE + Math.random() * FX.BLOOD_DROP_RANDOM) * dmgScale);
         for (let i = 0; i < dropCount; i++) {
             let angle;
             if (hasDirection) {
@@ -263,14 +337,14 @@ export const EffectsManager = {
         // 大血雾扩散效果（命中瞬间的红色半透明圆）
         this.explosions.push({
             x: hitX, y: hitY,
-            radius: (8 + Math.random() * 6) * dmgScale,
-            life: 12,
-            maxLife: 12,
+            radius: (FX.BLOOD_MIST_BASE + Math.random() * FX.BLOOD_MIST_RANDOM) * dmgScale,
+            life: FX.BLOOD_MIST_LIFE,
+            maxLife: FX.BLOOD_MIST_LIFE,
             type: 'blood_mist'
         });
 
         // 命中瞬间的小血雾粒子
-        const mistCount = Math.floor((4 + Math.random() * 4) * dmgScale);
+        const mistCount = Math.floor((FX.BLOOD_MIST_COUNT_BASE + Math.random() * FX.BLOOD_MIST_COUNT_RANDOM) * dmgScale);
         for (let i = 0; i < mistCount; i++) {
             const angle = Math.random() * Math.PI * 2;
             const speed = 0.5 + Math.random() * 2;
@@ -335,7 +409,7 @@ export const EffectsManager = {
         const texIndex = Math.floor(Math.random() * BLOOD_TEX_COUNT);
         // scale：纹理实际显示尺寸 = BLOOD_TEX_SIZE * scale
         // size范围3~7，原血滴实际半径约2~4px，保留相近大小
-        const scale = 0.04 + Math.random() * 0.06;
+        const scale = FX.BLOOD_STAIN_SCALE_BASE + Math.random() * FX.BLOOD_STAIN_SCALE_RANGE;
         const rotation = Math.random() * Math.PI * 2;
         const alpha = 0.5 + Math.random() * 0.4;
         this.bloodStains.push({ x, y, texIndex, scale, rotation, alpha });
@@ -354,9 +428,9 @@ export const EffectsManager = {
             const p = this.particles[i];
             p.x += p.vx;
             p.y += p.vy;
-            p.vy += 0.12; // 重力
-            p.vx *= 0.95; // 阻力
-            p.vy *= 0.95;
+            p.vy += FX.GRAVITY;
+            p.vx *= FX.DRAG;
+            p.vy *= FX.DRAG;
             // 血滴粒子落地检测 → 转为永久血迹
             if (p.isBloodDrop && p.y >= p.groundY) {
                 this.addBloodStain(p.x, p.groundY, p.size);
@@ -373,7 +447,7 @@ export const EffectsManager = {
         for (let i = this.damageNumbers.length - 1; i >= 0; i--) {
             const d = this.damageNumbers[i];
             d.y += d.vy;
-            d.vy *= 0.95;
+            d.vy *= FX.DRAG;
             d.life--;
             if (d.life <= 0) {
                 this.damageNumbers.splice(i, 1);
@@ -398,12 +472,12 @@ export const EffectsManager = {
             if (s.state === 'flying') {
                 s.x += s.vx;
                 s.y += s.vy;
-                s.vy += 0.15; // 重力
-                s.vx *= 0.98;
+                s.vy += FX.SHELL_GRAVITY;
+                s.vx *= FX.SHELL_DRAG;
                 s.rotation += s.rotationSpeed;
                 // 飞行中拖尾火花
                 s.trailTimer++;
-                if (s.trailTimer % 3 === 0) {
+                if (s.trailTimer % FX.SHELL_TRAIL_INTERVAL === 0) {
                     this.particles.push({
                         x: s.x, y: s.y,
                         vx: (Math.random() - 0.5) * 0.5,
@@ -425,11 +499,11 @@ export const EffectsManager = {
                         s.state = 'stopped';
                         s.vx = 0;
                         s.vy = 0;
-                        s.rotationSpeed *= 0.2;
+                        s.rotationSpeed *= FX.SHELL_ROT_DAMPING;
                     } else {
                         // 弹跳衰减
-                        s.vy = -Math.abs(s.vy) * 0.4;
-                        s.vx *= 0.6;
+                        s.vy = -Math.abs(s.vy) * FX.SHELL_BOUNCE_DAMPING;
+                        s.vx *= FX.SHELL_HORIZ_DAMPING;
                         s.rotationSpeed *= 0.5;
                     }
                 }
@@ -451,8 +525,8 @@ export const EffectsManager = {
             this.screenShake.y = (Math.random() - 0.5) * this.screenShake.intensity;
             this.screenShake.timer--;
             // 震动衰减
-            if (this.screenShake.timer < 6) {
-                this.screenShake.intensity *= 0.6;
+            if (this.screenShake.timer < FX.SHAKE_DECAY_THRESHOLD) {
+                this.screenShake.intensity *= FX.SHAKE_DECAY_FACTOR;
             }
         } else {
             this.screenShake.x = 0;
@@ -500,7 +574,7 @@ export const EffectsManager = {
                 ctx.fill();
             } else if (e.type === 'blood_mist') {
                 // 血雾扩散效果 - 红色渐变圆
-                const mistRadius = e.radius * (1 + (1 - alpha) * 1.5);
+                const mistRadius = e.radius * (1 + (1 - alpha) * FX.BLOOD_MIST_EXPANSION);
                 const gradient = ctx.createRadialGradient(sx, sy, 0, sx, sy, mistRadius);
                 gradient.addColorStop(0, `rgba(180, 0, 0, ${alpha * 0.7})`);
                 gradient.addColorStop(0.5, `rgba(139, 0, 0, ${alpha * 0.4})`);
@@ -553,12 +627,12 @@ export const EffectsManager = {
             const sx = pos.x + this.screenShake.x;
             const sy = pos.y + this.screenShake.y;
             const alpha = d.life / d.maxLife;
-            const scale = 1 + (1 - alpha) * 0.3; // 放大效果
+            const scale = 1 + (1 - alpha) * FX.DMG_NUM_SCALE_FACTOR;
             ctx.save();
             ctx.globalAlpha = alpha;
             ctx.translate(sx, sy);
             ctx.scale(scale * zoom, scale * zoom);
-            ctx.font = 'bold 16px sans-serif';
+            ctx.font = `bold ${FX.DMG_NUM_FONT_SIZE}px sans-serif`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             // 阴影
@@ -601,7 +675,7 @@ export const EffectsManager = {
         const viewRight = camera.x + (logicalW - cx * (1 - zoom) + offsetX) / zoom;
         const viewTop = camera.y + (0 - cy * (1 - zoom) + offsetY) / zoom;
         const viewBottom = camera.y + (logicalH - cy * (1 - zoom) + offsetY) / zoom;
-        const margin = 80;
+        const margin = FX.BLOOD_VIEWPORT_MARGIN;
 
         for (const stain of this.bloodStains) {
             // 视口裁剪

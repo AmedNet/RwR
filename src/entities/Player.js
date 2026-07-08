@@ -10,6 +10,17 @@ import { EffectsManager } from '../utils/EffectsManager.js';
 import * as SoundManager from '../utils/SoundManager.js';
 import { SlowEffect, STATUS_EFFECT_CONFIG } from '../utils/StatusEffects.js';
 export class Player extends Entity {
+    // 类常量
+    static SWITCH_ANIM_DURATION = 15;
+    static BURST_INTERVAL = 4;           // 三连射每发间隔帧数
+    static MEDICAL_HEAL_COOLDOWN = 20;   // 医疗包使用冷却帧数
+    static MEDICAL_RANGE = 100;          // 治疗队友最大距离
+    static MEDICAL_ANGLE_THRESHOLD = Math.PI / 6; // 治疗队友角度阈值（30度）
+    static LAUNCHER_SLOWDOWN = 0.5;      // 持火箭筒时速度倍率
+    static CAMERA_SMOOTH = 0.1;          // 镜头偏移平滑系数
+    static WEAPON_DRAW_HEIGHT = 50;      // 武器贴图绘制高度
+    static MELEE_KNOCKBACK = 30;         // 近战击退距离
+
     constructor(x, y, config) {
         super(x, y, {
             health: config.health,
@@ -21,7 +32,7 @@ export class Player extends Entity {
         this.shootCooldown = 0;
         this.config = config;
         this.switchAnimTimer = 0;
-        this.switchAnimDuration = 15;
+        this.switchAnimDuration = Player.SWITCH_ANIM_DURATION;
         this.isSwitching = false;
         this.switchFromSlot = -1;
         // 射击模式相关
@@ -191,8 +202,8 @@ export class Player extends Entity {
         if (nearestEnemy) {
             nearestEnemy.takeDamage(knifeConfig.damage, this.x, this.y);
             const angle = Math.atan2(nearestEnemy.y - this.y, nearestEnemy.x - this.x);
-            nearestEnemy.x += Math.cos(angle) * 30;
-            nearestEnemy.y += Math.sin(angle) * 30;
+            nearestEnemy.x += Math.cos(angle) * Player.MELEE_KNOCKBACK;
+            nearestEnemy.y += Math.sin(angle) * Player.MELEE_KNOCKBACK;
             if (!nearestEnemy.alive) {
                 GameState.enemies = GameState.enemies.filter(e => e.alive);
                 if (GameState.player && GameState.player.alive) { this.addKill(); GameState.rp += 10; }
@@ -205,7 +216,6 @@ export class Player extends Entity {
     update() {
         if (GameState.gameOver) return;
         this.updateStatusEffects();
-        // 保存上一帧位置用于AI预测瞄准
         this.savePrevPosition();
         if (this.isSwitching) {
             this.switchAnimTimer--;
@@ -215,9 +225,15 @@ export class Player extends Entity {
         const weapon = GameState.getActiveWeapon();
         if (weapon) {
             weapon.updateReload();
-            weapon.updateRecoilAndSpread(); // 每帧恢复后坐力和散布
+            weapon.updateRecoilAndSpread();
         }
+        const isMoving = this._updateMovement();
+        this._updateAiming(weapon, isMoving);
+        this._updateFiring(weapon);
+    }
 
+    /** 处理移动逻辑，返回是否正在移动 */
+    _updateMovement() {
         const keys = GameState.keys;
         let dx = 0, dy = 0;
         if (keys.w) dy -= 1;
@@ -225,27 +241,31 @@ export class Player extends Entity {
         if (keys.a) dx -= 1;
         if (keys.d) dx += 1;
         if (dx !== 0 || dy !== 0) {
-            const len = Math.sqrt(dx*dx + dy*dy);
+            const len = Math.sqrt(dx * dx + dy * dy);
             dx /= len; dy /= len;
             const speedFactor = GameState.map ? GameState.map.getSpeedFactor(this.x, this.y) : 1;
-            // 持有火箭筒时减速（类似沙地）
             const heldWeapon = GameState.getActiveWeapon();
-            const launcherSlowdown = (heldWeapon && heldWeapon.config.type === 'launcher') ? 0.5 : 1;
+            const launcherSlowdown = (heldWeapon && heldWeapon.config.type === 'launcher') ? Player.LAUNCHER_SLOWDOWN : 1;
             const finalSpeed = this.speed * speedFactor * launcherSlowdown * this.getSpeedMultiplier();
             const newX = this.x + dx * finalSpeed;
             const newY = this.y + dy * finalSpeed;
             if (GameState.map && !GameState.map.isWalkable(newX, newY, this.radius)) {
                 if (GameState.map.isWalkable(newX, this.y, this.radius)) this.x = newX;
                 else if (GameState.map.isWalkable(this.x, newY, this.radius)) this.y = newY;
-            } else { this.x = newX; this.y = newY; }
+            } else {
+                this.x = newX;
+                this.y = newY;
+            }
         }
         const world = GameState.config.world;
         this.x = Math.max(this.radius, Math.min(world.width - this.radius, this.x));
         this.y = Math.max(this.radius, Math.min(world.height - this.radius, this.y));
         if (this.shootCooldown > 0) this.shootCooldown--;
+        return dx !== 0 || dy !== 0;
+    }
 
-        // 开镜逻辑（狙击枪）- 只使用offset偏移，不使用zoom放大
-        const isMoving = dx !== 0 || dy !== 0;
+    /** 处理瞄准镜/开镜逻辑 */
+    _updateAiming(weapon, isMoving) {
         if (weapon && weapon.config.scope) {
             if (!isMoving) {
                 GameState.scopeState.idleTimer++;
@@ -253,12 +273,9 @@ export class Player extends Entity {
                     GameState.scopeState.isScoped = true;
                 }
             } else {
-                // 移动时立即退出瞄准状态
                 GameState.scopeState.idleTimer = 0;
                 GameState.scopeState.isScoped = false;
             }
-            
-            // 只在isScoped状态下计算offset
             if (GameState.scopeState.isScoped) {
                 const mouse = GameState.mouse;
                 const canvas = document.getElementById('gameCanvas');
@@ -268,7 +285,6 @@ export class Player extends Entity {
                 const mdy = mouse.y - screenCY;
                 const mdist = Math.hypot(mdx, mdy);
                 if (mdist > 0) {
-                    // 从武器配置读取偏移参数
                     const maxOffset = weapon.config.scope.maxOffset || 200;
                     const sensitivity = weapon.config.scope.offsetSensitivity || 300;
                     const factor = Math.min(mdist / sensitivity, 1);
@@ -276,68 +292,54 @@ export class Player extends Entity {
                     GameState.camera.targetOffsetY = (mdy / mdist) * maxOffset * factor;
                 }
             } else {
-                // 未开镜时重置偏移
                 GameState.camera.targetOffsetX = 0;
                 GameState.camera.targetOffsetY = 0;
             }
         } else {
-            // 没有瞄准镜的武器，重置所有状态
             GameState.scopeState.idleTimer = 0;
             GameState.scopeState.isScoped = false;
             GameState.camera.targetOffsetX = 0;
             GameState.camera.targetOffsetY = 0;
         }
-        // zoom始终为1（不使用缩放）
         GameState.camera.zoom = 1;
         GameState.camera.targetZoom = 1;
-        // 平滑过渡偏移
-        GameState.camera.offsetX += (GameState.camera.targetOffsetX - GameState.camera.offsetX) * 0.1;
-        GameState.camera.offsetY += (GameState.camera.targetOffsetY - GameState.camera.offsetY) * 0.1;
+        GameState.camera.offsetX += (GameState.camera.targetOffsetX - GameState.camera.offsetX) * Player.CAMERA_SMOOTH;
+        GameState.camera.offsetY += (GameState.camera.targetOffsetY - GameState.camera.offsetY) * Player.CAMERA_SMOOTH;
+    }
 
-        // 处理三连射
+    /** 处理射击模式输入（三连射/全自动/半自动） */
+    _updateFiring(weapon) {
         if (this.burstCount > 0) {
             this.burstTimer--;
             if (this.burstTimer <= 0) {
-                this.shootCooldown = 0;  // 临时清除冷却，让 burst 射击通过
+                this.shootCooldown = 0;
                 this.shoot();
                 this.burstCount--;
-                this.burstTimer = 4; // 三连射每发间隔4帧
+                this.burstTimer = Player.BURST_INTERVAL;
             }
         }
-
-
-        // 根据射击模式处理鼠标输入
-        if (weapon) {
-            const fireMode = weapon.config.fireMode || FireMode.SEMI;
-            const mouseDown = GameState.mouse.down;
-            const mouseJustPressed = mouseDown && !this.lastMouseDown;
-
-            switch (fireMode) {
-                case FireMode.AUTO:
-                    // 全自动：长按连发
-                    if (mouseDown) {
-                        this.shoot();
-                    }
-                    break;
-                case FireMode.BURST:
-                    // 三连射：按一次打3发
-                    if (mouseJustPressed && this.burstCount === 0) {
-                        this.burstCount = 3;
-                        this.burstTimer = 0;
-                        this.shoot(); // 立即打第一发
-                        this.burstCount--;
-                    }
-                    break;
-                case FireMode.SEMI:
-                default:
-                    // 半自动：只在按下瞬间射击
-                    if (mouseJustPressed) {
-                        this.shoot();
-                    }
-                    break;
-            }
-            this.lastMouseDown = mouseDown;
+        if (!weapon) return;
+        const fireMode = weapon.config.fireMode || FireMode.SEMI;
+        const mouseDown = GameState.mouse.down;
+        const mouseJustPressed = mouseDown && !this.lastMouseDown;
+        switch (fireMode) {
+            case FireMode.AUTO:
+                if (mouseDown) this.shoot();
+                break;
+            case FireMode.BURST:
+                if (mouseJustPressed && this.burstCount === 0) {
+                    this.burstCount = 3;
+                    this.burstTimer = 0;
+                    this.shoot();
+                    this.burstCount--;
+                }
+                break;
+            case FireMode.SEMI:
+            default:
+                if (mouseJustPressed) this.shoot();
+                break;
         }
+        this.lastMouseDown = mouseDown;
     }
 
     shoot() {
@@ -479,7 +481,7 @@ export class Player extends Entity {
                 this.autoSwitchToNextWeapon();
             }
             
-            this.shootCooldown = 20;
+            this.shootCooldown = Player.MEDICAL_HEAL_COOLDOWN;
             return;
         }
         
@@ -491,7 +493,7 @@ export class Player extends Entity {
         
         // 检测鼠标方向上的队友（距离 < 100）
         let nearestTeammate = null;
-        let nearestDist = 100; // 最大治疗距离
+        let nearestDist = Player.MEDICAL_RANGE;
         
         for (const teammate of GameState.teammates) {
             if (!teammate.alive) continue;
@@ -504,7 +506,7 @@ export class Player extends Entity {
             let angleDiff = Math.abs(angleToTeammate - angle);
             if (angleDiff > Math.PI) angleDiff = Math.PI * 2 - angleDiff;
             
-            if (dist < nearestDist && angleDiff < Math.PI / 6) { // 30度 = PI/6
+            if (dist < nearestDist && angleDiff < Player.MEDICAL_ANGLE_THRESHOLD) {
                 nearestDist = dist;
                 nearestTeammate = teammate;
             }
@@ -522,7 +524,7 @@ export class Player extends Entity {
                 this.autoSwitchToNextWeapon();
             }
             
-            this.shootCooldown = 20;
+            this.shootCooldown = Player.MEDICAL_HEAL_COOLDOWN;
         } else {
             console.log('💊 血量已满，面前无需要治疗的队友');
         }
@@ -591,7 +593,7 @@ export class Player extends Entity {
         if (weaponImage && weaponLoaded) {
             ctx.save();
             const facingLeft = Math.cos(angle) < 0;
-            const targetHeight =50;
+            const targetHeight = Player.WEAPON_DRAW_HEIGHT;
             const scale = targetHeight / weaponImage.naturalHeight;
             const drawW = weaponImage.naturalWidth * scale;
             const drawH = targetHeight;

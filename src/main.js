@@ -80,6 +80,30 @@ CONFIG.world = {
     height: CONFIG.map.rows * CONFIG.map.tileSize
 };
 
+// ---------- 游戏常量 ----------
+const GAME_CONSTANTS = {
+    INITIAL_TEAMMATES: 15,
+    INITIAL_ENEMIES: 3,
+    TEAMMATE_SPAWN_MIN_DIST: 250,
+    RANK_UP_SPAWN_MIN_DIST: 200,
+    GENERATE_POINTS_MAX_ATTEMPTS: 1000,
+    SPAWN_SEARCH_ATTEMPTS: 50,
+    ARSENAL_RADIUS: 60,
+    ARSENAL_SEARCH_ATTEMPTS: 20,
+    ARSENAL_SEARCH_RADIUS_MIN: 50,
+    ARSENAL_SEARCH_RADIUS_MAX: 150,
+    ARSENAL_OFFSET: 200,
+    ARSENAL_MIN_X: 150,
+    BOUNDARY_MARGIN: 50,
+    SCORE_CAPTURE: 10,
+    SCORE_LOST: -5
+};
+
+/** 获取所有己方据点 */
+function getPlayerPoints() {
+    return GameState.capturePoints.filter(p => p.owner === 'player');
+}
+
 // ---------- 初始化地图 ----------
 function initMap() {
     console.log('🗺️ 正在初始化地图...');
@@ -114,7 +138,7 @@ function generatePoints(xMin, xMax, yMin, yMax, count, radius, minDist) {
     const points = [];
     const map = GameState.map;
     let attempts = 0;
-    while (points.length < count && attempts < 1000) {
+    while (points.length < count && attempts < GAME_CONSTANTS.GENERATE_POINTS_MAX_ATTEMPTS) {
         attempts++;
         const x = xMin + Math.random() * (xMax - xMin);
         const y = yMin + Math.random() * (yMax - yMin);
@@ -195,23 +219,23 @@ function initArsenal(playerPoints) {
     
     if (leftMostPoint) {
         // 在最左侧玩家据点的左后方生成
-        arsenalX = Math.max(150, leftMostPoint.x - 200);
+        arsenalX = Math.max(GAME_CONSTANTS.ARSENAL_MIN_X, leftMostPoint.x - GAME_CONSTANTS.ARSENAL_OFFSET);
         arsenalY = leftMostPoint.y;
     } else {
         // 如果没有玩家据点，在地图左侧中间生成
-        arsenalX = 200;
+        arsenalX = GAME_CONSTANTS.ARSENAL_OFFSET;
         arsenalY = worldH / 2;
     }
     
     // 确保位置可通行
-    if (map && !map.isWalkable(arsenalX, arsenalY, 60)) {
+    if (map && !map.isWalkable(arsenalX, arsenalY, GAME_CONSTANTS.ARSENAL_RADIUS)) {
         // 尝试附近位置
-        for (let i = 0; i < 20; i++) {
+        for (let i = 0; i < GAME_CONSTANTS.ARSENAL_SEARCH_ATTEMPTS; i++) {
             const angle = Math.random() * Math.PI * 2;
-            const dist = 50 + Math.random() * 100;
+            const dist = GAME_CONSTANTS.ARSENAL_SEARCH_RADIUS_MIN + Math.random() * (GAME_CONSTANTS.ARSENAL_SEARCH_RADIUS_MAX - GAME_CONSTANTS.ARSENAL_SEARCH_RADIUS_MIN);
             const testX = arsenalX + Math.cos(angle) * dist;
             const testY = arsenalY + Math.sin(angle) * dist;
-            if (map.isWalkable(testX, testY, 60)) {
+            if (map.isWalkable(testX, testY, GAME_CONSTANTS.ARSENAL_RADIUS)) {
                 arsenalX = testX;
                 arsenalY = testY;
                 break;
@@ -244,7 +268,7 @@ function spawnTeammate(spawnPoint, minDistance = 150) {
     }
     
     // 尝试在生成点周围找到可通行的位置，保持最小距离
-    for (let attempt = 0; attempt < 50; attempt++) {
+    for (let attempt = 0; attempt < GAME_CONSTANTS.SPAWN_SEARCH_ATTEMPTS; attempt++) {
         const angle = Math.random() * Math.PI * 2;
         const dist = minDistance + Math.random() * 150; // 至少 minDistance 距离
         let x = centerX + Math.cos(angle) * dist;
@@ -289,11 +313,11 @@ function resetGame() {
     GameState.player = new Player(spawnX, spawnY, config.player);
 
     // 初始队友（15人），分散到各个己方据点（至少250像素外）
-    const playerPoints = GameState.capturePoints.filter(p => p.owner === 'player');
-    for (let i = 0; i < 15; i++) {
-        // 轮流在各个据点生成，保持250像素最小距离
+    const playerPoints = getPlayerPoints();
+    for (let i = 0; i < GAME_CONSTANTS.INITIAL_TEAMMATES; i++) {
+        // 轮流在各个据点生成，保持最小距离
         const spawnPoint = playerPoints.length > 0 ? playerPoints[i % playerPoints.length] : null;
-        const t = spawnTeammate(spawnPoint, 250);
+        const t = spawnTeammate(spawnPoint, GAME_CONSTANTS.TEAMMATE_SPAWN_MIN_DIST);
         if (t) {
             SpawnSystem.equipTeammate(t);
             GameState.teammates.push(t);
@@ -301,7 +325,7 @@ function resetGame() {
     }
 
     // 初始敌人
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < GAME_CONSTANTS.INITIAL_ENEMIES; i++) {
         GameState.enemies.push(SpawnSystem.spawnEnemy());
     }
     GameState.gameOver = false;
@@ -395,11 +419,11 @@ function init() {
         const maxCount = CONFIG.teammate.maxCount;
         if (GameState.teammates.length < maxCount) {
             // 随机选择一个己方据点生成新队友
-            const playerPoints = GameState.capturePoints.filter(p => p.owner === 'player');
+            const playerPoints = getPlayerPoints();
             const spawnPoint = playerPoints.length > 0 
                 ? playerPoints[Math.floor(Math.random() * playerPoints.length)] 
                 : null;
-            const t = spawnTeammate(spawnPoint, 200);
+            const t = spawnTeammate(spawnPoint, GAME_CONSTANTS.RANK_UP_SPAWN_MIN_DIST);
             if (t) {
                 SpawnSystem.equipTeammate(t);
                 GameState.teammates.push(t);
@@ -412,11 +436,11 @@ function init() {
     EventBus.on('game_over', () => UIManager.updateAll(GameState));
     EventBus.on('point_captured', (data) => {
         if (data.owner === 'player') {
-            GameState.score += 10;
-            console.log('🎯 占领据点! +10分');
+            GameState.score += GAME_CONSTANTS.SCORE_CAPTURE;
+            console.log(`🎯 占领据点! +${GAME_CONSTANTS.SCORE_CAPTURE}分`);
         } else if (data.owner === 'enemy') {
-            GameState.score -= 5;
-            console.log('💔 据点被敌人占领 -5分');
+            GameState.score += GAME_CONSTANTS.SCORE_LOST;
+            console.log(`💔 据点被敌人占领 ${GAME_CONSTANTS.SCORE_LOST}分`);
         }
         UIManager.updateAll(GameState);
     });
@@ -503,7 +527,7 @@ function updateTeammateRespawns() {
         queue[i].timer--;
         if (queue[i].timer <= 0) {
             // 在最近的己方据点重生
-            const playerPoints = GameState.capturePoints.filter(p => p.owner === 'player');
+            const playerPoints = getPlayerPoints();
             let spawnX, spawnY;
             if (playerPoints.length > 0) {
                 const point = playerPoints[Math.floor(Math.random() * playerPoints.length)];
@@ -543,7 +567,7 @@ init();
 function respawnPlayer(pointIndex) {
     const config = GameState.config;
     // 寻找己方据点
-    const playerPoints = GameState.capturePoints.filter(p => p.owner === 'player');
+    const playerPoints = getPlayerPoints();
     
     let spawnX = config.world.width / 2;
     let spawnY = config.world.height / 2;

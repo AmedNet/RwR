@@ -92,6 +92,83 @@ export const Renderer = {
         };
     },
 
+    /** 绘制全屏半透明遮罩 */
+    _drawOverlay() {
+        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+        this.ctx.fillRect(0, 0, this.width, this.height);
+    },
+
+    /** 在世界坐标位置绘制实体（save/translate/draw/restore） */
+    _drawAtWorldPos(entity) {
+        const pos = this.toScreen(entity.x, entity.y);
+        this.ctx.save();
+        this.ctx.translate(pos.x, pos.y);
+        entity.draw(this.ctx);
+        this.ctx.restore();
+    },
+
+    /** 绘制游戏世界（地图、血迹、据点、军械库、地面物品、实体、特效） */
+    _renderWorld() {
+        // 地图
+        if (GameState.map) {
+            GameState.map.draw(this.ctx, GameState.camera);
+        } else {
+            this.ctx.fillStyle = '#2d4a22';
+            this.ctx.fillRect(0, 0, this.width, this.height);
+            this.ctx.fillStyle = '#fff';
+            this.ctx.font = '24px sans-serif';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText('地图加载中...', this.width / 2, this.height / 2);
+        }
+
+        EffectsManager.drawBloodStains(this.ctx, GameState.camera);
+
+        for (const point of GameState.capturePoints) {
+            point.draw(this.ctx);
+        }
+
+        if (GameState.arsenal) {
+            GameState.arsenal.draw(this.ctx);
+        }
+
+        for (const pickup of GameState.weaponPickups) {
+            if (pickup.alive) this._drawAtWorldPos(pickup);
+        }
+
+        for (const g of GameState.grenades) {
+            g.draw(this.ctx);
+        }
+    },
+
+    /** 绘制所有实体（子弹、敌人、队友、玩家） */
+    _renderEntities() {
+        const { player, enemies, teammates, bullets } = GameState;
+
+        for (const b of bullets) {
+            if (b.alive) this._drawAtWorldPos(b);
+        }
+        for (const e of enemies) {
+            if (e.alive) this._drawAtWorldPos(e);
+        }
+        for (const t of teammates) {
+            if (t.alive) this._drawAtWorldPos(t);
+        }
+        if (player && player.alive) {
+            this._drawAtWorldPos(player);
+        }
+    },
+
+    /** 绘制 HUD 层（特效、武器HUD、状态效果） */
+    _renderHUD() {
+        EffectsManager.draw(this.ctx, GameState.camera);
+        drawWeaponHUD(this.ctx, this);
+
+        const { player } = GameState;
+        if (player && player.alive && player.statusEffects && player.statusEffects.length > 0) {
+            this.drawStatusEffectsHUD(this.ctx, player);
+        }
+    },
+
     render() {
         if (!this.ctx) {
             console.warn('⚠️ Renderer: ctx 未初始化，无法渲染');
@@ -99,12 +176,10 @@ export const Renderer = {
         }
         this.clear();
 
-        // 确保武器贴图已加载
         if (Object.keys(this.weaponImages).length === 0) {
             this.loadWeaponImages();
         }
 
-        // 控制HUD显示
         const menuOpen = GameState.inventoryOpen || GameState.arsenalOpen;
         const hud = document.getElementById('hud');
         if (hud) {
@@ -113,16 +188,14 @@ export const Renderer = {
 
         // Game Over 优先级最高
         if (GameState.gameOver) {
-            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
-            this.ctx.fillRect(0, 0, this.width, this.height);
+            this._drawOverlay();
             drawGameOver(this.ctx, this);
             return;
         }
 
-        // 如果菜单打开，跳过游戏世界渲染
+        // 菜单打开时跳过世界渲染
         if (menuOpen) {
-            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
-            this.ctx.fillRect(0, 0, this.width, this.height);
+            this._drawOverlay();
             if (GameState.arsenalOpen) {
                 drawArsenalShop(this.ctx, this);
             } else if (GameState.inventoryOpen) {
@@ -131,140 +204,46 @@ export const Renderer = {
             return;
         }
 
-        // Debug面板（覆盖在游戏世界上方）
+        // Debug 面板
         if (GameState.debugOpen) {
             drawDebug(this.ctx, this);
             return;
         }
 
-        // 绘制地图
-        if (GameState.map) {
-            GameState.map.draw(this.ctx, GameState.camera);
-        } else {
-            // 如果没有地图，绘制一个简单的提示
-            this.ctx.fillStyle = '#2d4a22';
-            this.ctx.fillRect(0, 0, this.width, this.height);
-            this.ctx.fillStyle = '#fff';
-            this.ctx.font = '24px sans-serif';
-            this.ctx.textAlign = 'center';
-            this.ctx.fillText('地图加载中...', this.width/2, this.height/2);
-        }
-
-        // 绘制地面血迹（地图之上、实体之下）
-        EffectsManager.drawBloodStains(this.ctx, GameState.camera);
-
-        // 绘制据点
-        for (const point of GameState.capturePoints) {
-            point.draw(this.ctx);
-        }
-
-        // 绘制军械库
-        if (GameState.arsenal) {
-            GameState.arsenal.draw(this.ctx);
-        }
-
-        // 绘制地面武器
-        for (const pickup of GameState.weaponPickups) {
-            if (!pickup.alive) continue;
-            const pos = this.toScreen(pickup.x, pickup.y);
-            this.ctx.save();
-            this.ctx.translate(pos.x, pos.y);
-            pickup.draw(this.ctx);
-            this.ctx.restore();
-        }
-
-        // 绘制手雷
-        for (const g of GameState.grenades) {
-            g.draw(this.ctx);
-        }
-
-        // 绘制实体（优化：减少save/restore）
-        const { player, enemies, teammates, bullets } = GameState;
-        
-// 子弹
-for (const b of bullets) {
-    if (!b.alive) continue;
-    const pos = this.toScreen(b.x, b.y);
-    this.ctx.save();
-    this.ctx.translate(pos.x, pos.y);
-    b.draw(this.ctx);
-    this.ctx.restore();
-}
-        
-        // 敌人（优化：批量渲染）
-        for (const e of enemies) {
-            if (!e.alive) continue;
-            const pos = this.toScreen(e.x, e.y);
-            this.ctx.save();
-            this.ctx.translate(pos.x, pos.y);
-            e.draw(this.ctx);
-            this.ctx.restore();
-        }
-        
-        // 队友（优化：批量渲染）
-        for (const t of teammates) {
-            if (!t.alive) continue;
-            const pos = this.toScreen(t.x, t.y);
-            this.ctx.save();
-            this.ctx.translate(pos.x, pos.y);
-            t.draw(this.ctx);
-            this.ctx.restore();
-        }
-        
-        // 玩家
-        if (player && player.alive) {
-            const pos = this.toScreen(player.x, player.y);
-            this.ctx.save();
-            this.ctx.translate(pos.x, pos.y);
-            player.draw(this.ctx);
-            this.ctx.restore();
-        }
-
-        // 绘制特效（粒子、伤害数字）
-        EffectsManager.draw(this.ctx, GameState.camera);
-
-        // 绘制武器 HUD（不再菜单或 GameOver 时显示）
-        drawWeaponHUD(this.ctx, this);
-
-       // 绘制状态效果 HUD（左上角）
-       if (player && player.alive && player.statusEffects && player.statusEffects.length > 0) {
-           this.drawStatusEffectsHUD(this.ctx, player);
-       }
+        this._renderWorld();
+        this._renderEntities();
+        this._renderHUD();
     },
 
-   drawStatusEffectsHUD(ctx, player) {
-        const effects = player.statusEffects;
-        const startX = 20;
-        const startY = 80;
-        const iconSize = 32;
-        const spacing = 8;
+    drawStatusEffectsHUD(ctx, player) {
+        const EFFECT_START_X = 20;
+        const EFFECT_START_Y = 80;
+        const ICON_SIZE = 32;
+        const ICON_SPACING = 8;
+        const FPS = 60;
 
-        for (let i = 0; i < effects.length; i++) {
-            const effect = effects[i];
-            const x = startX;
-            const y = startY + i * (iconSize + spacing);
+        for (let i = 0; i < player.statusEffects.length; i++) {
+            const effect = player.statusEffects[i];
+            const x = EFFECT_START_X;
+            const y = EFFECT_START_Y + i * (ICON_SIZE + ICON_SPACING);
 
-            // 背景
             ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-            ctx.fillRect(x, y, iconSize, iconSize);
+            ctx.fillRect(x, y, ICON_SIZE, ICON_SIZE);
 
-            // 边框
             ctx.strokeStyle = effect.color;
             ctx.lineWidth = 2;
-            ctx.strokeRect(x, y, iconSize, iconSize);
+            ctx.strokeRect(x, y, ICON_SIZE, ICON_SIZE);
 
-            // 图标
             ctx.fillStyle = effect.color;
             ctx.font = '20px sans-serif';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText(effect.icon, x + iconSize / 2, y + iconSize / 2 - 2);
+            ctx.fillText(effect.icon, x + ICON_SIZE / 2, y + ICON_SIZE / 2 - 2);
 
-            // 持续时间（秒）
-            const seconds = Math.ceil(effect.remaining / 60);
+            const seconds = Math.ceil(effect.remaining / FPS);
             ctx.fillStyle = '#fff';
             ctx.font = 'bold 11px sans-serif';
-            ctx.fillText(seconds + 's', x + iconSize / 2, y + iconSize - 6);
+            ctx.fillText(seconds + 's', x + ICON_SIZE / 2, y + ICON_SIZE - 6);
         }
     }
 };

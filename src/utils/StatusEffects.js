@@ -64,27 +64,33 @@ export class BurnEffect extends StatusEffect {
         this.damageInterval = STATUS_EFFECT_CONFIG.BURN.DAMAGE_INTERVAL;
         this.particles = [];
     }
+
     update(entity) {
         this.remaining--;
+        this._applyDamage(entity);
+        this._updateParticles();
+        this._trySpawnParticle(entity);
+    }
+
+    /** 每隔伤害间隔对实体造成随机伤害 */
+    _applyDamage(entity) {
         this.damageTimer++;
-        
-        // 每秒造成伤害（每次伤害随机）
-        if (this.damageTimer >= this.damageInterval) {
-            this.damageTimer = 0;
-            if (entity && entity.alive) {
-                const { MIN_DAMAGE, MAX_DAMAGE } = STATUS_EFFECT_CONFIG.BURN;
-                const damageThisTick = MIN_DAMAGE + Math.floor(Math.random() * (MAX_DAMAGE - MIN_DAMAGE + 1));
-                entity.health -= damageThisTick;
-                // 燃烧伤害产生少量血迹
-                EffectsManager.spawnBloodSplatter(entity.x, entity.y, 0, 0, damageThisTick);
-                if (entity.health <= 0) {
-                    entity.health = 0;
-                    entity.alive = false;
-                }
-            }
+        if (this.damageTimer < this.damageInterval) return;
+        this.damageTimer = 0;
+        if (!entity || !entity.alive) return;
+
+        const { MIN_DAMAGE, MAX_DAMAGE } = STATUS_EFFECT_CONFIG.BURN;
+        const damageThisTick = MIN_DAMAGE + Math.floor(Math.random() * (MAX_DAMAGE - MIN_DAMAGE + 1));
+        entity.health -= damageThisTick;
+        EffectsManager.spawnBloodSplatter(entity.x, entity.y, 0, 0, damageThisTick);
+        if (entity.health <= 0) {
+            entity.health = 0;
+            entity.alive = false;
         }
-        
-        // 更新火焰粒子
+    }
+
+    /** 更新所有火焰粒子的位置和生命周期 */
+    _updateParticles() {
         for (let i = this.particles.length - 1; i >= 0; i--) {
             const p = this.particles[i];
             p.life--;
@@ -95,18 +101,19 @@ export class BurnEffect extends StatusEffect {
                 this.particles.splice(i, 1);
             }
         }
-        
-        // 生成新粒子
-        if (Math.random() < STATUS_EFFECT_CONFIG.BURN.PARTICLE_SPAWN_CHANCE && entity) {
-            this.particles.push({
-                x: (Math.random() - 0.5) * entity.radius * 1.5,
-                y: (Math.random() - 0.5) * entity.radius * 0.5 - entity.radius * 0.3,
-                size: 3 + Math.random() * 4,
-                life: 20 + Math.random() * 15,
-                maxLife: 35,
-                vy: 0.8 + Math.random() * 0.6
-            });
-        }
+    }
+
+    /** 按概率在实体周围生成一个新的火焰粒子 */
+    _trySpawnParticle(entity) {
+        if (!entity || Math.random() >= STATUS_EFFECT_CONFIG.BURN.PARTICLE_SPAWN_CHANCE) return;
+        this.particles.push({
+            x: (Math.random() - 0.5) * entity.radius * 1.5,
+            y: (Math.random() - 0.5) * entity.radius * 0.5 - entity.radius * 0.3,
+            size: 3 + Math.random() * 4,
+            life: 20 + Math.random() * 15,
+            maxLife: 35,
+            vy: 0.8 + Math.random() * 0.6
+        });
     }
     draw(ctx, entity) {
         if (!entity) return;
