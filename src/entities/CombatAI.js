@@ -6,7 +6,7 @@ import { Bullet } from './Bullet.js';
 import { MovementSystem } from '../utils/MovementSystem.js';
 import { WeaponPickup } from './WeaponPickup.js';
 import { Grenade } from './Grenade.js';
-import { EffectsManager } from '../utils/EffectsManager.js';
+import { EffectsManager, ParticleType } from '../utils/EffectsManager.js';
 import * as SoundManager from '../utils/SoundManager.js';
 import { WEAPON_VALUE, evaluateWeaponChoice } from '../utils/WeaponAI.js';
 import { SlowEffect, STATUS_EFFECT_CONFIG } from '../utils/StatusEffects.js';
@@ -76,6 +76,8 @@ export class CombatAI extends Entity {
         this.weaponImagesLoaded = {};
         this.reloadImages = {};
         this.reloadImagesLoaded = {};
+        this.dying = false;
+        this.deathTimer = 0;
     }
 
     setWeapons(weapons) {
@@ -304,6 +306,11 @@ export class CombatAI extends Entity {
     }
 
     update() {
+        if (this.dying) {
+            this.deathTimer--;
+            if (this.deathTimer <= 0) this.alive = false;
+            return;
+        }
         if (!this.alive) return;
         this.updateStatusEffects();
         this.savePrevPosition();
@@ -387,7 +394,8 @@ export class CombatAI extends Entity {
         const forwardAngle = captureTarget
             ? Math.atan2(captureTarget.y - this.guardPoint.y, captureTarget.x - this.guardPoint.x)
             : this.patrolAngle;
-        const patrolAngle = forwardAngle + Math.sin(this.patrolTimer * CombatAI.PATROL_FREQ + this.x * 0.01) * Math.PI / 2;
+        // 移除位置依赖项，避免反馈震荡
+        const patrolAngle = forwardAngle + Math.sin(this.patrolTimer * CombatAI.PATROL_FREQ) * Math.PI / 2;
         return {
             x: this.guardPoint.x + Math.cos(patrolAngle) * CombatAI.PATROL_OFFSET,
             y: this.guardPoint.y + Math.sin(patrolAngle) * CombatAI.PATROL_OFFSET
@@ -427,8 +435,10 @@ export class CombatAI extends Entity {
 
     getCombatPosition(target, distance, wide = false) {
         const angle = Math.atan2(target.y - this.y, target.x - this.x);
-        const side = wide ? Math.sin(this.cycleTimer * 0.003 + this.y * 0.01) * Math.PI * 0.7
-            : (Math.sin(this.shootCooldown * 0.1 + this.x * 0.01) > 0 ? Math.PI / 4 : -Math.PI / 4);
+        // 用连续正弦值做侧向偏移，避免二值跳变导致抖动
+        const side = wide
+            ? Math.sin(this.cycleTimer * 0.003) * Math.PI * 0.7
+            : Math.sin(this.cycleTimer * 0.02) * Math.PI * 0.25;
         const moveAngle = angle + side;
         return {
             x: target.x + Math.cos(moveAngle) * distance,
@@ -683,6 +693,16 @@ export class CombatAI extends Entity {
     }
 
     draw(ctx) {
+        if (this.dying) {
+            const progress = 1 - this.deathTimer / 15;
+            ctx.save();
+            ctx.globalAlpha = 1 - progress * 0.85;
+            const s = 1 - progress * 0.4;
+            ctx.scale(s, s);
+            this.drawBody(ctx);
+            ctx.restore();
+            return;
+        }
         this.drawBody(ctx);
         this.drawWeapon(ctx);
         this.drawStatusEffects(ctx);
@@ -754,6 +774,7 @@ export class CombatAI extends Entity {
     }
 
     takeDamage(amount) {
+        if (this.dying) return this.alive;
         this.health -= amount;
         // 受到伤害时添加缓慢效果（使用配置常量）
         const slowDuration = STATUS_EFFECT_CONFIG.SLOW.DEFAULT_DURATION;
@@ -761,9 +782,19 @@ export class CombatAI extends Entity {
         const distance = GameState.player ? Math.hypot(this.x - GameState.player.x, this.y - GameState.player.y) : 0;
         if (this.health <= 0) {
             this.health = 0;
-            this.alive = false;
-            SoundManager.playDie(distance);
-            this.dropWeaponOnDeath();
+            if (!this.dying) {
+                if (this.faction === 'enemy') {
+                    // 敌人：死亡动画（淡出缩小 + 粒子）
+                    this.dying = true;
+                    this.deathTimer = 15;
+                    EffectsManager.spawnParticles(this.x, this.y, ParticleType.EXPLOSION, 15);
+                } else {
+                    // 队友：立即死亡，让 CollisionSystem 正常触发重生队列
+                    this.alive = false;
+                }
+                SoundManager.playDie(distance);
+                this.dropWeaponOnDeath();
+            }
         } else {
             SoundManager.playHurt(distance);
         }

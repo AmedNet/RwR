@@ -377,11 +377,11 @@ function gameLoop() {
 
     // 死亡状态下检查战败条件
     if (GameState.gameOver) {
-        const hasFriendly = GameState.capturePoints.some(p => p.owner === 'player');
         const playerDead = !GameState.player || !GameState.player.alive;
-        if (!hasFriendly && playerDead && !GameState.permanentDefeat) {
+        const noTeammates = GameState.teammates.filter(t => t.alive).length === 0;
+        if (playerDead && noTeammates && !GameState.permanentDefeat) {
             GameState.permanentDefeat = true;
-            console.log('💀 战败！所有据点已失守，游戏结束');
+            console.log('战败！所有友方单位已阵亡，游戏结束');
         }
     }
 

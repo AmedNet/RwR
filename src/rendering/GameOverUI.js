@@ -23,7 +23,7 @@ export function drawGameOver(ctx, renderer) {
         ctx.fillText('\u{1F480} \u6218\u8D25', W / 2, H / 2 - 40);
         ctx.fillStyle = '#ccc';
         ctx.font = '22px sans-serif';
-        ctx.fillText('\u6240\u6709\u636E\u70B9\u5DF2\u5931\u5B88\uFF0C\u6E38\u620F\u7ED3\u675F', W / 2, H / 2 + 10);
+        ctx.fillText('\u6240\u6709\u53CB\u65B9\u5355\u4F4D\u5DF2\u9635\u4EA1\uFF0C\u6E38\u620F\u7ED3\u675F', W / 2, H / 2 + 10);
         const rank = GameState.player ? GameState.player.getRankName() : '\u5217\u5175';
         ctx.fillStyle = '#ff9800';
         ctx.font = '18px sans-serif';
@@ -169,7 +169,7 @@ export function drawGameOver(ctx, renderer) {
         ctx.fillStyle = '#ff9800';
         ctx.font = '18px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('\u26A0\uFE0F \u65E0\u5DF1\u65B9\u636E\u70B9\uFF01\u5931\u5B88\u5373\u8D25\uFF01', W / 2, listY);
+        ctx.fillText('\u26A0\uFE0F \u65E0\u5DF1\u65B9\u636E\u70B9\uFF01\u6218\u53CB\u5168\u706D\u5373\u8D25\uFF01', W / 2, listY);
     }
 
     ctx.restore();
