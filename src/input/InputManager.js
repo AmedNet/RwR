@@ -41,19 +41,21 @@ export const InputManager = {
                 return;
             }
 
-            // ====== 菜单打开时的处理 ======
-            if (GameState.inventoryOpen || GameState.arsenalOpen) {
-                // 关闭菜单
-                if (key === 'e') {
-                    GameState.arsenalOpen = false;
-                    e.preventDefault();
-                    return;
-                }
-                if (key === 'q') {
-                    GameState.inventoryOpen = false;
-                    e.preventDefault();
-                    return;
-                }
+           // ====== 菜单打开时的处理 ======
+           if (GameState.inventoryOpen || GameState.arsenalOpen) {
+               // 关闭菜单
+               if (key === 'e') {
+                   GameState.arsenalOpen = false;
+                   playUISound('click');
+                   e.preventDefault();
+                   return;
+               }
+               if (key === 'q') {
+                   GameState.inventoryOpen = false;
+                   playUISound('click');
+                   e.preventDefault();
+                   return;
+               }
 // 军械库：↑ 键切换上一个分类
 if (GameState.arsenalOpen && key === 'arrowup') {
     GameState.arsenalCategory = (GameState.arsenalCategory + 6) % 7;
@@ -293,27 +295,27 @@ if (GameState.arsenalOpen && key === 's') {
                 return;
             }
 
-            // E 键：打开/关闭军械库
-            if (key === 'e') {
-                const arsenal = GameState.arsenal;
-                const player = GameState.player;
-                if (arsenal && player && arsenal.contains(player)) {
-                    GameState.arsenalOpen = !GameState.arsenalOpen;
-                    playUISound(GameState.arsenalOpen ? 'click' : 'hover');
-                    console.log(GameState.arsenalOpen ? '🔫 打开军械库' : '🔫 关闭军械库');
-                }
-                e.preventDefault();
-                return;
-            }
+          // E 键：打开/关闭军械库
+          if (key === 'e') {
+              const arsenal = GameState.arsenal;
+              const player = GameState.player;
+              if (arsenal && player && arsenal.contains(player)) {
+                  GameState.arsenalOpen = !GameState.arsenalOpen;
+                   playUISound('click');
+                  console.log(GameState.arsenalOpen ? '🔫 打开军械库' : '🔫 关闭军械库');
+              }
+              e.preventDefault();
+              return;
+          }
 
-            // Q 键：打开/关闭背包
-            if (key === 'q') {
-                GameState.inventoryOpen = !GameState.inventoryOpen;
-                playUISound(GameState.inventoryOpen ? 'click' : 'hover');
-                console.log(GameState.inventoryOpen ? '🎒 打开背包' : '🎒 关闭背包');
-                e.preventDefault();
-                return;
-            }
+          // Q 键：打开/关闭背包
+          if (key === 'q') {
+              GameState.inventoryOpen = !GameState.inventoryOpen;
+               playUISound('click');
+              console.log(GameState.inventoryOpen ? '🎒 打开背包' : '🎒 关闭背包');
+              e.preventDefault();
+              return;
+          }
 
             // WASD 移动
             if (key in GameState.keys) {
