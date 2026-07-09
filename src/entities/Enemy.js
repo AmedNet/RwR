@@ -1,6 +1,7 @@
 // src/entities/Enemy.js
 import { GameState } from '../core/GameState.js';
 import { CombatAI } from './CombatAI.js';
+import { rollRandomRank } from '../core/RankSystem.js';
 
 export class Enemy extends CombatAI {
     constructor(x, y, config) {
@@ -21,5 +22,6 @@ export class Enemy extends CombatAI {
             }
         );
         this.config = config;
+        this.setRank(rollRandomRank());
     }
 }

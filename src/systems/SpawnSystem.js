@@ -3,16 +3,33 @@ import { GameState } from '../core/GameState.js';
 import { Enemy } from '../entities/Enemy.js';
 import { Weapon } from '../core/Weapon.js';
 import { WeaponRegistry, WeaponType } from '../core/WeaponRegistry.js';
+import { AIRank, getRankConfig } from '../core/RankSystem.js';
 
-// AI 武器池
+// 所有可用武器（完整池）
+const ALL_WEAPONS = Object.keys(WeaponRegistry).filter(id => 
+    WeaponRegistry[id].aiWeight > 0
+);
+
+// 武器类型分级（用于权重调整）
+const WEAPON_TIER = {
+    [WeaponType.PISTOL]: 0,
+    [WeaponType.SMG]: 0,
+    [WeaponType.RIFLE]: 1,
+    [WeaponType.SHOTGUN]: 1,
+    [WeaponType.SNIPER]: 2,
+    [WeaponType.LAUNCHER]: 2
+};
+
+// 军衔对应的武器类型权重加成（军衔 -> 武器等级 -> 权重倍率）
+const RANK_WEAPON_WEIGHT_MULT = {
+    0: { 0: 3.0, 1: 1.5, 2: 0.5 },  // 列兵：偏好低级武器
+    1: { 0: 2.0, 1: 2.0, 2: 1.0 },  // 军士：均衡偏好中级
+    2: { 0: 1.0, 1: 2.5, 2: 1.5 },  // 军官：偏好中高级
+    3: { 0: 0.5, 1: 1.5, 2: 3.0 }   // 指挥官：偏好高级武器
+};
+
+// 配件池
 const AI_WEAPON_POOL = {
-    guns: Object.keys(WeaponRegistry).filter(id => [
-        WeaponType.PISTOL,
-        WeaponType.RIFLE,
-        WeaponType.SMG,
-        WeaponType.SHOTGUN,
-        WeaponType.SNIPER
-    ].includes(WeaponRegistry[id].type) && WeaponRegistry[id].aiWeight > 0),
     accessories: Object.keys(WeaponRegistry).filter(id => [
         WeaponType.LAUNCHER,
         WeaponType.GRENADE,
@@ -72,69 +89,33 @@ export const SpawnSystem = {
         const enemy = new Enemy(x, y, config);
 
         // 随机分配武器
-        const weapons = this.generateRandomWeapons();
+        const weapons = this.generateRandomWeapons(enemy.rank);
         enemy.setWeapons(weapons);
 
         return enemy;
     },
 
-    // 为 AI 生成随机武器配置
-    generateRandomWeapons() {
+    // 为 AI 生成随机武器配置（根据军衔）
+    generateRandomWeapons(rank = AIRank.PRIVATE) {
         const weapons = [];
+        const accChance1 = 0.3 + rank * 0.2;
+        const accChance2 = 0.1 + rank * 0.2;
 
-        // 槽位0: 固定军刀
         weapons.push(new Weapon('knife'));
 
-        // 槽位1: 加权随机选择枪械
-        const randomGun = weightedRandom(AI_WEAPON_POOL.guns);
-        const gun = new Weapon(randomGun);
-        gun.isInfiniteAmmo = true; // AI 枪械无限备弹
-        weapons.push(gun);
-
-        // 槽位2: 加权随机配件（可能为空）
-        if (Math.random() < 0.5) { // 50% 概率有配件
-            const randomAcc = weightedRandom(AI_WEAPON_POOL.accessories);
-            weapons.push(new Weapon(randomAcc));
-        } else {
-            weapons.push(null);
-        }
-
-        // 槽位3: 加权随机配件（可能为空）
-        if (Math.random() < 0.3) { // 30% 概率有第二个配件
-            const randomAcc = weightedRandom(AI_WEAPON_POOL.accessories);
-            weapons.push(new Weapon(randomAcc));
-        } else {
-            weapons.push(null);
-        }
-
-        return weapons;
-    },
-
-    // 为队友生成随机武器配置
-    generateTeammateWeapons() {
-        const weapons = [];
-
-        // 槽位0: 初始近战武器
-        weapons.push(new Weapon('knife'));
-
-        // 槽位1: 加权随机选择枪械
-        const randomGun = weightedRandom(AI_WEAPON_POOL.guns);
+        const randomGun = this.weightedRandomByRank(ALL_WEAPONS, rank);
         const gun = new Weapon(randomGun);
         gun.isInfiniteAmmo = true;
         weapons.push(gun);
 
-        // 槽位2: 加权随机配件（50%概率）
-        if (Math.random() < 0.5) {
-            const randomAcc = weightedRandom(AI_WEAPON_POOL.accessories);
-            weapons.push(new Weapon(randomAcc));
+        if (Math.random() < accChance1) {
+            weapons.push(new Weapon(weightedRandom(AI_WEAPON_POOL.accessories)));
         } else {
             weapons.push(null);
         }
 
-        // 槽位3: 加权随机配件（30%概率）
-        if (Math.random() < 0.3) {
-            const randomAcc = weightedRandom(AI_WEAPON_POOL.accessories);
-            weapons.push(new Weapon(randomAcc));
+        if (Math.random() < accChance2) {
+            weapons.push(new Weapon(weightedRandom(AI_WEAPON_POOL.accessories)));
         } else {
             weapons.push(null);
         }
@@ -142,9 +123,40 @@ export const SpawnSystem = {
         return weapons;
     },
 
+    // 根据军衔调整武器权重的随机选择
+    weightedRandomByRank(weaponIds, rank) {
+        const weightMult = RANK_WEAPON_WEIGHT_MULT[rank] || RANK_WEAPON_WEIGHT_MULT[0];
+        let totalWeight = 0;
+        const weights = [];
+        
+        for (const id of weaponIds) {
+            const config = WeaponRegistry[id];
+            const baseWeight = config?.aiWeight || 10;
+            const tier = WEAPON_TIER[config.type] ?? 0;
+            const mult = weightMult[tier] ?? 1.0;
+            const finalWeight = baseWeight * mult;
+            weights.push(finalWeight);
+            totalWeight += finalWeight;
+        }
+        
+        let random = Math.random() * totalWeight;
+        for (let i = 0; i < weaponIds.length; i++) {
+            random -= weights[i];
+            if (random <= 0) {
+                return weaponIds[i];
+            }
+        }
+        return weaponIds[weaponIds.length - 1];
+    },
+
+    // 为队友生成随机武器配置（根据军衔）
+    generateTeammateWeapons(rank = AIRank.PRIVATE) {
+        return this.generateRandomWeapons(rank);
+    },
+
     // 为队友装备武器
     equipTeammate(teammate) {
-        const weapons = this.generateTeammateWeapons();
+        const weapons = this.generateTeammateWeapons(teammate.rank);
         teammate.setWeapons(weapons);
     },
 

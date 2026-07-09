@@ -4,6 +4,7 @@ import { EventBus } from '../core/EventBus.js';
 import { Terrain } from '../core/Map.js';
 import { EffectsManager, ParticleType } from '../utils/EffectsManager.js';
 import { playExplosion, playBulletHit } from '../utils/SoundManager.js';
+import { getRankConfig, AIRank } from '../core/RankSystem.js';
 
 /** 碰撞特效配置常量 */
 const COLLISION_FX = {
@@ -85,6 +86,8 @@ export const CollisionSystem = {
         this._checkBulletVsBullet(bullets);
         this._checkBulletsVsEntities(bullets, player, enemies, teammates);
         GameState.bullets = GameState.bullets.filter(b => b.alive);
+        // 清理死亡动画结束的敌人
+        GameState.enemies = GameState.enemies.filter(e => e.alive);
     },
 
     // ─── 实体 vs 地图 ───
@@ -227,6 +230,7 @@ export const CollisionSystem = {
     },
 
     _onBulletHitEnemy(bullet, enemy, player, enemies, index) {
+        const wasDying = enemy.dying;
         enemy.takeDamage(bullet.damage, bullet.x, bullet.y);
         if (bullet.knockback > 0) {
             const kbAngle = Math.atan2(bullet.vy, bullet.vx);
@@ -237,15 +241,16 @@ export const CollisionSystem = {
         EffectsManager.addDamageNumber(enemy.x, enemy.y, bullet.damage, false);
         EffectsManager.spawnBloodSplatter(bullet.x, bullet.y, bullet.vx, bullet.vy, bullet.damage);
         playBulletHit(enemy);
-        if (!enemy.alive) {
-            EffectsManager.spawnParticles(enemy.x, enemy.y, ParticleType.EXPLOSION, COLLISION_FX.ENEMY_DEATH_PARTICLE_COUNT);
+        // 检测敌人刚进入dying状态的瞬间（takeDamage中设置的）
+        if (!wasDying && enemy.dying) {
             EffectsManager.triggerShake(COLLISION_FX.ENEMY_DEATH_SHAKE_INTENSITY, COLLISION_FX.ENEMY_DEATH_SHAKE_DURATION);
             if (bullet.shooter === player && player.alive) {
                 player.addKill();
-                GameState.rp += COLLISION_FX.KILL_RP_REWARD;
-                console.log(`💰 击杀敌人！+${COLLISION_FX.KILL_RP_REWARD} RP (当前: ${GameState.rp})`);
+                const rankCfg = getRankConfig(enemy.rank || AIRank.PRIVATE);
+                const rpReward = rankCfg.killReward;
+                GameState.rp += rpReward;
+                console.log(`💰 击杀${rankCfg.name}！+${rpReward} RP (当前: ${GameState.rp})`);
             }
-            enemies.splice(index, 1);
         }
     },
 

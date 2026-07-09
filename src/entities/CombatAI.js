@@ -10,6 +10,7 @@ import { EffectsManager, ParticleType } from '../utils/EffectsManager.js';
 import * as SoundManager from '../utils/SoundManager.js';
 import { WEAPON_VALUE, evaluateWeaponChoice } from '../utils/WeaponAI.js';
 import { SlowEffect, STATUS_EFFECT_CONFIG } from '../utils/StatusEffects.js';
+import { AIRank, getRankConfig } from '../core/RankSystem.js';
 
 export class CombatAI extends Entity {
     // AI 角色常量
@@ -47,9 +48,10 @@ export class CombatAI extends Entity {
     static MELEE_LINE_LENGTH = 25;
     static MELEE_LINE_WIDTH = 4;
     static DROP_CHANCE = 0.05;
-    static HEALTH_BAR_W = 40;
-    static HEALTH_BAR_H = 5;
-    static HEALTH_BAR_Y = -25;
+    // 军衔系统常量
+    static RECRUIT_RANGE = 300;
+    static RECRUIT_CHECK_INTERVAL = 60;
+    static FOLLOW_DISTANCE = 80;
 
     constructor(x, y, entityConfig, aiConfig) {
         super(x, y, entityConfig);
@@ -79,6 +81,61 @@ export class CombatAI extends Entity {
         this.dying = false;
         this.deathTimer = 0;
         this.healSwitchTimer = 0;
+        // 军衔系统
+        this.rank = AIRank.PRIVATE;
+        this.subordinates = [];
+        this.leader = null;
+        this.recruitTimer = 0;
+    }
+
+    // ─── 军衔系统方法 ───
+
+    setRank(rank) {
+        this.rank = rank;
+        const config = getRankConfig(rank);
+        this.maxHealth = Math.floor(this.maxHealth * config.healthMultiplier);
+        this.health = this.maxHealth;
+        this.damage = Math.floor(this.damage * config.damageMultiplier);
+    }
+
+    hasLeader() {
+        return this.leader !== null && this.leader.alive;
+    }
+
+    setLeader(leader) {
+        this.leader = leader;
+    }
+
+    tryRecruitSubordinates() {
+        const config = getRankConfig(this.rank);
+        if (config.maxSubordinates === 0) return;
+        this.subordinates = this.subordinates.filter(s => s.alive);
+        if (this.subordinates.length >= config.maxSubordinates) return;
+        this.recruitTimer++;
+        if (this.recruitTimer < CombatAI.RECRUIT_CHECK_INTERVAL) return;
+        this.recruitTimer = 0;
+        const allies = this.getAllies();
+        for (const ally of allies) {
+            if (this.subordinates.length >= config.maxSubordinates) break;
+            if (ally === this || !ally.alive || ally.hasLeader()) continue;
+            if (ally.rank >= this.rank) continue;
+            const dist = Math.hypot(ally.x - this.x, ally.y - this.y);
+            if (dist > CombatAI.RECRUIT_RANGE) continue;
+            ally.setLeader(this);
+            this.subordinates.push(ally);
+        }
+    }
+
+    releaseSubordinates() {
+        for (const sub of this.subordinates) {
+            if (sub.alive) sub.leader = null;
+        }
+        this.subordinates = [];
+    }
+
+    getLeaderTarget() {
+        if (!this.hasLeader()) return null;
+        return { x: this.leader.x, y: this.leader.y };
     }
 
     setWeapons(weapons) {
@@ -175,6 +232,8 @@ export class CombatAI extends Entity {
     }
 
     updateRole() {
+        // 有长官的小弟不参与角色切换
+        if (this.hasLeader()) return;
         const ownPoints = this.getOwnPoints();
         const targetPoints = this.getTargetPoints();
         if (this.role !== 0) return;
@@ -315,6 +374,10 @@ export class CombatAI extends Entity {
         if (!this.alive) return;
         this.updateStatusEffects();
         this.savePrevPosition();
+        // 军衔召集逻辑
+        if (this.rank > AIRank.PRIVATE) {
+            this.tryRecruitSubordinates();
+        }
         this.updateRole();
 
         if (this.healSwitchTimer > 0) {
@@ -365,9 +428,38 @@ export class CombatAI extends Entity {
     }
 
     chooseMoveTarget(closestTarget, closestDist, captureTarget) {
+        // 有长官的小弟：优先跟随长官
+        if (this.hasLeader()) {
+            return this.chooseFollowLeaderTarget(closestTarget, closestDist);
+        }
         if (this.role === CombatAI.ROLE_GUARD) return this.chooseGuardMoveTarget(closestTarget, closestDist, captureTarget);
         if (this.role === CombatAI.ROLE_ATTACK) return this.chooseAttackMoveTarget(closestTarget, closestDist, captureTarget);
         return this.chooseWanderMoveTarget(closestTarget, closestDist, captureTarget);
+    }
+
+    chooseFollowLeaderTarget(closestTarget, closestDist) {
+        const leaderPos = this.getLeaderTarget();
+        if (!leaderPos) return null;
+        const distToLeader = Math.hypot(leaderPos.x - this.x, leaderPos.y - this.y);
+        // 有近距离威胁，优先攻击
+        if (closestTarget && closestDist < 200) {
+            if (!this.hasLineOfSight(closestTarget)) return this.getFlankPosition(closestTarget);
+            return this.getCombatPosition(closestTarget, CombatAI.FOLLOW_DISTANCE);
+        }
+        // 离长官太远，快速跟上
+        if (distToLeader > CombatAI.FOLLOW_DISTANCE * 2) {
+            return leaderPos;
+        }
+        // 在长官周围小范围巡逻
+        if (distToLeader > CombatAI.FOLLOW_DISTANCE) {
+            return leaderPos;
+        }
+        const angle = Math.atan2(this.y - leaderPos.y, this.x - leaderPos.x);
+        const patrolAngle = angle + Math.sin(this.cycleTimer * 0.02) * 0.5;
+        return {
+            x: leaderPos.x + Math.cos(patrolAngle) * CombatAI.FOLLOW_DISTANCE,
+            y: leaderPos.y + Math.sin(patrolAngle) * CombatAI.FOLLOW_DISTANCE
+        };
     }
 
     chooseGuardMoveTarget(closestTarget, closestDist, captureTarget) {
@@ -731,7 +823,9 @@ export class CombatAI extends Entity {
         ctx.strokeStyle = this.getRoleStroke();
         ctx.lineWidth = 3;
         ctx.stroke();
-        this.drawHealthBar(ctx, -20, CombatAI.HEALTH_BAR_Y, CombatAI.HEALTH_BAR_W, CombatAI.HEALTH_BAR_H);
+        if (this.rank > AIRank.PRIVATE) {
+            this.drawRankStars(ctx);
+        }
         ctx.fillStyle = '#fff';
         ctx.font = 'bold 12px sans-serif';
         ctx.textAlign = 'center';
@@ -741,18 +835,20 @@ export class CombatAI extends Entity {
         ctx.restore();
     }
 
+    drawRankStars(ctx) {
+        const config = getRankConfig(this.rank);
+        const stars = config.stars;
+        ctx.fillStyle = config.starColor;
+        ctx.font = '16px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('★'.repeat(stars), 0, -28);
+    }
+
     getRoleStroke() {
         if (this.role === 0) return '#FFD740';
         if (this.role === 1) return '#ff5252';
         return '#E040FB';
-    }
-
-    drawHealthBar(ctx, x, y, w, h) {
-        const hpPercent = this.health / this.maxHealth;
-        ctx.fillStyle = 'rgba(0,0,0,0.5)';
-        ctx.fillRect(x, y, w, h);
-        ctx.fillStyle = hpPercent > 0.6 ? '#4CAF50' : (hpPercent > 0.3 ? '#FFC107' : '#f44336');
-        ctx.fillRect(x, y, w * hpPercent, h);
     }
 
     drawWeapon(ctx) {
@@ -807,6 +903,9 @@ export class CombatAI extends Entity {
                     this.alive = false;
                 }
                 SoundManager.playDie(distance);
+                if (this.rank > AIRank.PRIVATE) {
+                    this.releaseSubordinates();
+                }
                 this.dropWeaponOnDeath();
             }
         } else {
