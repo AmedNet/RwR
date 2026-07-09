@@ -1,6 +1,7 @@
 // src/entities/Teammate.js
 import { CombatAI } from './CombatAI.js';
 import { rollRandomRank, AIRank } from '../core/RankSystem.js';
+import { rollRandomClass } from '../core/ClassSystem.js';
 
 export class Teammate extends CombatAI {
     constructor(x, y, config) {
@@ -23,26 +24,8 @@ export class Teammate extends CombatAI {
         );
         this.config = config;
         this.setRank(rollRandomRank());
+        const rankBonus = this.rank * 0.05;
+        this.setClass(rollRandomClass(rankBonus));
     }
 
-    drawBody(ctx) {
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
-        ctx.fillStyle = this.color;
-        ctx.fill();
-        ctx.strokeStyle = this.getRoleStroke();
-        ctx.lineWidth = 3;
-        ctx.stroke();
-        if (this.rank > AIRank.PRIVATE) {
-            this.drawRankStars(ctx);
-        }
-        ctx.fillStyle = '#BBDEFB';
-        ctx.font = '12px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        const icons = ['◆', '▲', '●'];
-        ctx.fillText(icons[this.role] || '✦', 0, -2);
-        ctx.restore();
-    }
 }

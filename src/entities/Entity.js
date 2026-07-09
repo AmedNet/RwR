@@ -36,6 +36,14 @@ export class Entity {
         }
     }
 
+    hasStatusEffect(name) {
+        return this.statusEffects.some(e => e.name === name);
+    }
+
+    getStatusEffect(name) {
+        return this.statusEffects.find(e => e.name === name);
+    }
+
     updateStatusEffects() {
         for (let i = this.statusEffects.length - 1; i >= 0; i--) {
             this.statusEffects[i].update(this);

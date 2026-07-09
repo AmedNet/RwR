@@ -130,3 +130,66 @@ export class BurnEffect extends StatusEffect {
         }
     }
 }
+
+// 弹药兵增益效果：提升换弹速度和射速
+export class AmmoBuffEffect extends StatusEffect {
+    constructor(duration = 30) {
+        super('ammoBuff', '弹药补给', '⊕', duration, '#FFB300');
+    }
+
+    getReloadSpeedMult() {
+        return 1.3;
+    }
+
+    getFireRateMult() {
+        return 1.2;
+    }
+
+    draw(ctx, entity) {
+        if (!entity) return;
+        // 金色脉冲光环
+        const pulse = 0.5 + Math.sin(Date.now() * 0.008) * 0.3;
+        ctx.save();
+        ctx.strokeStyle = `rgba(255, 179, 0, ${pulse * 0.6})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, entity.radius + 4, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+    }
+}
+
+
+// 医疗兵光环效果：靠近医疗兵时缓慢回血
+export class HealAuraEffect extends StatusEffect {
+    constructor(duration = 30) {
+        super('healAura', '医疗光环', '+', duration, '#4CAF50');
+        this.healTimer = 0;
+        this.healInterval = 6;  // 每6帧回一次血
+        this.healAmount = 1;    // 每次1滴血 = 每秒10滴
+    }
+
+    update(entity) {
+        super.update();
+        if (!entity || !entity.alive) return;
+        if (entity.health >= entity.maxHealth) return;
+        this.healTimer++;
+        if (this.healTimer >= this.healInterval) {
+            this.healTimer = 0;
+            entity.health = Math.min(entity.health + this.healAmount, entity.maxHealth);
+        }
+    }
+
+    draw(ctx, entity) {
+        if (!entity) return;
+        // 绿色脉冲光环
+        const pulse = 0.5 + Math.sin(Date.now() * 0.006) * 0.3;
+        ctx.save();
+        ctx.strokeStyle = `rgba(76, 175, 80, ${pulse * 0.5})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, entity.radius + 4, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+    }
+}

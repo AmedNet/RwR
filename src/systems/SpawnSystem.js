@@ -4,6 +4,7 @@ import { Enemy } from '../entities/Enemy.js';
 import { Weapon } from '../core/Weapon.js';
 import { WeaponRegistry, WeaponType } from '../core/WeaponRegistry.js';
 import { AIRank, getRankConfig } from '../core/RankSystem.js';
+import { UnitClass, getClassConfig } from '../core/ClassSystem.js';
 
 // 所有可用武器（完整池）
 const ALL_WEAPONS = Object.keys(WeaponRegistry).filter(id => 
@@ -26,6 +27,26 @@ const RANK_WEAPON_WEIGHT_MULT = {
     1: { 0: 2.0, 1: 2.0, 2: 1.0 },  // 军士：均衡偏好中级
     2: { 0: 1.0, 1: 2.5, 2: 1.5 },  // 军官：偏好中高级
     3: { 0: 0.5, 1: 1.5, 2: 3.0 }   // 指挥官：偏好高级武器
+};
+
+// 兵种对应的武器类型权重加成
+const CLASS_WEAPON_WEIGHT_MULT = {
+    [UnitClass.NORMAL]: {},   // 普通兵：无额外偏好
+    [UnitClass.MEDIC]: {      // 医疗兵：偏好医疗包
+        medical: 3.0
+    },
+    [UnitClass.SNIPER]: {     // 狙击手：偏好狙击枪
+        sniper: 3.0
+    },
+    [UnitClass.ASSAULT]: {    // 突击兵：偏好霰弹枪/冲锋枪
+        shotgun: 2.0,
+        smg: 2.0
+    },
+    [UnitClass.AMMO]: {       // 弹药兵：偏好轻武器
+        pistol: 2.0,
+        smg: 2.0,
+        launcher: 0.5
+    }
 };
 
 // 配件池
@@ -89,26 +110,34 @@ export const SpawnSystem = {
         const enemy = new Enemy(x, y, config);
 
         // 随机分配武器
-        const weapons = this.generateRandomWeapons(enemy.rank);
+        const weapons = this.generateRandomWeapons(enemy.rank, enemy.unitClass);
         enemy.setWeapons(weapons);
 
         return enemy;
     },
 
-    // 为 AI 生成随机武器配置（根据军衔）
-    generateRandomWeapons(rank = AIRank.PRIVATE) {
+    // 为 AI 生成随机武器配置（根据军衔和兵种）
+    generateRandomWeapons(rank = AIRank.PRIVATE, unitClass = UnitClass.NORMAL) {
         const weapons = [];
         const accChance1 = 0.3 + rank * 0.2;
         const accChance2 = 0.1 + rank * 0.2;
 
         weapons.push(new Weapon('knife'));
 
-        const randomGun = this.weightedRandomByRank(ALL_WEAPONS, rank);
+        const randomGun = this.weightedRandomByClass(ALL_WEAPONS, rank, unitClass);
         const gun = new Weapon(randomGun);
         gun.isInfiniteAmmo = true;
         weapons.push(gun);
 
-        if (Math.random() < accChance1) {
+        // 医疗兵保证携带医疗包
+        if (unitClass === UnitClass.MEDIC) {
+            const medicalIds = AI_WEAPON_POOL.accessories.filter(id => WeaponRegistry[id].type === WeaponType.MEDICAL);
+            if (medicalIds.length > 0) {
+                weapons.push(new Weapon(medicalIds[Math.floor(Math.random() * medicalIds.length)]));
+            } else {
+                weapons.push(Math.random() < accChance1 ? new Weapon(weightedRandom(AI_WEAPON_POOL.accessories)) : null);
+            }
+        } else if (Math.random() < accChance1) {
             weapons.push(new Weapon(weightedRandom(AI_WEAPON_POOL.accessories)));
         } else {
             weapons.push(null);
@@ -149,14 +178,42 @@ export const SpawnSystem = {
         return weaponIds[weaponIds.length - 1];
     },
 
-    // 为队友生成随机武器配置（根据军衔）
-    generateTeammateWeapons(rank = AIRank.PRIVATE) {
-        return this.generateRandomWeapons(rank);
+    // 根据军衔+兵种调整武器权重的随机选择
+    weightedRandomByClass(weaponIds, rank, unitClass) {
+        const rankMult = RANK_WEAPON_WEIGHT_MULT[rank] || RANK_WEAPON_WEIGHT_MULT[0];
+        const classMult = CLASS_WEAPON_WEIGHT_MULT[unitClass] || {};
+        let totalWeight = 0;
+        const weights = [];
+
+        for (const id of weaponIds) {
+            const config = WeaponRegistry[id];
+            const baseWeight = config?.aiWeight || 10;
+            const tier = WEAPON_TIER[config.type] ?? 0;
+            const rMult = rankMult[tier] ?? 1.0;
+            const cMult = classMult[config.type] ?? 1.0;
+            const finalWeight = baseWeight * rMult * cMult;
+            weights.push(finalWeight);
+            totalWeight += finalWeight;
+        }
+
+        let random = Math.random() * totalWeight;
+        for (let i = 0; i < weaponIds.length; i++) {
+            random -= weights[i];
+            if (random <= 0) {
+                return weaponIds[i];
+            }
+        }
+        return weaponIds[weaponIds.length - 1];
+    },
+
+    // 为队友生成随机武器配置（根据军衔和兵种）
+    generateTeammateWeapons(rank = AIRank.PRIVATE, unitClass = UnitClass.NORMAL) {
+        return this.generateRandomWeapons(rank, unitClass);
     },
 
     // 为队友装备武器
     equipTeammate(teammate) {
-        const weapons = this.generateTeammateWeapons(teammate.rank);
+        const weapons = this.generateTeammateWeapons(teammate.rank, teammate.unitClass);
         teammate.setWeapons(weapons);
     },
 

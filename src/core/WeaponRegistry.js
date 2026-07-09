@@ -212,7 +212,7 @@ export const WeaponRegistry = {
         knockback: 15,
         bulletColor: '#00E676',      // 绿色子弹
         bulletGlow: '#00C853',       // 发光颜色
-        aiWeight: 5,                 // AI持有概率权重（狙击枪稀有）
+        aiWeight: 3,                 // AI持有概率权重（狙击枪极稀有）
         
         // 穿透配置
         penetration: {
@@ -263,7 +263,7 @@ export const WeaponRegistry = {
         knockback: 60,            // 同手雷击退
         bulletColor: '#F44336',      // 红色爆炸弹
         bulletGlow: '#D32F2F',       // 发光颜色
-        aiWeight: 2,                 // AI持有概率权重（反器材极稀有）
+        aiWeight: 1,                 // AI持有概率权重（反器材传说级稀有）
         
         // 爆炸弹配置
         explosionRadius: 70,      // 爆炸半径（像素）

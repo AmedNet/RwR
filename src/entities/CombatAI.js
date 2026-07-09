@@ -9,8 +9,9 @@ import { Grenade } from './Grenade.js';
 import { EffectsManager, ParticleType } from '../utils/EffectsManager.js';
 import * as SoundManager from '../utils/SoundManager.js';
 import { WEAPON_VALUE, evaluateWeaponChoice } from '../utils/WeaponAI.js';
-import { SlowEffect, STATUS_EFFECT_CONFIG } from '../utils/StatusEffects.js';
+import { SlowEffect, AmmoBuffEffect, HealAuraEffect, STATUS_EFFECT_CONFIG } from '../utils/StatusEffects.js';
 import { AIRank, getRankConfig } from '../core/RankSystem.js';
+import { UnitClass, getClassConfig } from '../core/ClassSystem.js';
 
 export class CombatAI extends Entity {
     // AI 角色常量
@@ -52,6 +53,16 @@ export class CombatAI extends Entity {
     static RECRUIT_RANGE = 300;
     static RECRUIT_CHECK_INTERVAL = 60;
     static FOLLOW_DISTANCE = 80;
+    // 瞄准延迟常量（帧数）
+    static AIM_DELAY = {
+        sniper: 75,      // 狙击枪：1.25秒
+        rifle: 25,       // 步枪：0.4秒
+        shotgun: 15,     // 霰弹枪：0.25秒
+        smg: 12,         // 冲锋枪：0.2秒
+        pistol: 15,      // 手枪：0.25秒
+        launcher: 40,    // 火箭筒：0.67秒
+        default: 20      // 默认：0.33秒
+    };
 
     constructor(x, y, entityConfig, aiConfig) {
         super(x, y, entityConfig);
@@ -86,6 +97,12 @@ export class CombatAI extends Entity {
         this.subordinates = [];
         this.leader = null;
         this.recruitTimer = 0;
+        // 兵种系统
+        this.unitClass = UnitClass.NORMAL;
+        this.healTimer = 0;
+        // 瞄准系统
+        this.aimTimer = 0;
+        this.currentAimTarget = null;
     }
 
     // ─── 军衔系统方法 ───
@@ -96,6 +113,101 @@ export class CombatAI extends Entity {
         this.maxHealth = Math.floor(this.maxHealth * config.healthMultiplier);
         this.health = this.maxHealth;
         this.damage = Math.floor(this.damage * config.damageMultiplier);
+    }
+
+    setClass(unitClass) {
+        this.unitClass = unitClass;
+        const config = getClassConfig(unitClass);
+        this.maxHealth = Math.floor(this.maxHealth * config.healthMultiplier);
+        this.health = this.maxHealth;
+        this.damage = Math.floor(this.damage * config.damageMultiplier);
+        this.speed = this.speed * config.speedMultiplier;
+    }
+
+    // 弹药兵：给附近队友施加弹药补给增益
+    applyAmmoBuffToAllies() {
+        if (this.unitClass !== UnitClass.AMMO) return;
+        const config = getClassConfig(UnitClass.AMMO);
+        const auraRange = config.auraRange || 200;
+        const allies = this.getAllies();
+        for (const ally of allies) {
+            if (ally === this || !ally.alive) continue;
+            const dist = Math.hypot(ally.x - this.x, ally.y - this.y);
+            if (dist <= auraRange) {
+                ally.addStatusEffect(new AmmoBuffEffect(30));
+            }
+        }
+        // 友军弹药兵也给玩家施加增益
+        if (this.faction === 'player' && GameState.player && GameState.player.alive) {
+            const dist = Math.hypot(GameState.player.x - this.x, GameState.player.y - this.y);
+            if (dist <= auraRange) {
+                GameState.player.addStatusEffect(new AmmoBuffEffect(30));
+            }
+        }
+    }
+
+    // 检查是否有弹药补给增益
+    hasAmmoBuff() {
+        return this.hasStatusEffect('ammoBuff');
+    }
+
+    // 医疗兵：给附近队友施加医疗光环
+    applyHealAuraToAllies() {
+        if (this.unitClass !== UnitClass.MEDIC) return;
+        const config = getClassConfig(UnitClass.MEDIC);
+        const auraRange = config.healAuraRange || 200;
+        const allies = this.getAllies();
+        for (const ally of allies) {
+            if (ally === this || !ally.alive) continue;
+            const dist = Math.hypot(ally.x - this.x, ally.y - this.y);
+            if (dist <= auraRange) {
+                ally.addStatusEffect(new HealAuraEffect(30));
+            }
+        }
+        // 友军医疗兵也给玩家施加光环
+        if (this.faction === 'player' && GameState.player && GameState.player.alive) {
+            const dist = Math.hypot(GameState.player.x - this.x, GameState.player.y - this.y);
+            if (dist <= auraRange) {
+                GameState.player.addStatusEffect(new HealAuraEffect(30));
+            }
+        }
+    }
+
+    tryHealAllies() {
+        if (this.unitClass !== UnitClass.MEDIC) return;
+        const config = getClassConfig(UnitClass.MEDIC);
+        if (this.healTimer > 0) {
+            this.healTimer--;
+            return;
+        }
+        const allies = this.getAllies();
+        let closestAlly = null;
+        let closestDist = Infinity;
+        for (const ally of allies) {
+            if (ally === this || !ally.alive) continue;
+            if (ally.health >= ally.maxHealth) continue;
+            const dist = Math.hypot(ally.x - this.x, ally.y - this.y);
+            if (dist > config.healRange) continue;
+            if (dist < closestDist) {
+                closestAlly = ally;
+                closestDist = dist;
+            }
+        }
+        // 友军医疗兵也检查玩家
+        if (this.faction === 'player' && GameState.player && GameState.player.alive) {
+            if (GameState.player.health < GameState.player.maxHealth) {
+                const dist = Math.hypot(GameState.player.x - this.x, GameState.player.y - this.y);
+                if (dist <= config.healRange && dist < closestDist) {
+                    closestAlly = GameState.player;
+                    closestDist = dist;
+                }
+            }
+        }
+        if (closestAlly) {
+            closestAlly.health = Math.min(closestAlly.health + config.healAmount, closestAlly.maxHealth);
+            this.healTimer = config.healCooldown;
+            EffectsManager.spawnParticles(closestAlly.x, closestAlly.y, ParticleType.HEAL, 5);
+        }
     }
 
     hasLeader() {
@@ -136,6 +248,29 @@ export class CombatAI extends Entity {
     getLeaderTarget() {
         if (!this.hasLeader()) return null;
         return { x: this.leader.x, y: this.leader.y };
+    }
+
+    // 获取武器瞄准延迟
+    getAimDelay(weapon) {
+        if (!weapon || !weapon.config) return CombatAI.AIM_DELAY.default;
+        const type = weapon.config.type;
+        return CombatAI.AIM_DELAY[type] || CombatAI.AIM_DELAY.default;
+    }
+
+    // 更新瞄准状态，返回是否可以射击
+    updateAim(target) {
+        // 目标改变或新目标，重置瞄准计时
+        if (this.currentAimTarget !== target) {
+            this.currentAimTarget = target;
+            const weapon = this.getActiveWeapon();
+            this.aimTimer = this.getAimDelay(weapon);
+        }
+        // 倒计时
+        if (this.aimTimer > 0) {
+            this.aimTimer--;
+            return false;
+        }
+        return true;
     }
 
     setWeapons(weapons) {
@@ -274,11 +409,18 @@ export class CombatAI extends Entity {
 
     getAwarenessRange() {
         const weapon = this.getActiveWeapon();
-        if (!weapon) return 550;
-        if (weapon.config.type === 'sniper') return 850;
-        if (weapon.config.type === 'rifle' || weapon.config.type === 'launcher') return 700;
-        if (weapon.config.type === 'smg') return 550;
-        return 500;
+        let base = 550;
+        if (weapon) {
+            if (weapon.config.type === 'sniper') base = 850;
+            else if (weapon.config.type === 'rifle' || weapon.config.type === 'launcher') base = 700;
+            else if (weapon.config.type === 'smg') base = 550;
+            else base = 500;
+        }
+        // 狙击手兵种加成
+        if (this.unitClass === UnitClass.SNIPER) {
+            base += getClassConfig(UnitClass.SNIPER).awarenessBonus || 300;
+        }
+        return base;
     }
 
     hasLineOfSight(target) {
@@ -378,6 +520,12 @@ export class CombatAI extends Entity {
         if (this.rank > AIRank.PRIVATE) {
             this.tryRecruitSubordinates();
         }
+        // 医疗兵治疗友军
+        this.tryHealAllies();
+        // 医疗兵光环效果
+        this.applyHealAuraToAllies();
+        // 弹药兵给附近队友施加增益
+        this.applyAmmoBuffToAllies();
         this.updateRole();
 
         if (this.healSwitchTimer > 0) {
@@ -401,7 +549,14 @@ export class CombatAI extends Entity {
         if (closestTarget) this.switchWeaponBasedOnCombat(closestTarget, closestDist);
 
         const weapon = this.getActiveWeapon();
+        // 弹药补给增益状态
+        const ammoBuff = this.getStatusEffect('ammoBuff');
         if (weapon) {
+            // 弹药补给增益：换弹速度加成
+            const reloadMult = ammoBuff ? ammoBuff.getReloadSpeedMult() : 1.0;
+            if (weapon.isReloading && reloadMult > 1.0) {
+                weapon.reloadTimer -= (reloadMult - 1.0);
+            }
             weapon.updateReload();
             weapon.updateRecoilAndSpread();
         }
@@ -413,9 +568,13 @@ export class CombatAI extends Entity {
             }
         }
 
+        // 弹药补给增益：射速加成
+        const fireRateMult = ammoBuff ? ammoBuff.getFireRateMult() : 1.0;
+        // 更新瞄准状态
+        const canAimFire = closestTarget ? this.updateAim(closestTarget) : true;
         if (this.shootCooldown > 0) {
-            this.shootCooldown--;
-        } else if (weapon) {
+            this.shootCooldown -= fireRateMult;
+        } else if (weapon && canAimFire) {
             if (weapon.config.type === 'medical' && this.health < this.maxHealth) {
                 this.fireWeapon(weapon, null, 0);
             } else if (closestTarget && closestDist < this.getEngageRange(weapon) && this.canFireAt(weapon, closestTarget)) {
@@ -634,7 +793,11 @@ export class CombatAI extends Entity {
             tvy = target.y - target.prevY;
         }
 
-        const predictionAccuracy = 0.35 + Math.random() * 0.4;
+        let predictionAccuracy = 0.35 + Math.random() * 0.4;
+        // 狙击手精度加成
+        if (this.unitClass === UnitClass.SNIPER) {
+            predictionAccuracy += getClassConfig(UnitClass.SNIPER).accuracyBonus || 0.2;
+        }
         let predictX = target.x + tvx * travelTime * predictionAccuracy;
         let predictY = target.y + tvy * travelTime * predictionAccuracy;
         const maxOffset = dist * 0.25;
@@ -645,7 +808,7 @@ export class CombatAI extends Entity {
             predictY = target.y + (predictY - target.y) * scale;
         }
 
-        const errorRange = Math.min(14 + dist * 0.11, 70);
+        const errorRange = Math.min(6 + dist * 0.05, 35);
         predictX += (Math.random() - 0.5) * errorRange;
         predictY += (Math.random() - 0.5) * errorRange;
         return { x: predictX, y: predictY };
@@ -695,7 +858,9 @@ export class CombatAI extends Entity {
         const speed = weapon.config.bulletSpeed || this.bulletSpeed;
         const predicted = this.predictTargetPosition(target, speed);
         const angle = Math.atan2(predicted.y - this.y, predicted.x - this.x);
-        const baseAngle = angle + weapon.getShotAngleOffset();
+        // AI 压枪补偿：根据当前后坐力反向修正弹道
+        const recoilCompensation = weapon.currentRecoil * 0.65;
+        const baseAngle = angle + weapon.getShotAngleOffset() + recoilCompensation;
 
         if (weaponType === 'shotgun') {
             const pellets = weapon.config.pellets || 8;
@@ -826,12 +991,13 @@ export class CombatAI extends Entity {
         if (this.rank > AIRank.PRIVATE) {
             this.drawRankStars(ctx);
         }
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 12px sans-serif';
+        // 中心图标表示兵种，使用描边颜色
+        const classConfig = getClassConfig(this.unitClass);
+        ctx.fillStyle = this.getRoleStroke();
+        ctx.font = 'bold 13px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        const icons = ['◆', '▲', '●'];
-        ctx.fillText(icons[this.role] || '✧', 0, 0);
+        ctx.fillText(classConfig.icon, 0, 0);
         ctx.restore();
     }
 
@@ -846,6 +1012,13 @@ export class CombatAI extends Entity {
     }
 
     getRoleStroke() {
+        if (this.faction === 'player') {
+            // 友军冷色调
+            if (this.role === 0) return '#80DEEA';  // 守卫：冰蓝
+            if (this.role === 1) return '#64B5F6';  // 攻击：钢蓝
+            return '#9FA8DA';  // 游走：淡紫蓝
+        }
+        // 敌军暖色调
         if (this.role === 0) return '#FFD740';
         if (this.role === 1) return '#ff5252';
         return '#E040FB';
