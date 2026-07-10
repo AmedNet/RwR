@@ -600,9 +600,9 @@ export const WeatherRenderer = {
             ctx.fillRect(0, 0, w, h);
         }
         
-        // 增强雾效果
+        // 增强雾效果（消散时同步淡出，避免突兀消失）
         const fogRadius = weatherSystem.getFogRadius();
-        if (fogRadius > 10 && GameState.player && GameState.player.alive) {
+        if (fogRadius > 5 && GameState.player && GameState.player.alive) {
             const player = GameState.player;
             const zoom = GameState.camera.zoom || 1;
             const offsetX = GameState.camera.offsetX || 0;
@@ -615,14 +615,41 @@ export const WeatherRenderer = {
             const innerR = fogRadius * zoom * 0.3;
             const outerR = fogRadius * zoom * 1.8;
             
+            // 消散系数：fogRadius 越小，雾越淡（平滑淡出而非突然消失）
+            const fadeFactor = Math.min(1, fogRadius / 250);
+            
             const gradient = ctx.createRadialGradient(px, py, innerR, px, py, outerR);
             gradient.addColorStop(0, 'rgba(200,200,200,0)');
-            gradient.addColorStop(0.4, 'rgba(180,180,180,0.1)');
-            gradient.addColorStop(0.7, 'rgba(160,160,160,0.3)');
-            gradient.addColorStop(1, 'rgba(140,140,140,0.6)');
+            gradient.addColorStop(0.3, `rgba(185,185,185,${0.06 * fadeFactor})`);
+            gradient.addColorStop(0.5, `rgba(180,180,180,${0.1 * fadeFactor})`);
+            gradient.addColorStop(0.7, `rgba(160,160,160,${0.3 * fadeFactor})`);
+            gradient.addColorStop(0.85, `rgba(150,150,150,${0.45 * fadeFactor})`);
+            gradient.addColorStop(1, `rgba(140,140,140,${0.6 * fadeFactor})`);
             
             ctx.fillStyle = gradient;
             ctx.fillRect(0, 0, w, h);
+            
+            // 消散阶段：在雾边缘生成飘散的薄雾残缕（视觉过渡更自然）
+            if (fadeFactor < 0.8 && fadeFactor > 0.02) {
+                const wispCount = Math.floor(12 * (1 - fadeFactor));
+                const time = weatherSystem.frameCount * 0.008;
+                ctx.save();
+                for (let i = 0; i < wispCount; i++) {
+                    const angle = (i / wispCount) * Math.PI * 2 + time + Math.sin(time * 0.7 + i) * 0.3;
+                    const dist = outerR * (0.6 + Math.sin(time * 0.5 + i * 1.3) * 0.3);
+                    const wispX = px + Math.cos(angle) * dist;
+                    const wispY = py + Math.sin(angle) * dist;
+                    const wispR = (20 + Math.sin(time + i * 2) * 10) * zoom;
+                    const wispAlpha = 0.08 * fadeFactor * (0.5 + Math.sin(time * 1.5 + i) * 0.5);
+                    
+                    const wispGrad = ctx.createRadialGradient(wispX, wispY, 0, wispX, wispY, wispR);
+                    wispGrad.addColorStop(0, `rgba(190,190,190,${wispAlpha})`);
+                    wispGrad.addColorStop(1, 'rgba(190,190,190,0)');
+                    ctx.fillStyle = wispGrad;
+                    ctx.fillRect(wispX - wispR, wispY - wispR, wispR * 2, wispR * 2);
+                }
+                ctx.restore();
+            }
         }
         
         // 天气特定晕影效果

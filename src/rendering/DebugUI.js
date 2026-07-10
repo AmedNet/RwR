@@ -2,6 +2,7 @@
 import { GameState } from '../core/GameState.js';
 import { WeatherSystem } from '../core/WeatherSystem.js';
 import { DayNightSystem } from '../core/DayNightSystem.js';
+import { AmbientSoundManager } from '../utils/AmbientSoundManager.js';
 
 export function drawDebug(ctx, renderer) {
     ctx.save();
@@ -234,6 +235,63 @@ export function drawDebug(ctx, renderer) {
         h: pauseBtnH,
         action: 'toggleDayNight'
     });
+
+    // ─── 环境音效控制区域 ───
+    const ambientTitleY = pauseBtnY + pauseBtnH + 40;
+    ctx.fillStyle = '#00BCD4';
+    ctx.font = 'bold 24px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('🔊 环境音效', renderer.width / 2, ambientTitleY);
+
+    // 音量滑块
+    const ambSliderW = 300;
+    const ambSliderH = 16;
+    const ambSliderX = renderer.width / 2 - ambSliderW / 2;
+    const ambSliderY = ambientTitleY + 40;
+
+    // 滑块轨道背景
+    ctx.fillStyle = '#333';
+    ctx.beginPath();
+    ctx.roundRect(ambSliderX, ambSliderY, ambSliderW, ambSliderH, 8);
+    ctx.fill();
+
+    // 已填充部分
+    const ambFillW = ambSliderW * AmbientSoundManager.masterVolume;
+    const ambGradient = ctx.createLinearGradient(ambSliderX, 0, ambSliderX + ambFillW, 0);
+    ambGradient.addColorStop(0, '#4CAF50');
+    ambGradient.addColorStop(1, '#81C784');
+    ctx.fillStyle = ambGradient;
+    ctx.beginPath();
+    ctx.roundRect(ambSliderX, ambSliderY, ambFillW, ambSliderH, 8);
+    ctx.fill();
+
+    // 滑块手柄
+    const ambHandleX = ambSliderX + ambFillW;
+    const ambHandleR = 10;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(ambHandleX, ambSliderY + ambSliderH / 2, ambHandleR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#4CAF50';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // 音量百分比文字
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 14px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${Math.round(AmbientSoundManager.masterVolume * 100)}%`, renderer.width / 2, ambSliderY + ambSliderH + 20);
+
+    // 保存环境音效滑块区域
+    renderer.ambientSlider = {
+        x: ambSliderX,
+        y: ambSliderY,
+        w: ambSliderW,
+        h: ambSliderH,
+        handleX: ambHandleX,
+        handleR: ambHandleR
+    };
 
     // 底部提示
     ctx.fillStyle = '#aaa';

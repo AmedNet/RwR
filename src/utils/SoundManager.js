@@ -53,6 +53,10 @@ export function setVolume(vol) {
   if (masterGain) masterGain.gain.value = vol;
 }
 
+export function getAudioContext() {
+  return getCtx();
+}
+
 export function setListenerProvider(provider) {
   listenerProvider = provider;
 }

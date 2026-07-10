@@ -8,6 +8,7 @@ import { WeaponPickup } from '../entities/WeaponPickup.js';
 import { playPickup, playUISound } from '../utils/SoundManager.js';
 import { WeatherSystem } from '../core/WeatherSystem.js';
 import { DayNightSystem } from '../core/DayNightSystem.js';
+import { AmbientSoundManager } from '../utils/AmbientSoundManager.js';
 
 export const InputManager = {
     setup() {
@@ -349,6 +350,22 @@ if (GameState.arsenalOpen && key === 's') {
             const scaleY = logicalHeight / rect.height;
             GameState.mouse.x = (e.clientX - rect.left) * scaleX;
             GameState.mouse.y = (e.clientY - rect.top) * scaleY;
+
+            // 环境音效滑块拖拽
+            if (GameState.ambientSliderDragging && Renderer.ambientSlider) {
+                const ambSlider = Renderer.ambientSlider;
+                const clickX = (e.clientX - rect.left) * scaleX;
+                const ratio = (clickX - ambSlider.x) / ambSlider.w;
+                AmbientSoundManager.setMasterVolume(Math.max(0, Math.min(1, ratio)));
+            }
+
+            // 昼夜滑块拖拽
+            if (GameState.debugSliderDragging && Renderer.debugSlider) {
+                const slider = Renderer.debugSlider;
+                const clickX2 = (e.clientX - rect.left) * scaleX;
+                const ratio2 = (clickX2 - slider.x) / slider.w;
+                DayNightSystem.setTime(Math.max(0, Math.min(1, ratio2)));
+            }
         });
 
 // 鼠标点击射击/投掷
@@ -381,6 +398,24 @@ canvas.addEventListener('mousedown', (e) => {
             const scaleY = logicalHeight / rect.height;
             const clickX = (e.clientX - rect.left) * scaleX;
             const clickY = (e.clientY - rect.top) * scaleY;
+
+            // 检查是否点击了环境音效滑块
+            if (Renderer.ambientSlider) {
+                const ambSlider = Renderer.ambientSlider;
+                const ambHandleDist = Math.hypot(clickX - ambSlider.handleX, clickY - (ambSlider.y + ambSlider.h / 2));
+                if (ambHandleDist < ambSlider.handleR + 5) {
+                    GameState.ambientSliderDragging = true;
+                    e.preventDefault();
+                    return;
+                }
+                if (clickX >= ambSlider.x && clickX <= ambSlider.x + ambSlider.w &&
+                    clickY >= ambSlider.y - 10 && clickY <= ambSlider.y + ambSlider.h + 10) {
+                    const ratio = (clickX - ambSlider.x) / ambSlider.w;
+                    AmbientSoundManager.setMasterVolume(Math.max(0, Math.min(1, ratio)));
+                    e.preventDefault();
+                    return;
+                }
+            }
 
             // 检查是否点击了时间滑块
             if (Renderer.debugSlider) {
@@ -419,6 +454,9 @@ canvas.addEventListener('mousedown', (e) => {
                             }
                         } else if (btn.weather) {
                             WeatherSystem.setWeather(btn.weather);
+                        } else if (btn.action === 'toggleDayNight') {
+                            DayNightSystem.togglePause();
+                            console.log(DayNightSystem.paused ? '⏸ 昼夜循环暂停' : '▶ 昼夜循环继续');
                         }
                         break;
                     }
@@ -445,6 +483,8 @@ canvas.addEventListener('mousedown', (e) => {
         canvas.addEventListener('mouseup', (e) => {
             if (e.button === 0) {
                 GameState.mouse.down = false;
+                GameState.ambientSliderDragging = false;
+                GameState.debugSliderDragging = false;
             }
         });
 
