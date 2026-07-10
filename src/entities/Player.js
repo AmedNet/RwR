@@ -9,6 +9,7 @@ import { Weapon } from '../core/Weapon.js';
 import { EffectsManager } from '../utils/EffectsManager.js';
 import * as SoundManager from '../utils/SoundManager.js';
 import { SlowEffect, STATUS_EFFECT_CONFIG } from '../utils/StatusEffects.js';
+import { WeatherSystem } from '../core/WeatherSystem.js';
 export class Player extends Entity {
     // 类常量
     static SWITCH_ANIM_DURATION = 15;
@@ -233,22 +234,31 @@ export class Player extends Entity {
     }
 
     /** 处理移动逻辑，返回是否正在移动 */
-    _updateMovement() {
-        const keys = GameState.keys;
-        let dx = 0, dy = 0;
-        if (keys.w) dy -= 1;
-        if (keys.s) dy += 1;
-        if (keys.a) dx -= 1;
-        if (keys.d) dx += 1;
+   _updateMovement() {
+       const keys = GameState.keys;
+       let dx = 0, dy = 0;
+       if (keys.w) dy -= 1;
+       if (keys.s) dy += 1;
+       if (keys.a) dx -= 1;
+       if (keys.d) dx += 1;
+       const currentWeather = WeatherSystem.current;
+        const isSnow = currentWeather === 'snow' || currentWeather === 'blizzard';
+        // 初始化滑移速度（惰性）
+        if (this.slipVX === undefined) { this.slipVX = 0; this.slipVY = 0; }
+
         if (dx !== 0 || dy !== 0) {
-            const len = Math.sqrt(dx * dx + dy * dy);
-            dx /= len; dy /= len;
-            const speedFactor = GameState.map ? GameState.map.getSpeedFactor(this.x, this.y) : 1;
-            const heldWeapon = GameState.getActiveWeapon();
-            const launcherSlowdown = (heldWeapon && heldWeapon.config.type === 'launcher') ? Player.LAUNCHER_SLOWDOWN : 1;
-            const finalSpeed = this.speed * speedFactor * launcherSlowdown * this.getSpeedMultiplier();
-            const newX = this.x + dx * finalSpeed;
-            const newY = this.y + dy * finalSpeed;
+           const len = Math.sqrt(dx * dx + dy * dy);
+           dx /= len; dy /= len;
+           const speedFactor = GameState.map ? GameState.map.getSpeedFactor(this.x, this.y) : 1;
+           const heldWeapon = GameState.getActiveWeapon();
+           const launcherSlowdown = (heldWeapon && heldWeapon.config.type === 'launcher') ? Player.LAUNCHER_SLOWDOWN : 1;
+           const weatherSpeed = WeatherSystem.getSpeedMultiplier();
+           const slipFactor = isSnow ? 0.82 : 1.0;
+           const finalSpeed = this.speed * speedFactor * launcherSlowdown * this.getSpeedMultiplier() * weatherSpeed * slipFactor;
+           const moveX = dx * finalSpeed;
+           const moveY = dy * finalSpeed;
+           const newX = this.x + moveX;
+           const newY = this.y + moveY;
             if (GameState.map && !GameState.map.isWalkable(newX, newY, this.radius)) {
                 if (GameState.map.isWalkable(newX, this.y, this.radius)) this.x = newX;
                 else if (GameState.map.isWalkable(this.x, newY, this.radius)) this.y = newY;
@@ -256,7 +266,54 @@ export class Player extends Entity {
                 this.x = newX;
                 this.y = newY;
             }
+            // 雪地：积累滑移速度（输入方向逐渐渗透）
+            if (isSnow) {
+                this.slipVX = this.slipVX * 0.82 + moveX * 0.18;
+                this.slipVY = this.slipVY * 0.82 + moveY * 0.18;
+            }
+        } else if (isSnow) {
+            // 松手后滑移速度衰减（惯性残留）
+            this.slipVX *= 0.93;
+            this.slipVY *= 0.93;
         }
+
+        // 应用滑移速度（雪地才有值，其他天气为0）
+        if (isSnow && (Math.abs(this.slipVX) > 0.01 || Math.abs(this.slipVY) > 0.01)) {
+            const newX2 = this.x + this.slipVX;
+            const newY2 = this.y + this.slipVY;
+            if (!GameState.map || GameState.map.isWalkable(newX2, newY2, this.radius)) {
+                this.x = newX2;
+                this.y = newY2;
+            } else {
+                this.slipVX *= 0.5;
+                this.slipVY *= 0.5;
+            }
+        }
+
+        // 天气风力影响
+        const windForce = WeatherSystem.getWindForce();
+        const tornadoForce = WeatherSystem.getTornadoForce(this.x, this.y);
+        
+        // 龙卷风伤害 - 累积机制，每0.5秒触发一次
+        const tornadoDmg = WeatherSystem.getTornadoDamage(this.x, this.y);
+        if (tornadoDmg > 0 && this.alive) {
+          this.tornadoDamageAccumulator += tornadoDmg;
+          this.tornadoDamageTimer++;
+          
+          // 每30帧（0.5秒）触发一次伤害
+          if (this.tornadoDamageTimer >= 30) {
+            this.takeDamage(this.tornadoDamageAccumulator);
+            this.tornadoDamageAccumulator = 0;
+            this.tornadoDamageTimer = 0;
+          }
+        } else {
+          // 不在龙卷风范围内时重置累积器
+          this.tornadoDamageAccumulator = 0;
+          this.tornadoDamageTimer = 0;
+        }
+        const windScale = currentWeather === 'windStorm' || currentWeather === 'sandstorm' ? 0.12 : 0.3;
+        this.x += windForce.x * windScale + tornadoForce.x;
+        this.y += windForce.y * windScale + tornadoForce.y;
         const world = GameState.config.world;
         this.x = Math.max(this.radius, Math.min(world.width - this.radius, this.x));
         this.y = Math.max(this.radius, Math.min(world.height - this.radius, this.y));
@@ -372,7 +429,8 @@ export class Player extends Entity {
 
         // 应用后坐力和散布到射击角度
         const angleOffset = weapon.getShotAngleOffset();
-        const baseAngle = angle + angleOffset;
+        const weatherAccuracy = WeatherSystem.getAccuracyMultiplier();
+        const baseAngle = angle + angleOffset * weatherAccuracy;
 
         const speed = weapon.config.bulletSpeed;
         const knockback = weapon.config.knockback || 0;

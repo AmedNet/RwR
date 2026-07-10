@@ -6,6 +6,7 @@ import { UIManager } from '../rendering/UIManager.js';
 import { Renderer } from '../rendering/Renderer.js';
 import { WeaponPickup } from '../entities/WeaponPickup.js';
 import { playPickup, playUISound } from '../utils/SoundManager.js';
+import { WeatherSystem } from '../core/WeatherSystem.js';
 
 export const InputManager = {
     setup() {
@@ -393,6 +394,8 @@ canvas.addEventListener('mousedown', (e) => {
                                 GameState.player.health = GameState.player.maxHealth;
                                 console.log('🐛 满血');
                             }
+                        } else if (btn.weather) {
+                            WeatherSystem.setWeather(btn.weather);
                         }
                         break;
                     }

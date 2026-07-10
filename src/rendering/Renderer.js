@@ -7,6 +7,7 @@ import { drawInventory } from './InventoryUI.js';
 import { drawArsenalShop } from './ArsenalUI.js';
 import { drawDebug } from './DebugUI.js';
 import { drawGameOver } from './GameOverUI.js';
+import { WeatherSystem } from '../core/WeatherSystem.js';
 
 export const Renderer = {
     canvas: null,
@@ -62,6 +63,9 @@ export const Renderer = {
         this.ctx.scale(dpr, dpr);
         this.logicalWidth = width;
         this.logicalHeight = height;
+        // 同步视口尺寸到 GameState（供天气系统等使用）
+        GameState.viewport.width = width;
+        GameState.viewport.height = height;
         console.log(`📐 画布尺寸: ${width}x${height}`);
     },
 
@@ -99,9 +103,44 @@ export const Renderer = {
     },
 
     /** 在世界坐标位置绘制实体（save/translate/draw/restore） */
-    _drawAtWorldPos(entity) {
+    _drawAtWorldPos(entity, isPlayer = false) {
         const pos = this.toScreen(entity.x, entity.y);
+        
+        // 计算能见度（仅特定天气生效：雾天、暴风雪、沙尘暴等）
+        let visibilityAlpha = 1.0;
+        if (!isPlayer && GameState.player && GameState.player.alive) {
+            const fogRadius = WeatherSystem.getFogRadius();
+            const awarenessMult = WeatherSystem.getAwarenessMultiplier();
+            
+            // 只在特定天气下启用能见度效果
+            const hasVisibilityEffect = fogRadius > 0 || awarenessMult < 0.8;
+            
+            if (hasVisibilityEffect) {
+                const dx = entity.x - GameState.player.x;
+                const dy = entity.y - GameState.player.y;
+                const dist = Math.hypot(dx, dy);
+                
+                const baseVisibility = 400;
+                const effectiveVisibility = fogRadius > 0 
+                    ? Math.min(baseVisibility, fogRadius * 0.8) 
+                    : baseVisibility * awarenessMult;
+                
+                if (dist > effectiveVisibility * 0.4) {
+                    const fadeStart = effectiveVisibility * 0.4;
+                    const fadeEnd = effectiveVisibility;
+                    if (dist < fadeEnd) {
+                        const t = (dist - fadeStart) / (fadeEnd - fadeStart);
+                        visibilityAlpha = 1.0 - t * t;
+                    } else {
+                        visibilityAlpha = 0.08;
+                    }
+                }
+                visibilityAlpha = Math.max(0.08, visibilityAlpha);
+            }
+        }
+        
         this.ctx.save();
+        this.ctx.globalAlpha = visibilityAlpha;
         this.ctx.translate(pos.x, pos.y);
         entity.draw(this.ctx);
         this.ctx.restore();
@@ -132,7 +171,7 @@ export const Renderer = {
         }
 
         for (const pickup of GameState.weaponPickups) {
-            if (pickup.alive) this._drawAtWorldPos(pickup);
+            if (pickup.alive) this._drawAtWorldPos(pickup, false);
         }
 
         for (const g of GameState.grenades) {
@@ -145,16 +184,16 @@ export const Renderer = {
         const { player, enemies, teammates, bullets } = GameState;
 
         for (const b of bullets) {
-            if (b.alive) this._drawAtWorldPos(b);
+            if (b.alive) this._drawAtWorldPos(b, false);
         }
         for (const e of enemies) {
-            if (e.alive) this._drawAtWorldPos(e);
+            if (e.alive) this._drawAtWorldPos(e, false);
         }
         for (const t of teammates) {
-            if (t.alive) this._drawAtWorldPos(t);
+            if (t.alive) this._drawAtWorldPos(t, false);
         }
         if (player && player.alive) {
-            this._drawAtWorldPos(player);
+            this._drawAtWorldPos(player, true);
         }
     },
 
@@ -189,9 +228,15 @@ export const Renderer = {
         // Game Over 优先级最高
         if (GameState.gameOver) {
             if (!GameState.permanentDefeat) {
-                // 非永久战败：渲染世界 + 较轻遮罩，让玩家看到战场
+                // 非永久战败：渲染世界 + 天气 + 较轻遮罩，让玩家看到战场
                 this._renderWorld();
                 this._renderEntities();
+                // 保留天气视觉效果
+                WeatherSystem.drawCloudShadows(this.ctx, GameState.camera);
+                WeatherSystem.drawParticles(this.ctx);
+                WeatherSystem.drawOverlay(this.ctx, this);
+                WeatherSystem.drawWeatherEdgeEffects(this.ctx, this);
+                WeatherSystem.drawLightning(this.ctx, this);
                 this.ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
                 this.ctx.fillRect(0, 0, this.width, this.height);
             } else {
@@ -220,6 +265,12 @@ export const Renderer = {
 
         this._renderWorld();
         this._renderEntities();
+        // 天气渲染层
+        WeatherSystem.drawCloudShadows(this.ctx, GameState.camera);
+        WeatherSystem.drawParticles(this.ctx);
+        WeatherSystem.drawOverlay(this.ctx, this);
+        WeatherSystem.drawWeatherEdgeEffects(this.ctx, this);
+        WeatherSystem.drawLightning(this.ctx, this);
         this._renderHUD();
     },
 

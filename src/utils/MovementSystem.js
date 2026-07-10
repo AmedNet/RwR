@@ -1,5 +1,6 @@
 // src/utils/MovementSystem.js
 import { GameState } from '../core/GameState.js';
+import { WeatherSystem } from '../core/WeatherSystem.js';
 
 export const MovementSystem = {
     /**
@@ -18,16 +19,57 @@ export const MovementSystem = {
         if (dist < 10) return true; // 已到达
 
         const speedFactor = GameState.map ? GameState.map.getSpeedFactor(entity.x, entity.y) : 1;
-        const finalSpeed = entity.speed * speedFactor;
+        const weatherSpeed = WeatherSystem.getSpeedMultiplier();
+        const currentWeather = WeatherSystem.current;
+        const isSnow = currentWeather === 'snow' || currentWeather === 'blizzard';
+        const slipFactor = isSnow ? 0.82 : 1.0;
+
+        const finalSpeed = entity.speed * speedFactor * weatherSpeed * slipFactor;
         const normX = dx / dist;
         const normY = dy / dist;
 
+        // 初始化AI滑移速度
+        if (entity.slipVX === undefined) { entity.slipVX = 0; entity.slipVY = 0; }
+
         // 尝试移动
         let moved = this.tryMove(entity, normX * finalSpeed, normY * finalSpeed);
-        
+
         // 如果没移动成功，尝试沿障碍物滑动
         if (!moved) {
             moved = this.slideMove(entity, normX, normY, finalSpeed);
+        }
+
+        // 雪地惯性：积累滑移速度
+        if (isSnow && moved) {
+            const moveX = normX * finalSpeed;
+            const moveY = normY * finalSpeed;
+            entity.slipVX = entity.slipVX * 0.82 + moveX * 0.18;
+            entity.slipVY = entity.slipVY * 0.82 + moveY * 0.18;
+        } else if (isSnow) {
+            entity.slipVX *= 0.93;
+            entity.slipVY *= 0.93;
+        }
+
+        // 应用滑移速度
+        if (isSnow && (Math.abs(entity.slipVX) > 0.01 || Math.abs(entity.slipVY) > 0.01)) {
+            const slipX = entity.x + entity.slipVX;
+            const slipY = entity.y + entity.slipVY;
+            if (!GameState.map || GameState.map.isWalkable(slipX, slipY, entity.radius)) {
+                entity.x = slipX;
+                entity.y = slipY;
+            } else {
+                entity.slipVX *= 0.5;
+                entity.slipVY *= 0.5;
+            }
+        }
+
+        // 天气风力影响
+        if (moved) {
+            const windForce = WeatherSystem.getWindForce();
+            const tornadoForce = WeatherSystem.getTornadoForce(entity.x, entity.y);
+            const windScale = currentWeather === 'windStorm' || currentWeather === 'sandstorm' ? 0.12 : 0.3;
+            entity.x += windForce.x * windScale + tornadoForce.x;
+            entity.y += windForce.y * windScale + tornadoForce.y;
         }
 
         // 世界边界限制

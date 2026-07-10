@@ -1,5 +1,6 @@
 // src/rendering/DebugUI.js
 import { GameState } from '../core/GameState.js';
+import { WeatherSystem } from '../core/WeatherSystem.js';
 
 export function drawDebug(ctx, renderer) {
     ctx.save();
@@ -90,11 +91,67 @@ export function drawDebug(ctx, renderer) {
         renderer.debugButtons.push({ x, y: extraBtnY, w: btnW, h: btnH, action: btn.action });
     });
 
+    // 天气控制区域
+    const weatherTitleY = extraBtnY + btnH + 50;
+    ctx.fillStyle = '#00BCD4';
+    ctx.font = 'bold 24px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('🌤️ 天气控制', renderer.width / 2, weatherTitleY);
+
+    // 当前天气显示
+    const currentDef = WeatherSystem.getWeatherDef();
+    ctx.fillStyle = '#FFD700';
+    ctx.font = 'bold 20px sans-serif';
+    ctx.fillText(`当前: ${currentDef.icon} ${currentDef.name}`, renderer.width / 2, weatherTitleY + 35);
+
+    // 天气按钮网格 (6列 × 3行)
+    const weatherTypes = WeatherSystem.getAllWeatherTypes();
+    const wBtnW = 70;
+    const wBtnH = 40;
+    const wBtnGap = 8;
+    const wCols = 6;
+    const wGridW = wCols * wBtnW + (wCols - 1) * wBtnGap;
+    const wStartX = renderer.width / 2 - wGridW / 2;
+    const wStartY = weatherTitleY + 60;
+
+    weatherTypes.forEach((wt, i) => {
+        const col = i % wCols;
+        const row = Math.floor(i / wCols);
+        const x = wStartX + col * (wBtnW + wBtnGap);
+        const y = wStartY + row * (wBtnH + wBtnGap);
+
+        // 按钮背景
+        const isActive = wt.key === WeatherSystem.current;
+        ctx.fillStyle = isActive ? '#4CAF50' : '#555';
+        ctx.beginPath();
+        ctx.roundRect(x, y, wBtnW, wBtnH, 6);
+        ctx.fill();
+
+        // 按钮边框
+        ctx.strokeStyle = isActive ? '#81C784' : 'rgba(255,255,255,0.2)';
+        ctx.lineWidth = isActive ? 2 : 1;
+        ctx.stroke();
+
+        // 按钮文字（图标 + 简称）
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 14px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(wt.icon, x + wBtnW / 2, y + wBtnH / 2 - 6);
+
+        ctx.font = '10px sans-serif';
+        ctx.fillText(wt.name, x + wBtnW / 2, y + wBtnH / 2 + 8);
+
+        // 保存按钮位置
+        renderer.debugButtons.push({ x, y, w: wBtnW, h: wBtnH, weather: wt.key });
+    });
+
     // 底部提示
     ctx.fillStyle = '#aaa';
     ctx.font = '16px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('点击按钮生效 | 按 ESC 或 9+1 关闭', renderer.width / 2, renderer.height - 40);
+    ctx.fillText('点击按钮生效 | 按 ESC 或 9+1 关闭', renderer.width / 2, renderer.height - 20);
 
     ctx.restore();
 }

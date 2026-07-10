@@ -3,6 +3,7 @@ import { Entity } from './Entity.js';
 import { GameState } from '../core/GameState.js';
 import { EffectsManager } from '../utils/EffectsManager.js';
 import * as SoundManager from '../utils/SoundManager.js';
+import { WeatherSystem } from '../core/WeatherSystem.js';
 
 export class Bullet extends Entity {
     constructor(x, y, vx, vy, isEnemy, damage, isPlayer = false, knockback = 0, bulletRadius = null, maxRange = null, penetration = null, explosion = null, hasTrail = false, bulletColor = null, bulletGlow = null, shooter = null) {
@@ -50,6 +51,14 @@ export class Bullet extends Entity {
         this.x += this.vx;
         this.y += this.vy;
         this.life--;
+
+        // 大风天气影响子弹弹道
+        const windForce = WeatherSystem.getWindForce();
+        const windStrength = Math.hypot(windForce.x, windForce.y);
+        if (windStrength > 0.5) {
+            this.vx += windForce.x * 0.02;
+            this.vy += windForce.y * 0.02;
+        }
 
         // 火箭弹拖尾特效
         if (this.hasTrail && this.alive) {

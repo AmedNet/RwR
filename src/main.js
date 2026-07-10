@@ -17,6 +17,7 @@ import { Arsenal } from './entities/Arsenal.js';
 import { EffectsManager } from './utils/EffectsManager.js';
 import { setListenerProvider } from './utils/SoundManager.js';
 import { BurnEffect, STATUS_EFFECT_CONFIG } from './utils/StatusEffects.js';
+import { WeatherSystem } from './core/WeatherSystem.js';
 
 // ---------- 配置 ----------
 const CONFIG = {
@@ -337,6 +338,8 @@ function resetGame() {
 function gameLoop() {
     // 更新特效（粒子、伤害数字等）
     EffectsManager.update();
+    // 更新天气系统
+    WeatherSystem.update();
 
     // 更新摄像机
     if (GameState.player && !GameState.gameOver) {
@@ -350,6 +353,10 @@ function gameLoop() {
         targetY = Math.max(0, Math.min(world.height - canvasHeight, targetY));
         GameState.camera.x = targetX;
         GameState.camera.y = targetY;
+        
+        // 平滑归零 camera offset
+        GameState.camera.offsetX *= 0.9;
+        GameState.camera.offsetY *= 0.9;
     }
 
     // 更新据点（无论是否阵亡都继续）
@@ -510,6 +517,8 @@ function init() {
         }
     });
 
+    // 初始化天气系统
+    WeatherSystem.init();
     // 初始化小地图
     Minimap.init();
 

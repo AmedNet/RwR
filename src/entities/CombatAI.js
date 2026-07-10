@@ -12,6 +12,7 @@ import { WEAPON_VALUE, evaluateWeaponChoice } from '../utils/WeaponAI.js';
 import { SlowEffect, AmmoBuffEffect, HealAuraEffect, STATUS_EFFECT_CONFIG } from '../utils/StatusEffects.js';
 import { AIRank, getRankConfig } from '../core/RankSystem.js';
 import { UnitClass, getClassConfig } from '../core/ClassSystem.js';
+import { WeatherSystem } from '../core/WeatherSystem.js';
 
 export class CombatAI extends Entity {
     // AI 角色常量
@@ -420,7 +421,9 @@ export class CombatAI extends Entity {
         if (this.unitClass === UnitClass.SNIPER) {
             base += getClassConfig(UnitClass.SNIPER).awarenessBonus || 300;
         }
-        return base;
+        // 天气感知倍率
+        const weatherAwareness = WeatherSystem.getAwarenessMultiplier();
+        return base * weatherAwareness;
     }
 
     hasLineOfSight(target) {
@@ -809,8 +812,9 @@ export class CombatAI extends Entity {
         }
 
         const errorRange = Math.min(6 + dist * 0.05, 35);
-        predictX += (Math.random() - 0.5) * errorRange;
-        predictY += (Math.random() - 0.5) * errorRange;
+        const weatherAccuracy = WeatherSystem.getAccuracyMultiplier();
+        predictX += (Math.random() - 0.5) * errorRange * weatherAccuracy;
+        predictY += (Math.random() - 0.5) * errorRange * weatherAccuracy;
         return { x: predictX, y: predictY };
     }
 
@@ -860,7 +864,8 @@ export class CombatAI extends Entity {
         const angle = Math.atan2(predicted.y - this.y, predicted.x - this.x);
         // AI 压枪补偿：根据当前后坐力反向修正弹道
         const recoilCompensation = weapon.currentRecoil * 0.65;
-        const baseAngle = angle + weapon.getShotAngleOffset() + recoilCompensation;
+        const weatherAccuracy = WeatherSystem.getAccuracyMultiplier();
+        const baseAngle = angle + weapon.getShotAngleOffset() * weatherAccuracy + recoilCompensation;
 
         if (weaponType === 'shotgun') {
             const pellets = weapon.config.pellets || 8;

@@ -1,6 +1,8 @@
 // src/utils/EffectsManager.js
 
 import { playShellLand } from './SoundManager.js';
+import { WeatherSystem } from '../core/WeatherSystem.js';
+
 import { GameState } from '../core/GameState.js';
 
 // 粒子类型
@@ -723,8 +725,41 @@ export const EffectsManager = {
             const pos = toScreen(s.x, s.y);
             const sx = pos.x + this.screenShake.x;
             const sy = pos.y + this.screenShake.y;
+
+            let alpha = s.fadeAlpha;
+
+            // 地图亮度 / 云影亮度对弹壳明暗的影响
+            let envLight = 1.0;
+            const map = GameState.map;
+            if (map && typeof map.getLightFactor === 'function') {
+                const light = map.getLightFactor(s.x, s.y);
+                if (typeof light === 'number' && !Number.isNaN(light)) {
+                    envLight *= light;
+                }
+            }
+
+            const currDef = WeatherSystem.getWeatherDef();
+            if (currDef && currDef.cloudShadows) {
+                const clouds = WeatherSystem.clouds;
+                if (clouds && clouds.length > 0) {
+                    let cloudDark = 0;
+                    for (const c of clouds) {
+                        const left = c.x - c.w * 0.5;
+                        const right = c.x + c.w * 0.5;
+                        const top = c.y - c.h * 0.5;
+                        const bottom = c.y + c.h * 0.5;
+                        if (s.x >= left && s.x <= right && s.y >= top && s.y <= bottom) {
+                            cloudDark = Math.max(cloudDark, c.alpha / 0.22);
+                        }
+                    }
+                    envLight *= Math.max(0.55, 1.0 - cloudDark * (currDef.cloudAlpha || 0));
+                }
+            }
+
+            alpha *= Math.max(0.35, Math.min(1.0, envLight));
+
             ctx.save();
-            ctx.globalAlpha = s.fadeAlpha;
+            ctx.globalAlpha = alpha;
             ctx.translate(sx, sy);
             ctx.rotate(s.rotation);
             ctx.scale(zoom, zoom);

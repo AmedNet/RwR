@@ -15,6 +15,7 @@ export const GameState = {
     inventoryOpen: false, // 背包是否打开
     rp: 0, // RP值（金钱）
     map: null,
+    weather: 'sunny', // 当前天气类型
     keys: { w: false, a: false, s: false, d: false },
     mouse: { x: 0, y: 0, down: false },
     kills: 0,
@@ -22,6 +23,8 @@ export const GameState = {
     gameOver: false,
     spawnTimer: 0,
     camera: { x: 0, y: 0, zoom: 1, targetZoom: 1, offsetX: 0, offsetY: 0, targetOffsetX: 0, targetOffsetY: 0 },
+    // 视口尺寸（由 Renderer.resize 同步）
+    viewport: { width: 0, height: 0 },
     // 倍镜状态
     scopeState: {
         isScoped: false,      // 是否正在开镜
