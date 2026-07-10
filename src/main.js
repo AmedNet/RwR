@@ -18,6 +18,7 @@ import { EffectsManager } from './utils/EffectsManager.js';
 import { setListenerProvider } from './utils/SoundManager.js';
 import { BurnEffect, STATUS_EFFECT_CONFIG } from './utils/StatusEffects.js';
 import { WeatherSystem } from './core/WeatherSystem.js';
+import { DayNightSystem } from './core/DayNightSystem.js';
 
 // ---------- 配置 ----------
 const CONFIG = {
@@ -341,6 +342,9 @@ function gameLoop() {
     // 更新天气系统
     WeatherSystem.update();
 
+    // 更新昼夜循环系统
+    DayNightSystem.update();
+
     // 更新摄像机
     if (GameState.player && !GameState.gameOver) {
         const player = GameState.player;
@@ -519,6 +523,9 @@ function init() {
 
     // 初始化天气系统
     WeatherSystem.init();
+
+    // 初始化昼夜循环系统
+    DayNightSystem.init();
     // 初始化小地图
     Minimap.init();
 

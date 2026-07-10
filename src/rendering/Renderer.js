@@ -8,6 +8,7 @@ import { drawArsenalShop } from './ArsenalUI.js';
 import { drawDebug } from './DebugUI.js';
 import { drawGameOver } from './GameOverUI.js';
 import { WeatherSystem } from '../core/WeatherSystem.js';
+import { DayNightSystem } from '../core/DayNightSystem.js';
 
 export const Renderer = {
     canvas: null,
@@ -16,6 +17,8 @@ export const Renderer = {
     logicalHeight: 0,
     weaponImages: {}, // 武器贴图缓存 { weaponId: HTMLImageElement }
     weaponImagesLoaded: {},
+    _dayNightCanvas: null,
+    _dayNightCtx: null,
 
     // 预加载武器贴图
     loadWeaponImages() {
@@ -208,6 +211,63 @@ export const Renderer = {
         }
     },
 
+
+    /** 绘制昼夜循环层（环境色调 + 动态光照） */
+    _renderDayNight() {
+        const darkness = DayNightSystem.getAmbientDarkness();
+        if (darkness < 0.01 && DayNightSystem.lightSources.length === 0) return;
+
+        const w = this.width;
+        const h = this.height;
+
+        // 复用离屏 canvas
+        if (!this._dayNightCanvas || this._dayNightCanvas.width !== Math.ceil(w) || this._dayNightCanvas.height !== Math.ceil(h)) {
+            this._dayNightCanvas = document.createElement('canvas');
+            this._dayNightCanvas.width = Math.ceil(w);
+            this._dayNightCanvas.height = Math.ceil(h);
+            this._dayNightCtx = this._dayNightCanvas.getContext('2d');
+        }
+
+        const offCtx = this._dayNightCtx;
+        offCtx.clearRect(0, 0, w, h);
+
+        // 填充环境色调遮罩
+        if (darkness > 0.01) {
+            const tint = DayNightSystem.getTint();
+            offCtx.fillStyle = `rgba(${tint.r},${tint.g},${tint.b},${tint.a})`;
+            offCtx.fillRect(0, 0, w, h);
+
+            // 动态光照"挖洞"
+            if (DayNightSystem.lightSources.length > 0) {
+                offCtx.save();
+                offCtx.globalCompositeOperation = 'destination-out';
+
+                for (const light of DayNightSystem.lightSources) {
+                    const pos = this.toScreen(light.x, light.y);
+                    const lifeRatio = light.life / light.maxLife;
+                    const currentRadius = light.radius * lifeRatio;
+
+                    if (currentRadius < 1) continue;
+
+                    const gradient = offCtx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, currentRadius);
+                    gradient.addColorStop(0, `rgba(0,0,0,${lifeRatio})`);
+                    gradient.addColorStop(0.5, `rgba(0,0,0,${lifeRatio * 0.5})`);
+                    gradient.addColorStop(1, 'rgba(0,0,0,0)');
+
+                    offCtx.fillStyle = gradient;
+                    offCtx.beginPath();
+                    offCtx.arc(pos.x, pos.y, currentRadius, 0, Math.PI * 2);
+                    offCtx.fill();
+                }
+
+                offCtx.restore();
+            }
+        }
+
+        // 将离屏 canvas 绘制到主 canvas
+        this.ctx.drawImage(this._dayNightCanvas, 0, 0);
+    },
+
     render() {
         if (!this.ctx) {
             console.warn('⚠️ Renderer: ctx 未初始化，无法渲染');
@@ -237,6 +297,8 @@ export const Renderer = {
                 WeatherSystem.drawOverlay(this.ctx, this);
                 WeatherSystem.drawWeatherEdgeEffects(this.ctx, this);
                 WeatherSystem.drawLightning(this.ctx, this);
+                // 昼夜渲染层
+                this._renderDayNight();
                 this.ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
                 this.ctx.fillRect(0, 0, this.width, this.height);
             } else {
@@ -271,6 +333,8 @@ export const Renderer = {
         WeatherSystem.drawOverlay(this.ctx, this);
         WeatherSystem.drawWeatherEdgeEffects(this.ctx, this);
         WeatherSystem.drawLightning(this.ctx, this);
+        // 昼夜渲染层
+        this._renderDayNight();
         this._renderHUD();
     },
 

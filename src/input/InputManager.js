@@ -7,6 +7,7 @@ import { Renderer } from '../rendering/Renderer.js';
 import { WeaponPickup } from '../entities/WeaponPickup.js';
 import { playPickup, playUISound } from '../utils/SoundManager.js';
 import { WeatherSystem } from '../core/WeatherSystem.js';
+import { DayNightSystem } from '../core/DayNightSystem.js';
 
 export const InputManager = {
     setup() {
@@ -380,6 +381,28 @@ canvas.addEventListener('mousedown', (e) => {
             const scaleY = logicalHeight / rect.height;
             const clickX = (e.clientX - rect.left) * scaleX;
             const clickY = (e.clientY - rect.top) * scaleY;
+
+            // 检查是否点击了时间滑块
+            if (Renderer.debugSlider) {
+                const slider = Renderer.debugSlider;
+                const handleDist = Math.hypot(clickX - slider.handleX, clickY - (slider.y + slider.h / 2));
+                if (handleDist < slider.handleR + 5) {
+                    // 点击了滑块手柄，进入拖拽模式
+                    GameState.debugSliderDragging = true;
+                    DayNightSystem.paused = true; // 拖拽时暂停自动推进
+                    e.preventDefault();
+                    return;
+                }
+                // 点击了滑块轨道（但不在手柄上），直接跳转到该位置
+                if (clickX >= slider.x && clickX <= slider.x + slider.w &&
+                    clickY >= slider.y - 10 && clickY <= slider.y + slider.h + 10) {
+                    const ratio = (clickX - slider.x) / slider.w;
+                    DayNightSystem.setTime(Math.max(0, Math.min(1, ratio)));
+                    DayNightSystem.paused = true;
+                    e.preventDefault();
+                    return;
+                }
+            }
 
             if (Renderer.debugButtons) {
                 for (const btn of Renderer.debugButtons) {

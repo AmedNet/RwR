@@ -1,6 +1,7 @@
 // src/rendering/DebugUI.js
 import { GameState } from '../core/GameState.js';
 import { WeatherSystem } from '../core/WeatherSystem.js';
+import { DayNightSystem } from '../core/DayNightSystem.js';
 
 export function drawDebug(ctx, renderer) {
     ctx.save();
@@ -145,6 +146,93 @@ export function drawDebug(ctx, renderer) {
 
         // 保存按钮位置
         renderer.debugButtons.push({ x, y, w: wBtnW, h: wBtnH, weather: wt.key });
+    });
+
+
+    // 昼夜控制区域
+    const daynightTitleY = wStartY + Math.ceil(weatherTypes.length / wCols) * (wBtnH + wBtnGap) + 30;
+    ctx.fillStyle = '#00BCD4';
+    ctx.font = 'bold 24px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('🌅 昼夜控制', renderer.width / 2, daynightTitleY);
+
+    // 当前时间显示
+    ctx.fillStyle = '#FFD700';
+    ctx.font = 'bold 20px sans-serif';
+    ctx.fillText(`🕐 ${DayNightSystem.getTimeString()}`, renderer.width / 2, daynightTitleY + 35);
+
+    // 时间滑块
+    const sliderW = 400;
+    const sliderH = 20;
+    const sliderX = renderer.width / 2 - sliderW / 2;
+    const sliderY = daynightTitleY + 60;
+
+    // 滑块轨道背景
+    ctx.fillStyle = '#333';
+    ctx.beginPath();
+    ctx.roundRect(sliderX, sliderY, sliderW, sliderH, 10);
+    ctx.fill();
+
+    // 滑块轨道渐变（模拟昼夜）
+    const gradient = ctx.createLinearGradient(sliderX, 0, sliderX + sliderW, 0);
+    gradient.addColorStop(0, 'rgba(10,15,40,0.8)');    // 深夜
+    gradient.addColorStop(0.25, 'rgba(60,30,10,0.6)'); // 黎明
+    gradient.addColorStop(0.5, 'rgba(135,206,235,0.3)'); // 白天
+    gradient.addColorStop(0.75, 'rgba(50,20,10,0.6)'); // 黄昏
+    gradient.addColorStop(1, 'rgba(10,15,40,0.8)');    // 夜晚
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.roundRect(sliderX, sliderY, sliderW, sliderH, 10);
+    ctx.fill();
+
+    // 滑块手柄
+    const handleX = sliderX + DayNightSystem.timeOfDay * sliderW;
+    const handleR = 12;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(handleX, sliderY + sliderH / 2, handleR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#00BCD4';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    // 保存滑块区域供点击检测
+    renderer.debugSlider = {
+        x: sliderX,
+        y: sliderY,
+        w: sliderW,
+        h: sliderH,
+        handleX: handleX,
+        handleR: handleR
+    };
+
+    // 暂停/继续按钮
+    const pauseBtnW = 120;
+    const pauseBtnH = 40;
+    const pauseBtnX = renderer.width / 2 - pauseBtnW / 2;
+    const pauseBtnY = sliderY + sliderH + 20;
+
+    ctx.fillStyle = DayNightSystem.paused ? '#f44336' : '#4CAF50';
+    ctx.beginPath();
+    ctx.roundRect(pauseBtnX, pauseBtnY, pauseBtnW, pauseBtnH, 8);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 16px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(DayNightSystem.paused ? '▶ 继续' : '⏸ 暂停', pauseBtnX + pauseBtnW / 2, pauseBtnY + pauseBtnH / 2);
+
+    renderer.debugButtons.push({
+        x: pauseBtnX,
+        y: pauseBtnY,
+        w: pauseBtnW,
+        h: pauseBtnH,
+        action: 'toggleDayNight'
     });
 
     // 底部提示

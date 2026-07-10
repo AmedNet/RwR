@@ -4,6 +4,7 @@ import { playShellLand } from './SoundManager.js';
 import { WeatherSystem } from '../core/WeatherSystem.js';
 
 import { GameState } from '../core/GameState.js';
+import { DayNightSystem } from '../core/DayNightSystem.js';
 
 // 粒子类型
 export const ParticleType = {
@@ -171,6 +172,9 @@ export const EffectsManager = {
             type: 'flash'
         });
 
+        // 动态光源：爆炸照亮周围
+        DayNightSystem.addLight(x, y, 300, '255,180,60', 20);
+
         // 外层烟雾
         for (let i = 0; i < FX.GRENADE_SMOKE_COUNT; i++) {
             const angle = Math.random() * Math.PI * 2;
@@ -286,6 +290,9 @@ export const EffectsManager = {
         const offset = FX.MUZZLE_OFFSET;
         const mx = shooterX + Math.cos(angle) * offset;
         const my = shooterY + Math.sin(angle) * offset;
+
+        // 动态光源：枪口火焰照亮周围
+        DayNightSystem.addLight(mx, my, 120, '255,200,80', 6);
 
         // 按武器类型配置火焰大小和颜色
         let flashSize, flashColors, particleCount, smokeCount;
