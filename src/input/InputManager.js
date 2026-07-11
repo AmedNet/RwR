@@ -9,6 +9,7 @@ import { playPickup, playUISound } from '../utils/SoundManager.js';
 import { WeatherSystem } from '../core/WeatherSystem.js';
 import { DayNightSystem } from '../core/DayNightSystem.js';
 import { AmbientSoundManager } from '../utils/AmbientSoundManager.js';
+import { SupportSystem } from '../core/SupportSystem.js';
 
 export const InputManager = {
     setup() {
@@ -21,6 +22,13 @@ export const InputManager = {
             if (GameState.gameOver) {
                 if (GameState.arsenalOpen) {
                     GameState.arsenalOpen = false;
+                }
+                // 阵亡时关闭电台
+                if (GameState.radioOpen) {
+                    GameState.radioOpen = false;
+                    GameState.radioAnimating = false;
+                    GameState.radioClosing = false;
+                    GameState.radioTargetWorld = null;
                 }
                 if (GameState.permanentDefeat) {
                     e.preventDefault();
@@ -166,6 +174,54 @@ if (GameState.arsenalOpen && key === 's') {
                 return;
             }
 
+            // ====== 电台界面打开时的处理 ======
+            if (GameState.radioOpen) {
+                if (key === 'escape') {
+                    GameState.radioClosing = true;
+                    GameState.radioAnimating = true;
+                    e.preventDefault();
+                    return;
+                }
+                if (key === 'arrowup') {
+                    const available = SupportSystem.getPlayerAvailableSupport();
+                    if (available.length > 0) {
+                        GameState.radioSelectedIndex = (GameState.radioSelectedIndex - 1 + available.length) % available.length;
+                    }
+                    e.preventDefault();
+                    return;
+                }
+                if (key === 'arrowdown') {
+                    const available = SupportSystem.getPlayerAvailableSupport();
+                    if (available.length > 0) {
+                        GameState.radioSelectedIndex = (GameState.radioSelectedIndex + 1) % available.length;
+                    }
+                    e.preventDefault();
+                    return;
+                }
+                if (key === 'enter') {
+                    const available = SupportSystem.getPlayerAvailableSupport();
+                    const sel = available[GameState.radioSelectedIndex];
+                    if (sel && sel.canCall && GameState.radioTargetWorld) {
+                        SupportSystem.callSupport(sel.type, GameState.radioTargetWorld.x, GameState.radioTargetWorld.y);
+                        GameState.radioClosing = true;
+                        GameState.radioAnimating = true;
+                    }
+                    e.preventDefault();
+                    return;
+                }
+                // G键：长按关闭电台（与正常分支相同的置位逻辑）
+                if (key === 'g') {
+                    if (!GameState.radioGKeyPressed) {
+                        GameState.radioGKeyPressed = true;
+                        GameState.radioGKeyTimer = 0;
+                        GameState.radioGKeyConsumed = false;
+                    }
+                    e.preventDefault();
+                    return;
+                }
+                return;
+            }
+
             // ====== Debug面板打开时的处理 ======
             if (GameState.debugOpen) {
                 // ESC 关闭Debug面板
@@ -223,10 +279,12 @@ if (GameState.arsenalOpen && key === 's') {
                 return;
             }
 
-            // G 键：投掷手雷
+            // G 键：长按打开电台（在 main.js gameLoop 中检测长按）
             if (key === 'g') {
-                if (GameState.player) {
-                    GameState.player.throwGrenade();
+                if (!GameState.radioGKeyPressed) {
+                    GameState.radioGKeyPressed = true;
+                    GameState.radioGKeyTimer = 0;
+                    GameState.radioGKeyConsumed = false;
                 }
                 e.preventDefault();
                 return;
@@ -339,6 +397,17 @@ if (GameState.arsenalOpen && key === 's') {
                 GameState.keys[key] = false;
                 e.preventDefault();
             }
+            // G键释放：短按投手雷
+            if (key === 'g' && GameState.radioGKeyPressed) {
+                if (GameState.radioGKeyTimer < 18 && !GameState.radioOpen && !GameState.gameOver && !GameState.radioGKeyConsumed) {
+                    if (GameState.player) {
+                        GameState.player.throwGrenade();
+                    }
+                }
+                GameState.radioGKeyPressed = false;
+                GameState.radioGKeyConsumed = false;
+                GameState.radioGKeyTimer = 0;
+            }
         });
 
         // 鼠标移动
@@ -372,6 +441,60 @@ if (GameState.arsenalOpen && key === 's') {
 canvas.addEventListener('mousedown', (e) => {
     if (e.button === 0) {
         GameState.mouse.down = true;
+        
+        // 电台界面点击处理
+        if (GameState.radioOpen) {
+            const rect = canvas.getBoundingClientRect();
+            const logicalWidth = canvas.clientWidth;
+            const logicalHeight = canvas.clientHeight;
+            const scaleX = logicalWidth / rect.width;
+            const scaleY = logicalHeight / rect.height;
+            const clickX = (e.clientX - rect.left) * scaleX;
+            const clickY = (e.clientY - rect.top) * scaleY;
+
+            const cam = GameState.camera;
+            const zoom = cam.zoom || 1;
+            const offsetX = cam.offsetX || 0;
+            const offsetY = cam.offsetY || 0;
+            const canvasW = canvas.clientWidth || 800;
+            const canvasH = canvas.clientHeight || 600;
+            const cx = canvasW / 2;
+            const cy = canvasH / 2;
+            const worldX = (clickX - cx * (1 - zoom) + offsetX) / zoom + cam.x;
+            const worldY = (clickY - cy * (1 - zoom) + offsetY) / zoom + cam.y;
+
+            const panelW = 260;
+            const panelX = 20;
+            const panelTop = 60;
+            const headerH = 48;
+            const itemH = 56;
+            const itemGap = 4;
+            const listTop = panelTop + headerH + 8;
+            const available = SupportSystem.getPlayerAvailableSupport();
+
+            let hitCard = false;
+            for (let i = 0; i < available.length; i++) {
+                const scrollOffset = GameState.radioScrollOffset || 0;
+                const iy = listTop + i * (itemH + itemGap) - scrollOffset;
+                if (clickX >= panelX + 6 && clickX <= panelX + panelW - 6 &&
+                    clickY >= iy && clickY <= iy + itemH) {
+                    hitCard = true;
+                    GameState.radioSelectedIndex = i;
+                    if (available[i].canCall && GameState.radioTargetWorld) {
+                        SupportSystem.callSupport(available[i].type, GameState.radioTargetWorld.x, GameState.radioTargetWorld.y);
+                        GameState.radioClosing = true;
+                        GameState.radioAnimating = true;
+                    }
+                    break;
+                }
+            }
+
+            if (!hitCard) {
+                GameState.radioTargetWorld = { x: worldX, y: worldY };
+            }
+            e.preventDefault();
+            return;
+        }
 
         // 死亡界面：点击据点复活
         if (GameState.gameOver && !GameState.permanentDefeat && GameState.respawnHitAreas) {
@@ -452,6 +575,11 @@ canvas.addEventListener('mousedown', (e) => {
                                 GameState.player.health = GameState.player.maxHealth;
                                 console.log('🐛 满血');
                             }
+                        } else if (btn.action === 'rankUp') {
+                            if (GameState.player) {
+                                GameState.player.addRank();
+                                console.log(`🐛 军衔提升! ${GameState.player.getRankName()}`);
+                            }
                         } else if (btn.weather) {
                             WeatherSystem.setWeather(btn.weather);
                         } else if (btn.action === 'toggleDayNight') {
@@ -493,7 +621,14 @@ canvas.addEventListener('mousedown', (e) => {
             GameState.mouse.down = false;
         });
 
-        canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+        canvas.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        // 右键关闭电台
+        if (GameState.radioOpen) {
+            GameState.radioClosing = true;
+            GameState.radioAnimating = true;
+        }
+    });
 
         // 军械库鼠标滚轮滚动
         canvas.addEventListener('wheel', (e) => {

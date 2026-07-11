@@ -5,6 +5,7 @@ import { Terrain } from '../core/Map.js';
 import { EffectsManager, ParticleType } from '../utils/EffectsManager.js';
 import { playExplosion, playBulletHit } from '../utils/SoundManager.js';
 import { getRankConfig, AIRank } from '../core/RankSystem.js';
+import { SupportSystem } from '../core/SupportSystem.js';
 
 /** 碰撞特效配置常量 */
 const COLLISION_FX = {
@@ -216,6 +217,8 @@ export const CollisionSystem = {
         if (!player.alive) {
             GameState.gameOver = true;
             EventBus.emit('game_over');
+            // 敌方击杀玩家获得RP
+            SupportSystem.onEnemyKill(true);
         }
     },
 
@@ -226,6 +229,8 @@ export const CollisionSystem = {
         if (!teammate.alive) {
             console.log('💔 队友阵亡，加入重生队列');
             GameState.teammateRespawnQueue.push({ timer: GameState.config.teammate.respawnDelay });
+            // 敌方击杀队友获得RP
+            SupportSystem.onEnemyKill(false);
         }
     },
 

@@ -52,6 +52,17 @@ export const GameState = {
     // Debug系统
     debugOpen: false, // Debug面板是否打开
     debugKey9Pressed: false, // 追踪9键状态（用于组合键）
+    // 电台系统
+    radioOpen: false, // 电台界面是否打开
+    radioSelectedIndex: 0, // 电台选中的支援类型索引
+    radioScrollOffset: 0, // 电台列表滚动偏移
+    radioTargetWorld: null, // 电台标记的世界坐标 {x, y}
+    radioGKeyTimer: 0, // G键按下计时器（用于长按检测）
+    radioGKeyPressed: false, // G键是否按下
+    radioGKeyConsumed: false, // 本次物理按住是否已触发过（防autorepeat闪烁）
+    radioAnimProgress: 0, // 电台动画进度 0~1
+    radioAnimating: false, // 是否正在播放动画
+    radioClosing: false, // 是否正在关闭动画
     gameOverSelectedPoint: -1, // 死亡界面当前悬浮的据点索引
     respawnHitAreas: [], // 死亡界面据点点击热区 [{x, y, r, index}]
 
@@ -88,5 +99,15 @@ export const GameState = {
         this.rp = 0;
         this.gameOverSelectedPoint = -1;
         this.respawnHitAreas = [];
+        this.radioOpen = false;
+        this.radioSelectedIndex = 0;
+        this.radioScrollOffset = 0;
+        this.radioTargetWorld = null;
+        this.radioGKeyTimer = 0;
+        this.radioGKeyPressed = false;
+        this.radioGKeyConsumed = false;
+        this.radioAnimProgress = 0;
+        this.radioAnimating = false;
+        this.radioClosing = false;
     }
 };

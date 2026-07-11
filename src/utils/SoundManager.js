@@ -286,41 +286,61 @@ export function playMelee(source = 0) {
 }
 
 // 播放爆炸音效 (保持原本出色的爆破分层)
-export function playExplosion(source = 0) {
+export function playExplosion(source = 0, isReaper = false) {
   const c = getCtx(), n = c.currentTime;
-  const vol = getDistanceVolume(source, 1500, 1.3);
+  const maxDist = isReaper ? 3000 : 1500;
+  const vol = getDistanceVolume(source, maxDist, 1.2);
   if (vol <= 0) return;
   
-  const nb = mkNoise(c, .9, 'brown'), ns = createSrc(c, nb);
+  // 基础音量增强
+  const baseVol = isReaper ? 2.0 : 1.5;
+  
+  // Layer 1: 棕色噪声（低频爆炸主体）
+  const nb = mkNoise(c, isReaper ? 1.5 : 1.0, 'brown'), ns = createSrc(c, nb);
   const lf = c.createBiquadFilter();
   lf.type = 'lowpass';
-  lf.frequency.setValueAtTime(450, n);
-  lf.frequency.exponentialRampToValueAtTime(50, n + .9);
+  lf.frequency.setValueAtTime(isReaper ? 600 : 450, n);
+  lf.frequency.exponentialRampToValueAtTime(40, n + (isReaper ? 1.5 : 1.0));
   const lg = c.createGain();
-  lg.gain.setValueAtTime(1.0 * vol, n);
-  lg.gain.exponentialRampToValueAtTime(.001, n + .9);
+  lg.gain.setValueAtTime(baseVol * vol, n);
+  lg.gain.exponentialRampToValueAtTime(.001, n + (isReaper ? 1.5 : 1.0));
   ns.connect(lf); lf.connect(lg); lg.connect(masterGain);
-  ns.start(n); ns.stop(n + .9);
+  ns.start(n); ns.stop(n + (isReaper ? 1.5 : 1.0));
 
+  // Layer 2: 正弦波（低频震荡，增强冲击感）
   const o = c.createOscillator();
   o.type = 'sine';
-  o.frequency.setValueAtTime(65, n);
-  o.frequency.exponentialRampToValueAtTime(12, n + .6);
+  o.frequency.setValueAtTime(isReaper ? 50 : 65, n);
+  o.frequency.exponentialRampToValueAtTime(10, n + (isReaper ? 1.2 : 0.8));
   const og = c.createGain();
-  og.gain.setValueAtTime(.8 * vol, n);
-  og.gain.exponentialRampToValueAtTime(.001, n + .6);
+  og.gain.setValueAtTime((isReaper ? 1.5 : 1.2) * vol, n);
+  og.gain.exponentialRampToValueAtTime(.001, n + (isReaper ? 1.2 : 0.8));
   o.connect(og); og.connect(masterGain);
-  o.start(n); o.stop(n + .6);
+  o.start(n); o.stop(n + (isReaper ? 1.2 : 0.8));
 
-  const db = mkNoise(c, .4, 'white'), ds = c.createBufferSource();
+  // Layer 3: 白色噪声（高频碎片声）
+  const db = mkNoise(c, isReaper ? 0.6 : 0.4, 'white'), ds = c.createBufferSource();
   ds.buffer = db;
   const hf = c.createBiquadFilter();
-  hf.type = 'highpass'; hf.frequency.value = 2800;
+  hf.type = 'highpass'; hf.frequency.value = isReaper ? 2000 : 2800;
   const dg = c.createGain();
-  dg.gain.setValueAtTime(.45 * vol, n);
-  dg.gain.exponentialRampToValueAtTime(.001, n + .4);
+  dg.gain.setValueAtTime((isReaper ? 0.7 : 0.5) * vol, n);
+  dg.gain.exponentialRampToValueAtTime(.001, n + (isReaper ? 0.6 : 0.4));
   ds.connect(hf); hf.connect(dg); dg.connect(masterGain);
-  ds.start(n); ds.stop(n + .4);
+  ds.start(n); ds.stop(n + (isReaper ? 0.6 : 0.4));
+  
+  // Layer 4: 次声波震荡（死神支援专属，增强震撼感）
+  if (isReaper) {
+    const sub = c.createOscillator();
+    sub.type = 'sine';
+    sub.frequency.setValueAtTime(25, n);
+    sub.frequency.exponentialRampToValueAtTime(8, n + 2.0);
+    const subG = c.createGain();
+    subG.gain.setValueAtTime(1.0 * vol, n);
+    subG.gain.exponentialRampToValueAtTime(.001, n + 2.0);
+    sub.connect(subG); subG.connect(masterGain);
+    sub.start(n); sub.stop(n + 2.0);
+  }
 }
 
 // 播放空仓咔嗒声
@@ -347,41 +367,6 @@ export function playEmpty(source = 0) {
   g.gain.exponentialRampToValueAtTime(.001, n + .015);
   ns.connect(f); f.connect(g); g.connect(masterGain);
   ns.start(n); ns.stop(n + .015);
-}
-
-// 播放脚步声
-export function playFootstep(type = 'concrete', source = 0) {
-  const c = getCtx(), n = c.currentTime;
-  const vol = getDistanceVolume(source, 550, 1.5);
-  if (vol <= 0) return;
-  const C = {
-    concrete: { iD: .03, iV: .35, iF: 1100, sD: .13, sV: .12, sF: 850 },
-    grass:    { iD: .05, iV: .18, iF: 550,  sD: .22, sV: .08, sF: 450 },
-    metal:    { iD: .02, iV: .45, iF: 1600, sD: .09, sV: .18, sF: 1400 },
-    water:    { iD: .07, iV: .25, iF: 380,  sD: .28, sV: .12, sF: 320 }
-  };
-  const x = C[type] || C.concrete;
-
-  const impOsc = c.createOscillator();
-  impOsc.type = 'triangle';
-  impOsc.frequency.setValueAtTime(x.iF, n);
-  impOsc.frequency.exponentialRampToValueAtTime(90, n + x.iD);
-  const impGain = c.createGain();
-  impGain.gain.setValueAtTime(x.iV * vol, n);
-  impGain.gain.exponentialRampToValueAtTime(.001, n + x.iD);
-  impOsc.connect(impGain); impGain.connect(masterGain);
-  impOsc.start(n); impOsc.stop(n + x.iD);
-
-  const scNoise = mkNoise(c, x.sD, 'pink');
-  const scSource = c.createBufferSource();
-  scSource.buffer = scNoise;
-  const scFilter = c.createBiquadFilter();
-  scFilter.type = 'bandpass'; scFilter.frequency.setValueAtTime(x.sF, n); scFilter.Q.value = 1.2;
-  const scGain = c.createGain();
-  scGain.gain.setValueAtTime(x.sV * vol, n);
-  scGain.gain.exponentialRampToValueAtTime(.001, n + x.sD);
-  scSource.connect(scFilter); scFilter.connect(scGain); scGain.connect(masterGain);
-  scSource.start(n); scSource.stop(n + x.sD);
 }
 
 // 播放受伤音效

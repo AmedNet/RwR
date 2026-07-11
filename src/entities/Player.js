@@ -402,7 +402,7 @@ export class Player extends Entity {
     shoot() {
         if (GameState.gameOver || this.shootCooldown > 0 || this.isSwitching) return;
         // UI界面打开时禁止开火
-        if (GameState.arsenalOpen || GameState.inventoryOpen || GameState.debugOpen) return;
+        if (GameState.arsenalOpen || GameState.inventoryOpen || GameState.debugOpen || GameState.radioOpen) return;
         const weapon = GameState.getActiveWeapon();
         if (!weapon || !weapon.canShoot()) return;
 

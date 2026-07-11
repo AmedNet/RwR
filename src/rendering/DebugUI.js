@@ -6,298 +6,288 @@ import { AmbientSoundManager } from '../utils/AmbientSoundManager.js';
 
 export function drawDebug(ctx, renderer) {
     ctx.save();
+    const W = renderer.width;
+    const H = renderer.height;
+    const cx = W / 2;
 
-    // 半透明背景
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
-    ctx.fillRect(0, 0, renderer.width, renderer.height);
+    // 全屏深色背景
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.95)';
+    ctx.fillRect(0, 0, W, H);
 
-    // 标题
+    // 存储按钮位置
+    renderer.debugButtons = [];
+
+    let y = 40;
+
+    // === 标题 ===
     ctx.fillStyle = '#00BCD4';
-    ctx.font = 'bold 42px sans-serif';
+    ctx.font = 'bold 32px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('🐛 Debug 面板', renderer.width / 2, 80);
+    ctx.fillText('🐛 Debug Panel', cx, y);
+    y += 50;
 
-    // 当前RP
+    // === 状态信息 ===
+    const player = GameState.player;
+    const stars = player ? '★'.repeat(player.rank + 1) : '';
+    const rankName = player && player.getRankName ? player.getRankName() : '';
     ctx.fillStyle = '#FFD700';
-    ctx.font = 'bold 28px sans-serif';
-    ctx.fillText(`💰 当前 RP: ${GameState.rp}`, renderer.width / 2, 150);
+    ctx.font = 'bold 20px sans-serif';
+    ctx.fillText(`💰 RP: ${GameState.rp}   ${stars} ${rankName}`, cx, y);
+    y += 40;
 
-    // 按钮配置
-    const buttons = [
+    // === 按钮配置 ===
+    const btnW = 140;
+    const btnH = 44;
+    const btnGap = 16;
+
+    // === Row 1: RP 按钮（居中）===
+    const rpButtons = [
         { label: '+100 RP', value: 100, color: '#4CAF50' },
         { label: '+500 RP', value: 500, color: '#2196F3' },
         { label: '+1000 RP', value: 1000, color: '#9C27B0' }
     ];
+    const row1W = rpButtons.length * btnW + (rpButtons.length - 1) * btnGap;
+    let rowX = cx - row1W / 2;
 
-    const btnW = 180;
-    const btnH = 60;
-    const btnGap = 20;
-    const startX = renderer.width / 2 - (buttons.length * btnW + (buttons.length - 1) * btnGap) / 2;
-    const btnY = 220;
-
-    // 存储按钮位置供点击检测
-    renderer.debugButtons = [];
-
-    buttons.forEach((btn, i) => {
-        const x = startX + i * (btnW + btnGap);
-
-        // 按钮背景
+    rpButtons.forEach((btn) => {
         ctx.fillStyle = btn.color;
         ctx.beginPath();
-        ctx.roundRect(x, btnY, btnW, btnH, 10);
+        ctx.roundRect(rowX, y, btnW, btnH, 8);
         ctx.fill();
-
-        // 按钮边框
+        
         ctx.strokeStyle = 'rgba(255,255,255,0.3)';
         ctx.lineWidth = 2;
         ctx.stroke();
-
-        // 按钮文字
+        
         ctx.fillStyle = '#fff';
-        ctx.font = 'bold 20px sans-serif';
+        ctx.font = 'bold 16px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(btn.label, x + btnW / 2, btnY + btnH / 2);
-
-        // 保存按钮位置
-        renderer.debugButtons.push({ x, y: btnY, w: btnW, h: btnH, value: btn.value });
+        ctx.fillText(btn.label, rowX + btnW / 2, y + btnH / 2);
+        
+        renderer.debugButtons.push({ x: rowX, y, w: btnW, h: btnH, value: btn.value });
+        rowX += btnW + btnGap;
     });
+    y += btnH + 16;
 
-    // 额外功能按钮
-    const extraButtons = [
-        { label: '满血', action: 'heal', color: '#f44336' }
+    // === Row 2: 提升军衔 + 满血（居中，独立一行）===
+    const actionButtons = [
+        { label: '⬆ 提升军衔', action: 'rankUp', color: '#FF6F00' },
+        { label: '❤ 满血', action: 'heal', color: '#f44336' }
     ];
+    const row2W = actionButtons.length * btnW + (actionButtons.length - 1) * btnGap;
+    rowX = cx - row2W / 2;
 
-    const extraBtnY = btnY + btnH + 30;
-    const extraStartX = renderer.width / 2 - (extraButtons.length * btnW + (extraButtons.length - 1) * btnGap) / 2;
-
-    extraButtons.forEach((btn, i) => {
-        const x = extraStartX + i * (btnW + btnGap);
-
+    actionButtons.forEach((btn) => {
         ctx.fillStyle = btn.color;
         ctx.beginPath();
-        ctx.roundRect(x, extraBtnY, btnW, btnH, 10);
+        ctx.roundRect(rowX, y, btnW, btnH, 8);
         ctx.fill();
-
+        
         ctx.strokeStyle = 'rgba(255,255,255,0.3)';
         ctx.lineWidth = 2;
         ctx.stroke();
-
+        
         ctx.fillStyle = '#fff';
-        ctx.font = 'bold 20px sans-serif';
+        ctx.font = 'bold 16px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(btn.label, x + btnW / 2, extraBtnY + btnH / 2);
-
-        renderer.debugButtons.push({ x, y: extraBtnY, w: btnW, h: btnH, action: btn.action });
+        ctx.fillText(btn.label, rowX + btnW / 2, y + btnH / 2);
+        
+        renderer.debugButtons.push({ x: rowX, y, w: btnW, h: btnH, action: btn.action });
+        rowX += btnW + btnGap;
     });
+    y += btnH + 30;
 
-    // 天气控制区域
-    const weatherTitleY = extraBtnY + btnH + 50;
+    // === 分隔线 ===
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(60, y);
+    ctx.lineTo(W - 60, y);
+    ctx.stroke();
+    y += 24;
+
+    // === 天气控制 ===
+    const sectionX = 80;
     ctx.fillStyle = '#00BCD4';
-    ctx.font = 'bold 24px sans-serif';
-    ctx.textAlign = 'center';
+    ctx.font = 'bold 20px sans-serif';
+    ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText('🌤️ 天气控制', renderer.width / 2, weatherTitleY);
+    ctx.fillText('🌤️ 天气控制', sectionX, y);
 
-    // 当前天气显示
     const currentDef = WeatherSystem.getWeatherDef();
     ctx.fillStyle = '#FFD700';
-    ctx.font = 'bold 20px sans-serif';
-    ctx.fillText(`当前: ${currentDef.icon} ${currentDef.name}`, renderer.width / 2, weatherTitleY + 35);
+    ctx.font = '16px sans-serif';
+    ctx.fillText(`当前: ${currentDef.icon} ${currentDef.name}`, sectionX + 120, y);
+    y += 32;
 
-    // 天气按钮网格 (6列 × 3行)
+    // 天气按钮网格 (6列)
     const weatherTypes = WeatherSystem.getAllWeatherTypes();
-    const wBtnW = 70;
-    const wBtnH = 40;
-    const wBtnGap = 8;
+    const wBtnW = 80;
+    const wBtnH = 44;
+    const wGap = 10;
     const wCols = 6;
-    const wGridW = wCols * wBtnW + (wCols - 1) * wBtnGap;
-    const wStartX = renderer.width / 2 - wGridW / 2;
-    const wStartY = weatherTitleY + 60;
+    const wGridW = wCols * wBtnW + (wCols - 1) * wGap;
+    const wStartX = cx - wGridW / 2;
 
     weatherTypes.forEach((wt, i) => {
         const col = i % wCols;
         const row = Math.floor(i / wCols);
-        const x = wStartX + col * (wBtnW + wBtnGap);
-        const y = wStartY + row * (wBtnH + wBtnGap);
+        const x = wStartX + col * (wBtnW + wGap);
+        const wy = y + row * (wBtnH + wGap);
 
-        // 按钮背景
         const isActive = wt.key === WeatherSystem.current;
-        ctx.fillStyle = isActive ? '#4CAF50' : '#555';
+        ctx.fillStyle = isActive ? '#4CAF50' : '#3a3a3a';
         ctx.beginPath();
-        ctx.roundRect(x, y, wBtnW, wBtnH, 6);
+        ctx.roundRect(x, wy, wBtnW, wBtnH, 6);
         ctx.fill();
 
-        // 按钮边框
-        ctx.strokeStyle = isActive ? '#81C784' : 'rgba(255,255,255,0.2)';
+        ctx.strokeStyle = isActive ? '#81C784' : 'rgba(255,255,255,0.15)';
         ctx.lineWidth = isActive ? 2 : 1;
         ctx.stroke();
 
-        // 按钮文字（图标 + 简称）
         ctx.fillStyle = '#fff';
-        ctx.font = 'bold 14px sans-serif';
+        ctx.font = '16px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(wt.icon, x + wBtnW / 2, y + wBtnH / 2 - 6);
+        ctx.fillText(wt.icon, x + wBtnW / 2, wy + wBtnH / 2 - 8);
+        ctx.font = '11px sans-serif';
+        ctx.fillText(wt.name, x + wBtnW / 2, wy + wBtnH / 2 + 10);
 
-        ctx.font = '10px sans-serif';
-        ctx.fillText(wt.name, x + wBtnW / 2, y + wBtnH / 2 + 8);
-
-        // 保存按钮位置
-        renderer.debugButtons.push({ x, y, w: wBtnW, h: wBtnH, weather: wt.key });
+        renderer.debugButtons.push({ x, y: wy, w: wBtnW, h: wBtnH, weather: wt.key });
     });
 
+    y += Math.ceil(weatherTypes.length / wCols) * (wBtnH + wGap) + 24;
 
-    // 昼夜控制区域
-    const daynightTitleY = wStartY + Math.ceil(weatherTypes.length / wCols) * (wBtnH + wBtnGap) + 30;
+    // === 分隔线 ===
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    ctx.beginPath();
+    ctx.moveTo(60, y);
+    ctx.lineTo(W - 60, y);
+    ctx.stroke();
+    y += 24;
+
+    // === 昼夜控制 ===
     ctx.fillStyle = '#00BCD4';
-    ctx.font = 'bold 24px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('🌅 昼夜控制', renderer.width / 2, daynightTitleY);
-
-    // 当前时间显示
-    ctx.fillStyle = '#FFD700';
     ctx.font = 'bold 20px sans-serif';
-    ctx.fillText(`🕐 ${DayNightSystem.getTimeString()}`, renderer.width / 2, daynightTitleY + 35);
+    ctx.textAlign = 'left';
+    ctx.fillText('🌅 昼夜控制', sectionX, y);
+
+    ctx.fillStyle = '#FFD700';
+    ctx.font = '16px sans-serif';
+    ctx.fillText(`🕐 ${DayNightSystem.getTimeString()}`, sectionX + 120, y);
+    y += 32;
 
     // 时间滑块
-    const sliderW = 400;
+    const sliderW = Math.min(W - 160, 600);
     const sliderH = 20;
-    const sliderX = renderer.width / 2 - sliderW / 2;
-    const sliderY = daynightTitleY + 60;
+    const sliderX = cx - sliderW / 2;
+    const sliderY = y;
 
-    // 滑块轨道背景
-    ctx.fillStyle = '#333';
+    ctx.fillStyle = '#2a2a2a';
     ctx.beginPath();
     ctx.roundRect(sliderX, sliderY, sliderW, sliderH, 10);
     ctx.fill();
 
-    // 滑块轨道渐变（模拟昼夜）
     const gradient = ctx.createLinearGradient(sliderX, 0, sliderX + sliderW, 0);
-    gradient.addColorStop(0, 'rgba(10,15,40,0.8)');    // 深夜
-    gradient.addColorStop(0.25, 'rgba(60,30,10,0.6)'); // 黎明
-    gradient.addColorStop(0.5, 'rgba(135,206,235,0.3)'); // 白天
-    gradient.addColorStop(0.75, 'rgba(50,20,10,0.6)'); // 黄昏
-    gradient.addColorStop(1, 'rgba(10,15,40,0.8)');    // 夜晚
+    gradient.addColorStop(0, 'rgba(10,15,40,0.9)');
+    gradient.addColorStop(0.25, 'rgba(60,30,10,0.7)');
+    gradient.addColorStop(0.5, 'rgba(135,206,235,0.4)');
+    gradient.addColorStop(0.75, 'rgba(50,20,10,0.7)');
+    gradient.addColorStop(1, 'rgba(10,15,40,0.9)');
     ctx.fillStyle = gradient;
     ctx.beginPath();
     ctx.roundRect(sliderX, sliderY, sliderW, sliderH, 10);
     ctx.fill();
 
-    // 滑块手柄
     const handleX = sliderX + DayNightSystem.timeOfDay * sliderW;
-    const handleR = 12;
     ctx.fillStyle = '#fff';
     ctx.beginPath();
-    ctx.arc(handleX, sliderY + sliderH / 2, handleR, 0, Math.PI * 2);
+    ctx.arc(handleX, sliderY + sliderH / 2, 12, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = '#00BCD4';
     ctx.lineWidth = 3;
     ctx.stroke();
 
-    // 保存滑块区域供点击检测
-    renderer.debugSlider = {
-        x: sliderX,
-        y: sliderY,
-        w: sliderW,
-        h: sliderH,
-        handleX: handleX,
-        handleR: handleR
-    };
+    renderer.debugSlider = { x: sliderX, y: sliderY, w: sliderW, h: sliderH, handleX, handleR: 12 };
 
     // 暂停/继续按钮
+    y += sliderH + 20;
     const pauseBtnW = 120;
     const pauseBtnH = 40;
-    const pauseBtnX = renderer.width / 2 - pauseBtnW / 2;
-    const pauseBtnY = sliderY + sliderH + 20;
-
+    const pauseBtnX = cx - pauseBtnW / 2;
     ctx.fillStyle = DayNightSystem.paused ? '#f44336' : '#4CAF50';
     ctx.beginPath();
-    ctx.roundRect(pauseBtnX, pauseBtnY, pauseBtnW, pauseBtnH, 8);
+    ctx.roundRect(pauseBtnX, y, pauseBtnW, pauseBtnH, 8);
     ctx.fill();
     ctx.strokeStyle = 'rgba(255,255,255,0.3)';
     ctx.lineWidth = 2;
     ctx.stroke();
-
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 16px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(DayNightSystem.paused ? '▶ 继续' : '⏸ 暂停', pauseBtnX + pauseBtnW / 2, pauseBtnY + pauseBtnH / 2);
+    ctx.fillText(DayNightSystem.paused ? '▶ 继续' : '⏸ 暂停', pauseBtnX + pauseBtnW / 2, y + pauseBtnH / 2);
+    renderer.debugButtons.push({ x: pauseBtnX, y, w: pauseBtnW, h: pauseBtnH, action: 'toggleDayNight' });
 
-    renderer.debugButtons.push({
-        x: pauseBtnX,
-        y: pauseBtnY,
-        w: pauseBtnW,
-        h: pauseBtnH,
-        action: 'toggleDayNight'
-    });
+    y += pauseBtnH + 28;
 
-    // ─── 环境音效控制区域 ───
-    const ambientTitleY = pauseBtnY + pauseBtnH + 40;
-    ctx.fillStyle = '#00BCD4';
-    ctx.font = 'bold 24px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('🔊 环境音效', renderer.width / 2, ambientTitleY);
-
-    // 音量滑块
-    const ambSliderW = 300;
-    const ambSliderH = 16;
-    const ambSliderX = renderer.width / 2 - ambSliderW / 2;
-    const ambSliderY = ambientTitleY + 40;
-
-    // 滑块轨道背景
-    ctx.fillStyle = '#333';
+    // === 分隔线 ===
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
     ctx.beginPath();
-    ctx.roundRect(ambSliderX, ambSliderY, ambSliderW, ambSliderH, 8);
+    ctx.moveTo(60, y);
+    ctx.lineTo(W - 60, y);
+    ctx.stroke();
+    y += 24;
+
+    // === 环境音效 ===
+    ctx.fillStyle = '#00BCD4';
+    ctx.font = 'bold 20px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('🔊 环境音效', sectionX, y);
+
+    ctx.fillStyle = '#fff';
+    ctx.font = '16px sans-serif';
+    ctx.fillText(`${Math.round(AmbientSoundManager.masterVolume * 100)}%`, sectionX + 120, y);
+    y += 32;
+
+    const ambSliderW = Math.min(W - 160, 500);
+    const ambSliderH = 18;
+    const ambSliderX = cx - ambSliderW / 2;
+    const ambSliderY = y;
+
+    ctx.fillStyle = '#2a2a2a';
+    ctx.beginPath();
+    ctx.roundRect(ambSliderX, ambSliderY, ambSliderW, ambSliderH, 9);
     ctx.fill();
 
-    // 已填充部分
     const ambFillW = ambSliderW * AmbientSoundManager.masterVolume;
     const ambGradient = ctx.createLinearGradient(ambSliderX, 0, ambSliderX + ambFillW, 0);
     ambGradient.addColorStop(0, '#4CAF50');
     ambGradient.addColorStop(1, '#81C784');
     ctx.fillStyle = ambGradient;
     ctx.beginPath();
-    ctx.roundRect(ambSliderX, ambSliderY, ambFillW, ambSliderH, 8);
+    ctx.roundRect(ambSliderX, ambSliderY, ambFillW, ambSliderH, 9);
     ctx.fill();
 
-    // 滑块手柄
     const ambHandleX = ambSliderX + ambFillW;
-    const ambHandleR = 10;
     ctx.fillStyle = '#fff';
     ctx.beginPath();
-    ctx.arc(ambHandleX, ambSliderY + ambSliderH / 2, ambHandleR, 0, Math.PI * 2);
+    ctx.arc(ambHandleX, ambSliderY + ambSliderH / 2, 11, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = '#4CAF50';
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // 音量百分比文字
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 14px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(`${Math.round(AmbientSoundManager.masterVolume * 100)}%`, renderer.width / 2, ambSliderY + ambSliderH + 20);
-
-    // 保存环境音效滑块区域
-    renderer.ambientSlider = {
-        x: ambSliderX,
-        y: ambSliderY,
-        w: ambSliderW,
-        h: ambSliderH,
-        handleX: ambHandleX,
-        handleR: ambHandleR
-    };
+    renderer.ambientSlider = { x: ambSliderX, y: ambSliderY, w: ambSliderW, h: ambSliderH, handleX: ambHandleX, handleR: 11 };
 
     // 底部提示
-    ctx.fillStyle = '#aaa';
-    ctx.font = '16px sans-serif';
+    ctx.fillStyle = '#666';
+    ctx.font = '14px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('点击按钮生效 | 按 ESC 或 9+1 关闭', renderer.width / 2, renderer.height - 20);
+    ctx.fillText('按 ESC 或 9+1 关闭', cx, H - 20);
 
     ctx.restore();
 }

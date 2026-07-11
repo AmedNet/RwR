@@ -20,6 +20,7 @@ import { BurnEffect, STATUS_EFFECT_CONFIG } from './utils/StatusEffects.js';
 import { WeatherSystem } from './core/WeatherSystem.js';
 import { DayNightSystem } from './core/DayNightSystem.js';
 import { AmbientSoundManager } from './utils/AmbientSoundManager.js';
+import { SupportSystem } from './core/SupportSystem.js';
 
 // ---------- 配置 ----------
 const CONFIG = {
@@ -347,6 +348,54 @@ function gameLoop() {
     DayNightSystem.update();
     // 更新环境音效
     AmbientSoundManager.update();
+    
+    // 更新支援系统
+    SupportSystem.update();
+    
+    // G键长按检测（打开/关闭电台）
+    if (GameState.radioGKeyPressed && !GameState.radioGKeyConsumed && !GameState.gameOver) {
+        GameState.radioGKeyTimer++;
+        if (GameState.radioGKeyTimer >= 18) {
+            if (GameState.radioOpen) {
+                GameState.radioClosing = true;
+                GameState.radioAnimating = true;
+            } else {
+                const player = GameState.player;
+                if (player && (player.rank + 1) >= 2) {
+                    GameState.radioOpen = true;
+                    GameState.radioAnimating = true;
+                    GameState.radioClosing = false;
+                    GameState.radioAnimProgress = 0;
+                    GameState.radioSelectedIndex = 0;
+                    GameState.radioScrollOffset = 0;
+                    const cam = GameState.camera;
+                    const zoom = cam.zoom || 1;
+                    const offsetX = cam.offsetX || 0;
+                    const offsetY = cam.offsetY || 0;
+                    const canvas = document.getElementById('gameCanvas');
+                    const canvasW = canvas ? canvas.clientWidth : 800;
+                    const canvasH = canvas ? canvas.clientHeight : 600;
+                    const cx = canvasW / 2;
+                    const cy = canvasH / 2;
+                    GameState.radioTargetWorld = {
+                        x: (GameState.mouse.x - cx * (1 - zoom) + offsetX) / zoom + cam.x,
+                        y: (GameState.mouse.y - cy * (1 - zoom) + offsetY) / zoom + cam.y
+                    };
+                }
+            }
+            GameState.radioGKeyConsumed = true;
+            GameState.radioGKeyTimer = 0;
+        }
+    }
+    
+    
+    // 敌方AI支援决策
+    if (!GameState.gameOver) {
+        const aiDecision = SupportSystem.aiShouldCallSupport();
+        if (aiDecision) {
+            SupportSystem.enemyCallSupport(aiDecision.type, aiDecision.x, aiDecision.y);
+        }
+    }
 
     // 更新摄像机
     if (GameState.player && !GameState.gameOver) {
@@ -533,6 +582,9 @@ function init() {
     AmbientSoundManager.init();
     // 初始化小地图
     Minimap.init();
+    
+    // 初始化支援系统
+    SupportSystem.init();
 
     console.log('🎮 游戏初始化完成！');
     console.log(`📐 地图大小: ${CONFIG.world.width} x ${CONFIG.world.height}`);
@@ -623,8 +675,12 @@ function respawnPlayer(pointIndex) {
     // 重置自杀标记
     GameState.suicideDeath = false;
     
+    // 保留当前军衔（阵亡不降级）
+    const savedRank = GameState.player ? GameState.player.rank : 0;
+    
     // 重置玩家状态（位置、血量等）
     GameState.player = new Player(spawnX, spawnY, config.player);
+    GameState.player.rank = savedRank;
     GameState.gameOver = false;
     GameState.respawnSelection = false;
     UIManager.updateAll(GameState);
