@@ -807,15 +807,15 @@ export const SupportSystem = {
     },
 
     // 死神支援执行
-    _executeReaperStrike(x, y) {
-        const config = SupportConfig[SupportType.REAPER_STRIKE];
-        
-        // 创建音频实例（循环播放，fadeOut 阶段淡出后停止）
-        const audio = new Audio(config.audioPath);
-        audio.loop = true;
-        audio.volume = 0;
-        audio.play().catch(e => console.log('Audio play failed:', e));
-        
+   _executeReaperStrike(x, y) {
+       const config = SupportConfig[SupportType.REAPER_STRIKE];
+       
+        // 创建音频实例（自然播放完毕，不循环）
+       const audio = new Audio(config.audioPath);
+        audio.loop = false;
+       audio.volume = 0;
+       audio.play().catch(e => console.log('Audio play failed:', e));
+       
         // 添加到死神支援数组
         this.reaperStrikes.push({
             x, y,
