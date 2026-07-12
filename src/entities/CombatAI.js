@@ -3,6 +3,7 @@ import { Entity } from './Entity.js';
 import { GameState } from '../core/GameState.js';
 import { Terrain } from '../core/Map.js';
 import { Bullet } from './Bullet.js';
+import { GrenadeBullet } from './GrenadeBullet.js';
 import { MovementSystem } from '../utils/MovementSystem.js';
 import { WeaponPickup } from './WeaponPickup.js';
 import { Grenade } from './Grenade.js';
@@ -874,6 +875,16 @@ export class CombatAI extends Entity {
                 const pelletAngle = baseAngle + (Math.random() - 0.5) * spreadAngle;
                 this.spawnBullet(pelletAngle, speed, weapon, weapon.config.range || 250);
             }
+        } else if (weapon.config.arcRange) {
+            // 抛物线武器（XM320榴弹发射器）— 预判目标位置
+            const arcSpeed = weapon.config.bulletSpeed || 6;
+            const predicted = this.predictTargetPosition(target, arcSpeed);
+            GameState.bullets.push(new GrenadeBullet(
+                this.x, this.y,
+                predicted.x, predicted.y,
+                weapon.config,
+                this
+            ));
         } else {
             this.spawnBullet(baseAngle, speed, weapon, null);
         }
@@ -882,7 +893,7 @@ export class CombatAI extends Entity {
            SoundManager.playShoot(weaponType, this);
            EffectsManager.spawnMuzzleFlash(this.x, this.y, baseAngle, weaponType);
             // 火箭筒：额外生成后焰喷射效果
-            if (weaponType === 'launcher') {
+            if (weaponType === 'launcher' && weapon.config.hasBackblast !== false) {
                 EffectsManager.spawnBackblast(this.x, this.y, baseAngle);
             }
        }
@@ -898,7 +909,7 @@ export class CombatAI extends Entity {
             SoundManager.playShellEject(shellType, this);
         }
 
-        if (weaponType === 'launcher') {
+        if (weaponType === 'launcher' && weapon.config.maxStack) {
             weapon.consumeStack();
             if (weapon.stackCount <= 0) this.weapons[this.activeWeaponSlot] = null;
         }

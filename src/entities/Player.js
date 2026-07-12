@@ -4,6 +4,7 @@ import { GameState } from '../core/GameState.js';
 import { EventBus } from '../core/EventBus.js';
 import { Bullet } from './Bullet.js';
 import { Grenade } from './Grenade.js';
+import { GrenadeBullet } from './GrenadeBullet.js';
 import { WeaponRegistry, FireMode } from '../core/WeaponRegistry.js';
 import { Weapon } from '../core/Weapon.js';
 import { WeaponPickup } from './WeaponPickup.js';
@@ -56,6 +57,7 @@ export class Player extends Entity {
         this.loadWeaponImage('awp'); // 狙击枪
         this.loadWeaponImage('m82'); // 反器材狙击枪
         this.loadWeaponImage('at4'); // 火箭筒
+        this.loadWeaponImage('xm320'); // 榴弹发射器
         this.loadWeaponImage('hkmp5'); // 冲锋枪
     }
 
@@ -252,7 +254,7 @@ export class Player extends Entity {
            dx /= len; dy /= len;
            const speedFactor = GameState.map ? GameState.map.getSpeedFactor(this.x, this.y) : 1;
            const heldWeapon = GameState.getActiveWeapon();
-           const launcherSlowdown = (heldWeapon && heldWeapon.config.type === 'launcher') ? Player.LAUNCHER_SLOWDOWN : 1;
+           const launcherSlowdown = (heldWeapon && heldWeapon.config.type === 'launcher' && !heldWeapon.config.noSlowdown) ? Player.LAUNCHER_SLOWDOWN : 1;
            const weatherSpeed = WeatherSystem.getSpeedMultiplier();
            const slipFactor = isSnow ? 0.82 : 1.0;
            const finalSpeed = this.speed * speedFactor * launcherSlowdown * this.getSpeedMultiplier() * weatherSpeed * slipFactor;
@@ -459,6 +461,24 @@ export class Player extends Entity {
                     this
                 ));
             }
+        } else if (weapon.config.arcRange) {
+            // 抛物线武器（XM320榴弹发射器）：计算鼠标世界坐标作为目标点
+            const mouse = GameState.mouse;
+            const cam = GameState.camera;
+            const offsetX = cam.offsetX || 0;
+            const offsetY = cam.offsetY || 0;
+            const logicalW = GameState.viewport.width;
+            const logicalH = GameState.viewport.height;
+            const cx = logicalW / 2;
+            const cy = logicalH / 2;
+            const worldX = (mouse.x - cx * (1 - cam.zoom) + offsetX) / cam.zoom + cam.x;
+            const worldY = (mouse.y - cy * (1 - cam.zoom) + offsetY) / cam.zoom + cam.y;
+            GameState.bullets.push(new GrenadeBullet(
+                this.x, this.y,
+                worldX, worldY,
+                weapon.config,
+                this
+            ));
         } else {
             // 获取穿透配置（狙击枪用）
             const penetration = weapon.config.penetration || null;
@@ -489,7 +509,7 @@ export class Player extends Entity {
             SoundManager.playShoot(weaponType, this);
             EffectsManager.spawnMuzzleFlash(this.x, this.y, baseAngle, weaponType);
             // 火箭筒：额外生成后焰喷射效果
-            if (weaponType === 'launcher') {
+            if (weaponType === 'launcher' && weapon.config.hasBackblast !== false) {
                 EffectsManager.spawnBackblast(this.x, this.y, baseAngle);
             }
         }
@@ -512,7 +532,7 @@ export class Player extends Entity {
         }
 
         // 火箭筒等一次性堆叠武器：射击后消耗堆叠，用完销毁
-        if (weapon.config.type === 'launcher') {
+        if (weapon.config.type === 'launcher' && weapon.config.maxStack) {
             weapon.consumeStack();
             if (weapon.stackCount <= 0) {
                 // 用完销毁，类似医疗包
@@ -617,13 +637,15 @@ export class Player extends Entity {
             this.alive = false;
             
             // 死亡时掉落所有武器（初始手枪 beretta92 除外）
+            const droppedWeapons = new Set(); // 追踪已掉落的武器，避免重复
             for (let i = 0; i < GameState.inventory.length; i++) {
                 const weapon = GameState.inventory[i];
-                if (weapon && weapon.id !== 'beretta92') {
+                if (weapon && weapon.id !== 'beretta92' && !droppedWeapons.has(weapon.id)) {
                     // 在玩家位置附近随机偏移掉落
                     const offsetX = (Math.random() - 0.5) * 60;
                     const offsetY = (Math.random() - 0.5) * 60;
                     GameState.weaponPickups.push(new WeaponPickup(this.x + offsetX, this.y + offsetY, weapon));
+                    droppedWeapons.add(weapon.id);
                 }
             }
             

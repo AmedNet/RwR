@@ -106,6 +106,8 @@ export const CollisionSystem = {
         for (let i = bullets.length - 1; i >= 0; i--) {
             const bullet = bullets[i];
             if (!bullet.alive) continue;
+            // 跳过抛物线弹道（GrenadeBullet自己处理碰撞）
+            if (bullet.isArcProjectile) continue;
             if (!map) continue;
             const { col, row } = map.worldToTile(bullet.x, bullet.y);
             if (!SOLID_TERRAIN.has(map.getTile(col, row))) continue;
@@ -145,6 +147,8 @@ export const CollisionSystem = {
                 bullets.splice(i, 1);
                 continue;
             }
+            // 跳过抛物线弹道（GrenadeBullet自己处理伤害）
+            if (bullet.isArcProjectile) continue;
             const bulletUsed = bullet.isEnemy
                 ? this._checkEnemyBulletVsEntities(bullet, player, teammates)
                 : this._checkPlayerBulletVsEnemies(bullet, player, enemies);

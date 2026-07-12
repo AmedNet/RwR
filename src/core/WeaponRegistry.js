@@ -351,6 +351,51 @@ export const WeaponRegistry = {
         bulletRadiusMultiplier: 1.0
     },
 
+    // XM320 榴弹发射器 - 抛物线弹道，落地即炸
+    xm320: {
+        id: 'xm320',
+        name: 'XM320',
+        type: WeaponType.LAUNCHER,
+        damage: 180,
+        shootDelay: 90,
+        bulletSpeed: 6,
+        magSize: 1,
+        reloadTime: { min: 300, max: 360 },  // 5-6秒
+        buyPrice: 800,
+        sellPrice: 400,
+        icon: 'src/pkg/weapon/xm320/xm320.png',
+        imagePath: 'src/pkg/weapon/xm320/xm320.png',
+        aiWeight: 2,
+        range: 1000,              // 实际由 arcRange 控制
+        fireMode: FireMode.SEMI,
+        knockback: 40,
+        bulletColor: '#4CAF50',
+        bulletGlow: '#2E7D32',
+        explosionRadius: 120,
+        explosionDamage: 150,
+        shrapnelRadius: 200,
+        shrapnelDamage: 50,
+        arcRange: 1000,          // 最大抛射距离1000像素
+        scope: {
+            activateDelay: 30,
+            maxOffset: 300,
+            offsetSensitivity: 300
+        },
+        recoil: {
+            maxAngle: 0.35,
+            recoverySpeed: 0.004
+        },
+        spread: {
+            base: 0.02,
+            max: 0.10,
+            increase: 0.03,
+            recovery: 0.01
+        },
+        hasBackblast: false,
+        noSlowdown: true,  // 不减速
+        bulletRadiusMultiplier: 1.2
+    },
+
     // HK MP5 冲锋枪 - 极速射速，小弹丸
     hkmp5: {
         id: 'hkmp5',

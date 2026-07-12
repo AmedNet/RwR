@@ -36,7 +36,10 @@ export class Weapon {
         }
         if (this.config.type === 'melee') return true;
         // 火箭筒检查堆叠数
-        if (this.config.type === 'launcher') return this.stackCount > 0 && this.ammo > 0;
+        // 火箭筒检查堆叠数（XM320等无堆叠的launcher除外）
+        if (this.config.type === 'launcher' && this.config.maxStack) {
+            return this.stackCount > 0 && this.ammo > 0;
+        }
         return this.ammo > 0;
     }
 
@@ -74,8 +77,8 @@ export class Weapon {
         if (this.config.type === 'grenade') return false;
         if (this.isReloading) return false;
         this.firedDuringReload = false;
-        // 火箭筒：有备弹才能换弹
-        if (this.config.type === 'launcher') {
+        // 火箭筒（有堆叠机制的）：有备弹才能换弹
+        if (this.config.type === 'launcher' && this.config.maxStack) {
             if (this.ammo > 0) return false; // 弹膛还有弹，不需要换
             if (this.stackCount <= 0) return false; // 没有备弹
             this.isReloading = true;
@@ -115,7 +118,7 @@ export class Weapon {
         if (!this.isReloading) return;
         this.reloadTimer--;
         if (this.reloadTimer <= 0) {
-            if (this.config.type === 'launcher') {
+            if (this.config.type === 'launcher' && this.config.maxStack) {
                 // 火箭筒：从堆叠取1发装填
                 if (this.stackCount > 0) {
                     this.ammo = 1;
