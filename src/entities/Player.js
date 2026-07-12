@@ -6,6 +6,7 @@ import { Bullet } from './Bullet.js';
 import { Grenade } from './Grenade.js';
 import { WeaponRegistry, FireMode } from '../core/WeaponRegistry.js';
 import { Weapon } from '../core/Weapon.js';
+import { WeaponPickup } from './WeaponPickup.js';
 import { EffectsManager } from '../utils/EffectsManager.js';
 import * as SoundManager from '../utils/SoundManager.js';
 import { SlowEffect, STATUS_EFFECT_CONFIG } from '../utils/StatusEffects.js';
@@ -614,6 +615,18 @@ export class Player extends Entity {
         if (this.health <= 0) {
             this.health = 0;
             this.alive = false;
+            
+            // 死亡时掉落所有武器（初始手枪 beretta92 除外）
+            for (let i = 0; i < GameState.inventory.length; i++) {
+                const weapon = GameState.inventory[i];
+                if (weapon && weapon.id !== 'beretta92') {
+                    // 在玩家位置附近随机偏移掉落
+                    const offsetX = (Math.random() - 0.5) * 60;
+                    const offsetY = (Math.random() - 0.5) * 60;
+                    GameState.weaponPickups.push(new WeaponPickup(this.x + offsetX, this.y + offsetY, weapon));
+                }
+            }
+            
             GameState.gameOver = true;
             EventBus.emit('game_over', { reason: 'player_died' });
             SoundManager.playDie();

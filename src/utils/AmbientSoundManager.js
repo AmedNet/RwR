@@ -138,7 +138,7 @@ class Channel {
 }
 
 // ─── 一次性播放（雷声、猫头鹰、鸟叫） ───
-function playOneShot(id, vol) {
+function playOneShot(id, vol, maxDuration, fadeOut) {
     const ctx = getAudioContext();
     if (!ctx) return;
     const channel = AmbientSoundManager.channels[id];
@@ -150,7 +150,19 @@ function playOneShot(id, vol) {
     gain.gain.value = Math.min(1, vol);
     source.connect(gain);
     gain.connect(ctx.destination);
-    source.start(0);
+
+    // Random start offset within the buffer for variety
+    const bufLen = channel.buffer.duration;
+    const dur = maxDuration ? Math.min(maxDuration, bufLen) : bufLen;
+    const offset = bufLen > dur ? Math.random() * (bufLen - dur) : 0;
+    source.start(0, offset, dur);
+
+    // Smooth fade-out to avoid abrupt cutoff
+    if (fadeOut && dur > 0.5) {
+        const now = ctx.currentTime;
+        gain.gain.setValueAtTime(Math.min(1, vol), now);
+        gain.gain.linearRampToValueAtTime(0, now + dur - 0.1);
+    }
 }
 
 // ─── 收集所有天气相关通道 ID ───
@@ -188,7 +200,7 @@ export const AmbientSoundManager = {
         this._owlTimer = 0;
     },
     _resetBirdTimer() {
-        this._birdInterval = 1200 + Math.floor(Math.random() * 1800);
+        this._birdInterval = 1800 + Math.floor(Math.random() * 3800);
         this._birdTimer = 0;
     },
     _resetThunderTimer() {
@@ -291,7 +303,7 @@ export const AmbientSoundManager = {
         if (!isDaytime) { this._birdTimer = 0; return; }
         this._birdTimer++;
         if (this._birdTimer >= this._birdInterval) {
-            playOneShot('birds', 0.2 * this.masterVolume);
+            playOneShot('birds', 0.1 * this.masterVolume, 3 + Math.random() * 2, true);
             this._resetBirdTimer();
         }
     },
@@ -302,7 +314,7 @@ export const AmbientSoundManager = {
         if (!isDeepNight) { this._owlTimer = 0; return; }
         this._owlTimer++;
         if (this._owlTimer >= this._owlInterval) {
-            playOneShot('owl', 0.3 * this.masterVolume);
+            playOneShot('owl', 0.25 * this.masterVolume, 4 + Math.random() * 2, true);
             this._resetOwlTimer();
         }
     }
