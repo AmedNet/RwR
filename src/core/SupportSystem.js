@@ -714,13 +714,16 @@ export const SupportSystem = {
             const startY = targetY - config.dropHeight;
 
             let unit;
-            if (faction === 'enemy') {
-                // 敌方伞兵：创建 Enemy 实例
-                unit = new Enemy(targetX, targetY, GameState.config.enemy);
-                if (isElite) {
-                    unit.setRank(AIRank.OFFICER);
-                }
-            } else if (isElite) {
+           if (faction === 'enemy') {
+               // 敌方伞兵：创建 Enemy 实例
+               unit = new Enemy(targetX, targetY, GameState.config.enemy);
+               if (isElite) {
+                   unit.setRank(AIRank.OFFICER);
+               }
+                // 分配武器（与普通敌人生成逻辑一致）
+                const enemyWeapons = SpawnSystem.generateRandomWeapons(unit.rank, unit.unitClass);
+                unit.setWeapons(enemyWeapons);
+           } else if (isElite) {
                 unit = this._createEliteTeammate(targetX, targetY, i);
             } else {
                 unit = new Teammate(targetX, targetY, GameState.config.teammate);
