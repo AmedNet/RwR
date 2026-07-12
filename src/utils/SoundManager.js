@@ -656,3 +656,59 @@ export function playShellLand(type = 'pistol', bounceIndex = 0, source = 0) {
     ns.start(n); ns.stop(n + 0.02);
   }
 }
+
+// 电台打开音效 — PTT beep + 电流噪声 + 信号爆裂
+export function playRadioOpen() {
+    const c = getCtx();
+    if (!c) return;
+    const t = c.currentTime;
+    // PTT 按下 beep
+    const osc1 = c.createOscillator(), g1 = c.createGain();
+    osc1.type = 'square'; osc1.frequency.value = 2100;
+    g1.gain.setValueAtTime(0, t);
+    g1.gain.linearRampToValueAtTime(0.18, t + 0.005);
+    g1.gain.exponentialRampToValueAtTime(0.0001, t + 0.08);
+    osc1.connect(g1).connect(masterGain);
+    osc1.start(t); osc1.stop(t + 0.08);
+    // 电流噪声
+    const sr = c.sampleRate, dur = 0.45, len = sr * dur;
+    const buf = c.createBuffer(1, len, sr), ch = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) ch[i] = (Math.random() * 2 - 1) * 0.25;
+    const ns = c.createBufferSource(); ns.buffer = buf;
+    const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2600; bp.Q.value = 1.5;
+    const ng = c.createGain(); ng.gain.value = 0.6;
+    ns.connect(bp).connect(ng).connect(masterGain);
+    ns.start(t + 0.08);
+    // 信号爆裂
+    for (let i = 0; i < 10; i++) {
+        const osc = c.createOscillator(), g = c.createGain();
+        osc.type = 'square'; osc.frequency.value = 800 + Math.random() * 2500;
+        const st = t + 0.12 + i * 0.008;
+        g.gain.setValueAtTime(0.08, st);
+        g.gain.exponentialRampToValueAtTime(0.0001, st + 0.005);
+        osc.connect(g).connect(masterGain);
+        osc.start(st); osc.stop(st + 0.005);
+    }
+    // 中间停顿噪声
+    const buf2 = c.createBuffer(1, sr * 0.12, sr), ch2 = buf2.getChannelData(0);
+    for (let i = 0; i < ch2.length; i++) ch2[i] = (Math.random() * 2 - 1) * 0.25;
+    const ns2 = c.createBufferSource(); ns2.buffer = buf2;
+    const bp2 = c.createBiquadFilter(); bp2.type = 'bandpass'; bp2.frequency.value = 2600; bp2.Q.value = 1.5;
+    const ng2 = c.createGain(); ng2.gain.value = 0.6;
+    ns2.connect(bp2).connect(ng2).connect(masterGain);
+    ns2.start(t + 0.65);
+}
+
+// 电台关闭音效 — 短促低沉 beep
+export function playRadioClose() {
+    const c = getCtx();
+    if (!c) return;
+    const t = c.currentTime;
+    const osc = c.createOscillator(), g = c.createGain();
+    osc.type = 'square'; osc.frequency.value = 1400;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.18, t + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+    osc.connect(g).connect(masterGain);
+    osc.start(t); osc.stop(t + 0.12);
+}

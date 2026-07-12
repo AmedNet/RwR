@@ -5,7 +5,7 @@ import { WeaponRegistry } from '../core/WeaponRegistry.js';
 import { UIManager } from '../rendering/UIManager.js';
 import { Renderer } from '../rendering/Renderer.js';
 import { WeaponPickup } from '../entities/WeaponPickup.js';
-import { playPickup, playUISound } from '../utils/SoundManager.js';
+import { playPickup, playUISound, playRadioClose } from '../utils/SoundManager.js';
 import { WeatherSystem } from '../core/WeatherSystem.js';
 import { DayNightSystem } from '../core/DayNightSystem.js';
 import { AmbientSoundManager } from '../utils/AmbientSoundManager.js';
@@ -179,6 +179,7 @@ if (GameState.arsenalOpen && key === 's') {
                 if (key === 'escape') {
                     GameState.radioClosing = true;
                     GameState.radioAnimating = true;
+                    playRadioClose();
                     e.preventDefault();
                     return;
                 }
@@ -205,6 +206,7 @@ if (GameState.arsenalOpen && key === 's') {
                         SupportSystem.callSupport(sel.type, GameState.radioTargetWorld.x, GameState.radioTargetWorld.y);
                         GameState.radioClosing = true;
                         GameState.radioAnimating = true;
+                        playRadioClose();
                     }
                     e.preventDefault();
                     return;
@@ -484,6 +486,7 @@ canvas.addEventListener('mousedown', (e) => {
                         SupportSystem.callSupport(available[i].type, GameState.radioTargetWorld.x, GameState.radioTargetWorld.y);
                         GameState.radioClosing = true;
                         GameState.radioAnimating = true;
+                        playRadioClose();
                     }
                     break;
                 }
@@ -627,6 +630,7 @@ canvas.addEventListener('mousedown', (e) => {
         if (GameState.radioOpen) {
             GameState.radioClosing = true;
             GameState.radioAnimating = true;
+            playRadioClose();
         }
     });
 

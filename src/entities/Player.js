@@ -628,6 +628,7 @@ export class Player extends Entity {
 
     // 重写父类的 takeDamage 方法以播放音效
     takeDamage(amount) {
+        if (!this.alive) return;
         this.health -= amount;
         // 受到伤害时添加缓慢效果（使用配置常量）
         const slowDuration = STATUS_EFFECT_CONFIG.SLOW.DEFAULT_DURATION;

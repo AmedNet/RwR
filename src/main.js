@@ -15,7 +15,7 @@ import { Minimap } from './rendering/Minimap.js';
 import { MapGenerator } from './utils/MapGenerator.js';
 import { Arsenal } from './entities/Arsenal.js';
 import { EffectsManager } from './utils/EffectsManager.js';
-import { setListenerProvider } from './utils/SoundManager.js';
+import { setListenerProvider, playRadioOpen, playRadioClose } from './utils/SoundManager.js';
 import { BurnEffect, STATUS_EFFECT_CONFIG } from './utils/StatusEffects.js';
 import { WeatherSystem } from './core/WeatherSystem.js';
 import { DayNightSystem } from './core/DayNightSystem.js';
@@ -359,6 +359,7 @@ function gameLoop() {
             if (GameState.radioOpen) {
                 GameState.radioClosing = true;
                 GameState.radioAnimating = true;
+                playRadioClose();
             } else {
                 const player = GameState.player;
                 if (player && (player.rank + 1) >= 2) {
@@ -366,6 +367,7 @@ function gameLoop() {
                     GameState.radioAnimating = true;
                     GameState.radioClosing = false;
                     GameState.radioAnimProgress = 0;
+                    playRadioOpen();
                     GameState.radioSelectedIndex = 0;
                     GameState.radioScrollOffset = 0;
                     const cam = GameState.camera;
