@@ -487,6 +487,10 @@ export class Player extends Entity {
         if (['pistol', 'rifle', 'smg', 'shotgun', 'sniper', 'launcher'].includes(weaponType)) {
             SoundManager.playShoot(weaponType, this);
             EffectsManager.spawnMuzzleFlash(this.x, this.y, baseAngle, weaponType);
+            // 火箭筒：额外生成后焰喷射效果
+            if (weaponType === 'launcher') {
+                EffectsManager.spawnBackblast(this.x, this.y, baseAngle);
+            }
         }
 
         weapon.consumeAmmo();

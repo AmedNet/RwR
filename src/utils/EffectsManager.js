@@ -110,8 +110,22 @@ const FX = {
     BLOOD_MIST_COUNT_RANDOM: 4,
     BLOOD_STAIN_SCALE_BASE: 0.04,
     BLOOD_STAIN_SCALE_RANGE: 0.06,
-    BLOOD_VIEWPORT_MARGIN: 80,
-    BLOOD_MIST_EXPANSION: 1.5
+   BLOOD_VIEWPORT_MARGIN: 80,
+   BLOOD_MIST_EXPANSION: 1.5,
+    // 火箭筒后焰（backblast）
+    BACKBLAST_FIRE_COUNT: 15,
+    BACKBLAST_SMOKE_COUNT: 8,
+    BACKBLAST_FIRE_LIFE_BASE: 10,
+    BACKBLAST_FIRE_LIFE_RANGE: 8,
+    BACKBLAST_SMOKE_LIFE_BASE: 30,
+    BACKBLAST_SMOKE_LIFE_RANGE: 15,
+    BACKBLAST_SPREAD: 0.6,
+    BACKBLAST_SPEED_BASE: 3,
+    BACKBLAST_SPEED_RANGE: 4,
+    BACKBLAST_FLASH_LIFE: 6,
+    BACKBLAST_FLASH_RADIUS: 20,
+    BACKBLAST_SHAKE_INTENSITY: 8,
+    BACKBLAST_SHAKE_DURATION: 10
 };
 
 export const EffectsManager = {
@@ -381,6 +395,66 @@ export const EffectsManager = {
                 type: ParticleType.SMOKE
             });
         }
+    },
+
+    // 生成火箭筒后焰喷射效果（武器尾部，非火箭弹拖尾）
+    spawnBackblast(shooterX, shooterY, angle) {
+        const backAngle = angle + Math.PI;
+        const rearOffset = 15;
+        const bx = shooterX + Math.cos(backAngle) * rearOffset;
+        const by = shooterY + Math.sin(backAngle) * rearOffset;
+
+        // 动态光源：后焰照亮后方区域
+        DayNightSystem.addLight(bx, by, 180, '255,160,40', 10);
+
+        // 中心闪光
+        this.explosions.push({
+            x: bx, y: by,
+            radius: FX.BACKBLAST_FLASH_RADIUS,
+            life: FX.BACKBLAST_FLASH_LIFE,
+            maxLife: FX.BACKBLAST_FLASH_LIFE,
+            type: 'muzzle_flash',
+            color: '#FF6D00'
+        });
+
+        // 火焰粒子（沿后方扇形喷射）
+        for (let i = 0; i < FX.BACKBLAST_FIRE_COUNT; i++) {
+            const spread = (Math.random() - 0.5) * FX.BACKBLAST_SPREAD;
+            const pAngle = backAngle + spread;
+            const speed = FX.BACKBLAST_SPEED_BASE + Math.random() * FX.BACKBLAST_SPEED_RANGE;
+            this.particles.push({
+                x: bx + (Math.random() - 0.5) * 4,
+                y: by + (Math.random() - 0.5) * 4,
+                vx: Math.cos(pAngle) * speed,
+                vy: Math.sin(pAngle) * speed,
+                life: FX.BACKBLAST_FIRE_LIFE_BASE + Math.random() * FX.BACKBLAST_FIRE_LIFE_RANGE,
+                maxLife: FX.BACKBLAST_FIRE_LIFE_BASE + FX.BACKBLAST_FIRE_LIFE_RANGE,
+                color: ['#FF3D00', '#FF6D00', '#FF9100', '#FFAB00'][Math.floor(Math.random() * 4)],
+                size: 3 + Math.random() * 4,
+                type: ParticleType.SPARK
+            });
+        }
+
+        // 烟雾粒子（后焰产生的大量浓烟）
+        for (let i = 0; i < FX.BACKBLAST_SMOKE_COUNT; i++) {
+            const spread = (Math.random() - 0.5) * FX.BACKBLAST_SPREAD * 1.5;
+            const pAngle = backAngle + spread;
+            const speed = 1 + Math.random() * 2;
+            this.particles.push({
+                x: bx + (Math.random() - 0.5) * 8,
+                y: by + (Math.random() - 0.5) * 8,
+                vx: Math.cos(pAngle) * speed,
+                vy: Math.sin(pAngle) * speed - 0.5,
+                life: FX.BACKBLAST_SMOKE_LIFE_BASE + Math.random() * FX.BACKBLAST_SMOKE_LIFE_RANGE,
+                maxLife: FX.BACKBLAST_SMOKE_LIFE_BASE + FX.BACKBLAST_SMOKE_LIFE_RANGE,
+                color: '#666',
+                size: 4 + Math.random() * 4,
+                type: ParticleType.SMOKE
+            });
+        }
+
+        // 屏幕震动（后焰冲击感）
+        this.triggerShake(FX.BACKBLAST_SHAKE_INTENSITY, FX.BACKBLAST_SHAKE_DURATION);
     },
 
     // 生成抛壳效果
