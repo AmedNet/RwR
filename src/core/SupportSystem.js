@@ -632,9 +632,21 @@ export const SupportSystem = {
     },
 
     _spawnDropItems(drop) {
-        // 敌方空投不产生物品（敌人不使用武器拾取）
+        // 敌方空投：给范围内敌方单位回血
         if (drop.faction === 'enemy') {
-            EffectsManager.spawnGrenadeExplosion(drop.x, drop.y, 60);
+            const healAmount = 80;
+            const healRadius = drop.radius * 2;
+            let healedCount = 0;
+            for (const enemy of GameState.enemies) {
+                if (!enemy.alive) continue;
+                const dist = Math.hypot(enemy.x - drop.x, enemy.y - drop.y);
+                if (dist < healRadius && enemy.health < enemy.maxHealth) {
+                    enemy.health = Math.min(enemy.health + healAmount, enemy.maxHealth);
+                    healedCount++;
+                }
+            }
+            EffectsManager.spawnHealEffect(drop.x, drop.y, healRadius);
+            console.log(`🔴 敌方空投补给：治疗了 ${healedCount} 个敌方单位`);
             return;
         }
         if (drop.items) {
