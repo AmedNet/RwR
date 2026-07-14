@@ -11,16 +11,17 @@ import { drawRadioUI, updateRadioAnimation } from './RadioUI.js';
 import { WeatherSystem } from '../core/WeatherSystem.js';
 import { DayNightSystem } from '../core/DayNightSystem.js';
 import { SupportSystem } from '../core/SupportSystem.js';
+import { PostProcess } from './PostProcess.js';
 
 export const Renderer = {
     canvas: null,
     ctx: null,
+    _offscreenCanvas: null,
+    _offscreenCtx: null,
     logicalWidth: 0,
     logicalHeight: 0,
     weaponImages: {}, // 武器贴图缓存 { weaponId: HTMLImageElement }
     weaponImagesLoaded: {},
-    _dayNightCanvas: null,
-    _dayNightCtx: null,
 
     // 预加载武器贴图
     loadWeaponImages() {
@@ -48,7 +49,16 @@ export const Renderer = {
             console.error('❌ 找不到 gameCanvas!');
             return;
         }
-        this.ctx = this.canvas.getContext('2d');
+        // 创建离屏 canvas 用于渲染游戏画面
+        this._offscreenCanvas = document.createElement('canvas');
+        this._offscreenCtx = this._offscreenCanvas.getContext('2d');
+        
+        // 实际绘制到离屏 canvas
+        this.ctx = this._offscreenCtx;
+        
+        // 初始化后处理管线
+        PostProcess.init();
+        
         console.log('✅ Renderer 初始化成功');
     },
 
@@ -59,18 +69,22 @@ export const Renderer = {
         const container = this.canvas.parentElement;
         const rect = container.getBoundingClientRect();
         const dpr = window.devicePixelRatio || 1;
-        this.canvas.style.width = '100%';
-        this.canvas.style.height = '100%';
         const width = rect.width;
         const height = rect.height;
-        this.canvas.width = width * dpr;
-        this.canvas.height = height * dpr;
-        this.ctx.scale(dpr, dpr);
+        
+        // 离屏 canvas 使用逻辑尺寸（非 DPR 放大），控制纹理上传开销
+        this._offscreenCanvas.width = width;
+        this._offscreenCanvas.height = height;
+        
+        
         this.logicalWidth = width;
         this.logicalHeight = height;
         // 同步视口尺寸到 GameState（供天气系统等使用）
         GameState.viewport.width = width;
         GameState.viewport.height = height;
+        // 调整后处理 canvas 尺寸
+        PostProcess.resize(width, height);
+        
         console.log(`📐 画布尺寸: ${width}x${height}`);
     },
 
@@ -1066,60 +1080,17 @@ export const Renderer = {
     },
 
 
-    /** 绘制昼夜循环层（环境色调 + 动态光照） */
-    _renderDayNight() {
+    // 更新昼夜和闪电数据到着色器
+    _updateShaderLighting() {
+        // 昼夜系统数据
         const darkness = DayNightSystem.getAmbientDarkness();
-        if (darkness < 0.01 && DayNightSystem.lightSources.length === 0) return;
-
-        const w = this.width;
-        const h = this.height;
-
-        // 复用离屏 canvas
-        if (!this._dayNightCanvas || this._dayNightCanvas.width !== Math.ceil(w) || this._dayNightCanvas.height !== Math.ceil(h)) {
-            this._dayNightCanvas = document.createElement('canvas');
-            this._dayNightCanvas.width = Math.ceil(w);
-            this._dayNightCanvas.height = Math.ceil(h);
-            this._dayNightCtx = this._dayNightCanvas.getContext('2d');
-        }
-
-        const offCtx = this._dayNightCtx;
-        offCtx.clearRect(0, 0, w, h);
-
-        // 填充环境色调遮罩
-        if (darkness > 0.01) {
-            const tint = DayNightSystem.getTint();
-            offCtx.fillStyle = `rgba(${tint.r},${tint.g},${tint.b},${tint.a})`;
-            offCtx.fillRect(0, 0, w, h);
-
-            // 动态光照"挖洞"
-            if (DayNightSystem.lightSources.length > 0) {
-                offCtx.save();
-                offCtx.globalCompositeOperation = 'destination-out';
-
-                for (const light of DayNightSystem.lightSources) {
-                    const pos = this.toScreen(light.x, light.y);
-                    const lifeRatio = light.life / light.maxLife;
-                    const currentRadius = light.radius * lifeRatio;
-
-                    if (currentRadius < 1) continue;
-
-                    const gradient = offCtx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, currentRadius);
-                    gradient.addColorStop(0, `rgba(0,0,0,${lifeRatio})`);
-                    gradient.addColorStop(0.5, `rgba(0,0,0,${lifeRatio * 0.5})`);
-                    gradient.addColorStop(1, 'rgba(0,0,0,0)');
-
-                    offCtx.fillStyle = gradient;
-                    offCtx.beginPath();
-                    offCtx.arc(pos.x, pos.y, currentRadius, 0, Math.PI * 2);
-                    offCtx.fill();
-                }
-
-                offCtx.restore();
-            }
-        }
-
-        // 将离屏 canvas 绘制到主 canvas
-        this.ctx.drawImage(this._dayNightCanvas, 0, 0);
+        const tint = DayNightSystem.getTint();
+        const tintRGB = [tint.r / 255, tint.g / 255, tint.b / 255];
+        PostProcess.updateDayNight(darkness, tintRGB, tint.a);
+        
+        // 闪电数据
+        const flash = WeatherSystem.lightningFlash > 0 ? WeatherSystem.lightningFlash / 10 : 0;
+        PostProcess.updateLightning(flash);
     },
 
     render() {
@@ -1153,21 +1124,23 @@ export const Renderer = {
                 WeatherSystem.drawParticles(this.ctx);
                 WeatherSystem.drawOverlay(this.ctx, this);
                 WeatherSystem.drawWeatherEdgeEffects(this.ctx, this);
-                WeatherSystem.drawLightning(this.ctx, this);
                 // 昼夜渲染层
-                this._renderDayNight();
                 this.ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
                 this.ctx.fillRect(0, 0, this.width, this.height);
             } else {
                 this._drawOverlay();
             }
             drawGameOver(this.ctx, this);
+            this._updateShaderLighting();
+        PostProcess.apply(this._offscreenCanvas, this);
             return;
         }
 
         // Debug 面板
         if (GameState.debugOpen) {
             drawDebug(this.ctx, this);
+            this._updateShaderLighting();
+        PostProcess.apply(this._offscreenCanvas, this);
             return;
         }
 
@@ -1179,9 +1152,9 @@ export const Renderer = {
             WeatherSystem.drawParticles(this.ctx);
             WeatherSystem.drawOverlay(this.ctx, this);
             WeatherSystem.drawWeatherEdgeEffects(this.ctx, this);
-            WeatherSystem.drawLightning(this.ctx, this);
-            this._renderDayNight();
             drawRadioUI(this.ctx, this);
+            this._updateShaderLighting();
+        PostProcess.apply(this._offscreenCanvas, this);
             return;
         }
 
@@ -1193,6 +1166,8 @@ export const Renderer = {
             } else if (GameState.inventoryOpen) {
                 drawInventory(this.ctx, this);
             }
+            this._updateShaderLighting();
+        PostProcess.apply(this._offscreenCanvas, this);
             return;
         }
 
@@ -1203,10 +1178,11 @@ export const Renderer = {
         WeatherSystem.drawParticles(this.ctx);
         WeatherSystem.drawOverlay(this.ctx, this);
         WeatherSystem.drawWeatherEdgeEffects(this.ctx, this);
-        WeatherSystem.drawLightning(this.ctx, this);
-        // 昼夜渲染层
-        this._renderDayNight();
         this._renderHUD();
+        
+        // 应用后处理效果并输出到 WebGL canvas
+        this._updateShaderLighting();
+        PostProcess.apply(this._offscreenCanvas, this);
     },
 
     drawStatusEffectsHUD(ctx, player) {

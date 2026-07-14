@@ -516,7 +516,10 @@ function init() {
         const pointIndex = e.detail ? e.detail.pointIndex : undefined;
         respawnPlayer(pointIndex);
     });
-    window.addEventListener('resize', () => Renderer.resize());
+    window.addEventListener('resize', () => {
+        Renderer.resize();
+        // PostProcess.resize 已在 Renderer.resize() 内部调用
+    });
 
     // ---- 手雷爆炸监听 ----
     window.addEventListener('grenade_explode', (e) => {
