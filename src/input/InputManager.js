@@ -585,11 +585,14 @@ canvas.addEventListener('mousedown', (e) => {
                             }
                         } else if (btn.weather) {
                             WeatherSystem.setWeather(btn.weather);
-                        } else if (btn.action === 'toggleDayNight') {
-                            DayNightSystem.togglePause();
-                            console.log(DayNightSystem.paused ? '⏸ 昼夜循环暂停' : '▶ 昼夜循环继续');
-                        }
-                        break;
+                       } else if (btn.action === 'toggleDayNight') {
+                           DayNightSystem.togglePause();
+                           console.log(DayNightSystem.paused ? '⏸ 昼夜循环暂停' : '▶ 昼夜循环继续');
+                       } else if (btn.action === 'toggleTornadoRadar') {
+                           GameState.debugShowTornado = !GameState.debugShowTornado;
+                           console.log(GameState.debugShowTornado ? '🐛 龙卷风雷达开启' : '🐛 龙卷风雷达关闭');
+                       }
+                       break;
                     }
                 }
             }

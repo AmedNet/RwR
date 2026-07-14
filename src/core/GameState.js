@@ -52,6 +52,7 @@ export const GameState = {
     // Debug系统
     debugOpen: false, // Debug面板是否打开
     debugKey9Pressed: false, // 追踪9键状态（用于组合键）
+    debugShowTornado: false, // 小地图上显示龙卷风位置
     // 电台系统
     radioOpen: false, // 电台界面是否打开
     radioSelectedIndex: 0, // 电台选中的支援类型索引

@@ -59,6 +59,10 @@ uniform float u_lightningFlash;
 
 // 火光增强
 uniform float u_fireGlowIntensity;
+// 积水反射
+uniform float u_rainIntensity;
+// 龙卷风浓雾
+uniform float u_tornadoFog;
 
 varying vec2 v_uv;
 
@@ -66,9 +70,19 @@ float luminance(vec3 color) {
     return dot(color, vec3(0.299, 0.587, 0.114));
 }
 
-
-
-
+// 伪随机噪声
+float hash(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+float noise(vec2 p) {
+    float a = hash(floor(p));
+    float b = hash(floor(p + vec2(1.0, 0.0)));
+    float c = hash(floor(p + vec2(0.0, 1.0)));
+    float d = hash(floor(p + vec2(1.0, 1.0)));
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
 
 
 
@@ -102,7 +116,35 @@ void main() {
             color += fireGlow;
         }
     }
-    
+    // 积水反射 — 屏幕底部区域（微妙的地面湿润效果）
+    float puddleMask = smoothstep(0.25, 0.0, uv.y);
+    if (puddleMask > 0.01 && u_rainIntensity > 0.01) {
+        // 波纹扭曲（更柔和）
+        float ripple1 = noise(uv * 30.0 + u_time * 1.5) * 0.004 * u_rainIntensity;
+        float ripple2 = noise(uv * 60.0 - u_time * 1.0) * 0.003 * u_rainIntensity;
+        // 反射采样（轻微偏移，不是完美镜像）
+        vec2 reflUV = vec2(uv.x + ripple1 + ripple2, uv.y - 0.05 + ripple1 * 0.3);
+        vec3 reflColor = texture2D(u_scene, reflUV).rgb;
+        // 更强的水面色调（蓝灰色）
+        reflColor = mix(reflColor, vec3(0.25, 0.35, 0.45), 0.5);
+        // 闪电时水面反光增强
+        reflColor += vec3(0.15, 0.18, 0.2) * u_lightningFlash;
+        // 非常微妙的混合（避免反射地形）
+        float reflStrength = puddleMask * u_rainIntensity * 0.2;
+        color = mix(color, reflColor, reflStrength);
+    }
+    // 龙卷风浓雾 — 随距离变浓的灰雾效果
+    if (u_tornadoFog > 0.01) {
+        float fogNoise1 = noise(uv * 8.0 + u_time * 0.3) * 0.5 + 0.5;
+        float fogNoise2 = noise(uv * 16.0 - u_time * 0.2) * 0.5 + 0.5;
+        float fogPattern = mix(fogNoise1, fogNoise2, 0.5);
+        vec3 fogColor = vec3(0.55, 0.55, 0.50);
+        float fogStrength = u_tornadoFog * (0.6 + 0.4 * fogPattern);
+        fogStrength = clamp(fogStrength, 0.0, 0.85);
+        color = mix(color, fogColor, fogStrength);
+        float fogContrast = 1.0 - u_tornadoFog * 0.3;
+        color = (color - 0.5) * fogContrast + 0.5;
+    }
     // 对比度和饱和度
     color = (color - 0.5) * u_contrast + 0.5;
     float lum = luminance(color);
@@ -151,7 +193,15 @@ export const PostProcess = {
     fireGlowData: {
         intensity: 0
     },
-    
+
+    rainData: {
+        intensity: 0
+    },
+
+    tornadoFogData: {
+        intensity: 0
+    },
+
     init() {
         this.canvas = document.createElement("canvas");
         this.canvas.id = "postProcessCanvas";
@@ -215,6 +265,8 @@ export const PostProcess = {
         cache.saturation = gl.getUniformLocation(this.compositeProgram, "u_saturation");
         cache.lightningFlash = gl.getUniformLocation(this.compositeProgram, "u_lightningFlash");
         cache.fireGlowIntensity = gl.getUniformLocation(this.compositeProgram, "u_fireGlowIntensity");
+        cache.rainIntensity = gl.getUniformLocation(this.compositeProgram, "u_rainIntensity");
+        cache.tornadoFog = gl.getUniformLocation(this.compositeProgram, "u_tornadoFog");
 
         this._cachedUniforms = cache;
     },
@@ -329,7 +381,15 @@ export const PostProcess = {
     updateFireGlow(intensity) {
         this.fireGlowData.intensity = intensity;
     },
-    
+
+    updateRain(intensity) {
+        this.rainData.intensity = intensity;
+    },
+
+    updateTornadoFog(intensity) {
+        this.tornadoFogData.intensity = intensity;
+    },
+
     apply(sourceCanvas) {
         if (!this.enabled || !this.gl || !sourceCanvas) return;
         const gl = this.gl;
@@ -338,6 +398,9 @@ export const PostProcess = {
         const bh = this._bloomH;
         const u = this._cachedUniforms;
         
+        // 直接上传 OffscreenCanvas / 普通 canvas。
+        // 注意：transferToImageBitmap() 得到的 ImageBitmap 会忽略 UNPACK_FLIP_Y_WEBGL，
+        // 导致纹理不翻转、画面上下颠倒，因此这里直接以 canvas 作为纹理源。
         gl.bindTexture(gl.TEXTURE_2D, this.sceneTexture);
         gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, sourceCanvas);
@@ -387,6 +450,8 @@ export const PostProcess = {
 
         gl.uniform1f(u.lightningFlash, this.lightningData.flash);
         gl.uniform1f(u.fireGlowIntensity, this.fireGlowData.intensity);
+        gl.uniform1f(u.rainIntensity, this.rainData.intensity);
+        gl.uniform1f(u.tornadoFog, this.tornadoFogData.intensity);
         
         gl.drawArrays(gl.TRIANGLES, 0, 6);
     },

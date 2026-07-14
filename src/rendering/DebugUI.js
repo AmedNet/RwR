@@ -161,6 +161,26 @@ export function drawDebug(ctx, renderer) {
 
     y += Math.ceil(weatherTypes.length / wCols) * (wBtnH + wGap) + 24;
 
+    // 龙卷风雷达开关
+    const toggleBtnW = 180;
+    const toggleBtnH = 36;
+    const toggleBtnX = cx - toggleBtnW / 2;
+    const isOn = GameState.debugShowTornado;
+    ctx.fillStyle = isOn ? '#4CAF50' : '#3a3a3a';
+    ctx.beginPath();
+    ctx.roundRect(toggleBtnX, y, toggleBtnW, toggleBtnH, 6);
+    ctx.fill();
+    ctx.strokeStyle = isOn ? '#81C784' : 'rgba(255,255,255,0.15)';
+    ctx.lineWidth = isOn ? 2 : 1;
+    ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 14px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(isOn ? '🌪️ 龙卷风雷达: 开' : '🌪️ 龙卷风雷达: 关', toggleBtnX + toggleBtnW / 2, y + toggleBtnH / 2);
+    renderer.debugButtons.push({ x: toggleBtnX, y, w: toggleBtnW, h: toggleBtnH, action: 'toggleTornadoRadar' });
+    y += toggleBtnH + 16;
+
     // === 分隔线 ===
     ctx.strokeStyle = 'rgba(255,255,255,0.15)';
     ctx.beginPath();

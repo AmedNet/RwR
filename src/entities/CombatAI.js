@@ -105,6 +105,9 @@ export class CombatAI extends Entity {
         // 瞄准系统
         this.aimTimer = 0;
         this.currentAimTarget = null;
+        // 龙卷风伤害累积
+        this.tornadoDamageAccumulator = 0;
+        this.tornadoDamageTimer = 0;
     }
 
     // ─── 军衔系统方法 ───
@@ -520,6 +523,21 @@ export class CombatAI extends Entity {
         if (!this.alive) return;
         this.updateStatusEffects();
         this.savePrevPosition();
+
+        // 龙卷风伤害（getTornadoDamage 返回每秒伤害，除以 60 转为每帧）
+        const tornadoDmg = WeatherSystem.getTornadoDamage(this.x, this.y);
+        if (tornadoDmg > 0) {
+            this.tornadoDamageAccumulator += tornadoDmg / 60;
+            this.tornadoDamageTimer++;
+            if (this.tornadoDamageTimer >= 30) {
+                this.takeDamage(this.tornadoDamageAccumulator);
+                this.tornadoDamageAccumulator = 0;
+                this.tornadoDamageTimer = 0;
+            }
+        } else {
+            this.tornadoDamageAccumulator = 0;
+            this.tornadoDamageTimer = 0;
+        }
         // 军衔召集逻辑
         if (this.rank > AIRank.PRIVATE) {
             this.tryRecruitSubordinates();

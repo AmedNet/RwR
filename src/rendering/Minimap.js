@@ -1,5 +1,7 @@
 // src/rendering/Minimap.js
 import { GameState } from '../core/GameState.js';
+import { WeatherSystem } from '../core/WeatherSystem.js';
+import { TornadoSystem } from '../core/TornadoSystem.js';
 import { Renderer } from './Renderer.js';
 
 export const Minimap = {
@@ -153,6 +155,31 @@ export const Minimap = {
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText('★', ax, ay);
+        }
+
+        // 龙卷风位置（debug开关）
+        if (GameState.debugShowTornado && WeatherSystem.current === 'tornado' && TornadoSystem.center) {
+            const tc = TornadoSystem.center;
+            const tx = tc.x * scaleX;
+            const ty = tc.y * scaleY;
+            // 脉冲圆环
+            const pulse = 0.5 + 0.5 * Math.sin(Date.now() * 0.005);
+            ctx.strokeStyle = `rgba(180, 0, 255, ${0.4 + 0.4 * pulse})`;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(tx, ty, 8 + 4 * pulse, 0, Math.PI * 2);
+            ctx.stroke();
+            // 中心点
+            ctx.fillStyle = '#b400ff';
+            ctx.beginPath();
+            ctx.arc(tx, ty, 4, 0, Math.PI * 2);
+            ctx.fill();
+            // 龙卷风图标
+            ctx.fillStyle = '#e0b0ff';
+            ctx.font = 'bold 9px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('🌪', tx, ty - 12);
         }
 
         // 视野框

@@ -4,6 +4,7 @@ import { GameState } from './GameState.js';
 import { WEATHER_DEFS, lerp, lerpAngle, weightedRandom } from './WeatherDefs.js';
 import { WeatherRenderer } from './WeatherRenderer.js';
 import { EffectsManager } from '../utils/EffectsManager.js';
+import { TornadoSystem } from './TornadoSystem.js';
 
 export const WeatherSystem = {
   // 状态
@@ -38,9 +39,6 @@ export const WeatherSystem = {
   lightningPending: false,
   distantFlash: 0,
 
-  // 龙卷风
-  tornadoCenter: null,
-  tornadoAngle: 0,
 
   // ─── 初始化 ───
   init() {
@@ -71,7 +69,9 @@ export const WeatherSystem = {
     this._initClouds();
 
     if (this.current === 'tornado') {
-      this._initTornadoCenter();
+      TornadoSystem.init();
+    } else {
+      TornadoSystem.deactivate();
     }
 
     GameState.weather = this.current;
@@ -102,23 +102,6 @@ export const WeatherSystem = {
     };
   },
 
-  // ─── 龙卷风中心初始化 ───
-  _initTornadoCenter() {
-    const world = GameState.config.world;
-    this.tornadoCenter = {
-      x: world.width * 0.3 + Math.random() * world.width * 0.4,
-      y: world.height * 0.3 + Math.random() * world.height * 0.4
-    };
-    this.tornadoAngle = 0;
-    this.tornadoScale = 1.0;
-    this.tornadoScaleTarget = 1.0;
-    this.tornadoScaleTimer = 0;
-    // 贝塞尔曲线路径
-    this.tornadoPath = null;
-    this.tornadoPathT = 0;
-    this.tornadoPathSpeed = 0.00001;
-    this._generateTornadoPath();
-  },
 
   // ─── 每帧更新 ───
   update() {
@@ -146,7 +129,7 @@ export const WeatherSystem = {
     this._updateLightning();
 
     if (this.current === 'tornado' || (this.transitioning && (this.current === 'tornado' || this.previous === 'tornado'))) {
-      this._updateTornado();
+      TornadoSystem.update();
     }
   },
 
@@ -174,7 +157,9 @@ export const WeatherSystem = {
     this.weatherTimer = 3600 + Math.floor(Math.random() * 14400);
 
     if (this.current === 'tornado') {
-      this._initTornadoCenter();
+      TornadoSystem.init();
+    } else {
+      TornadoSystem.deactivate();
     }
 
     GameState.weather = this.current;
@@ -227,7 +212,7 @@ export const WeatherSystem = {
 
     // 血月浮尘粒子
     const isBloodMoon = this.current === 'bloodMoon' || (this.transitioning && (this.current === 'bloodMoon' || this.previous === 'bloodMoon'));
-    if (isBloodMoon && this.particles.filter(p => p.type === 'ember').length < 40) {
+    if (isBloodMoon && this._emberCount < 40) {
       for (let i = 0; i < 3; i++) {
         this.particles.push({
           type: 'ember',
@@ -325,7 +310,7 @@ export const WeatherSystem = {
             // 酸雨蒸汽效果：落地时产生绿色蒸汽
             const isAcidRain = currDef.particleType === 'acid';
             const wasAcidRain = prevDef.particleType === 'acid';
-            if ((isAcidRain || wasAcidRain) && this.particles.filter(p => p.type === 'steam').length < 30) {
+            if ((isAcidRain || wasAcidRain) && this._steamCount < 30) {
                 const steamCount = Math.ceil(targetDensity * 0.3);
                 for (let i = 0; i < steamCount; i++) {
                     const sx = cam.x + Math.random() * viewW;
@@ -350,11 +335,23 @@ export const WeatherSystem = {
     const windX = Math.cos(this.windAngle) * this.windStrength;
     const windY = Math.sin(this.windAngle) * this.windStrength;
 
+    // 重置粒子类型计数器（供生成逻辑使用，零额外遍历开销）
+    this._dustCloudCount = 0;
+    this._emberCount = 0;
+    this._steamCount = 0;
+
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
       p.x += p.vx;
       p.y += p.vy;
       p.life--;
+
+      // 累加存活粒子计数
+      if (p.life > 0) {
+        if (p.type === 'dustCloud') this._dustCloudCount++;
+        else if (p.type === 'ember') this._emberCount++;
+        else if (p.type === 'steam') this._steamCount++;
+      }
 
       if (p.affectedByWind) {
         p.vx += windX * p.windFactor;
@@ -384,6 +381,11 @@ export const WeatherSystem = {
       }
     }
 
+    // 生成龙卷风粒子（包括降雨）
+    if (this.current === 'tornado' && TornadoSystem.active) {
+      TornadoSystem.generateParticles(this);
+      TornadoSystem.updateParticles(this.particles);
+    }
   },
 
   // ─── 生成非雨粒子（雪/风/沙/冰雹/碎片） ───
@@ -479,13 +481,13 @@ export const WeatherSystem = {
         });
         break;
       case 'debris':
-        if (this.tornadoCenter) {
+        if (TornadoSystem.center) {
           const angle = Math.random() * Math.PI * 2;
           const dist = 50 + Math.random() * 200;
           this.particles.push({
             type: 'debris',
-            x: this.tornadoCenter.x + Math.cos(angle) * dist,
-            y: this.tornadoCenter.y + Math.sin(angle) * dist,
+            x: TornadoSystem.center.x + Math.cos(angle) * dist,
+            y: TornadoSystem.center.y + Math.sin(angle) * dist,
             vx: 0, vy: 0,
             life: 120 + Math.floor(Math.random() * 60),
             maxLife: 180,
@@ -587,173 +589,8 @@ export const WeatherSystem = {
     }
   },
 
-  // ─── 生成贝塞尔曲线路径 ───
-  _generateTornadoPath() {
-    const world = GameState.config.world;
-    const margin = 400;
-    // 生成 4-6 个控制点
-    const numPoints = 4 + Math.floor(Math.random() * 3);
-    const points = [];
-    for (let i = 0; i < numPoints; i++) {
-      points.push({
-        x: margin + Math.random() * (world.width - margin * 2),
-        y: margin + Math.random() * (world.height - margin * 2)
-      });
-    }
-    this.tornadoPath = points;
-    this.tornadoPathT = 0;
-  },
 
-  // ─── 计算贝塞尔曲线上的点 ───
-  _getBezierPoint(t) {
-    const points = this.tornadoPath;
-    if (!points || points.length < 2) return null;
-    
-    // 使用多段贝塞尔曲线连接控制点
-    const n = points.length;
-    const totalSegments = n;
-    const segment = Math.floor(t * totalSegments) % totalSegments;
-    const localT = (t * totalSegments) % 1;
-    
-    // 获取当前段的 4 个控制点（循环使用）
-    const p0 = points[segment % n];
-    const p1 = points[(segment + 1) % n];
-    const p2 = points[(segment + 2) % n];
-    const p3 = points[(segment + 3) % n];
-    
-    // 三次贝塞尔曲线
-    const mt = 1 - localT;
-    const x = mt*mt*mt*p0.x + 3*mt*mt*localT*p1.x + 3*mt*localT*localT*p2.x + localT*localT*localT*p3.x;
-    const y = mt*mt*mt*p0.y + 3*mt*mt*localT*p1.y + 3*mt*localT*localT*p2.y + localT*localT*localT*p3.y;
-    
-    return { x, y };
-  },
 
-  // ─── 龙卷风更新 ───
-  _updateTornado() {
-    if (!this.tornadoCenter) return;
-    this.tornadoAngle += 0.01;
-    
-    // 动态大小变化
-    this.tornadoScaleTimer++;
-    if (this.tornadoScaleTimer >= 180) { // 每3秒变化一次
-      this.tornadoScaleTarget = 0.7 + Math.random() * 0.6; // 0.7-1.3倍
-      this.tornadoScaleTimer = 0;
-    }
-    this.tornadoScale += (this.tornadoScaleTarget - this.tornadoScale) * 0.02;
-
-    // 贝塞尔曲线路径移动
-    if (this.tornadoPath) {
-      this.tornadoPathT += this.tornadoPathSpeed;
-      // 到达终点后生成新路径
-      if (this.tornadoPathT >= 1) {
-        this._generateTornadoPath();
-        this.tornadoPathT = 0;
-      }
-      
-      const targetPos = this._getBezierPoint(this.tornadoPathT);
-      if (targetPos) {
-        // 添加随机扰动
-        const jitterX = (Math.random() - 0.5) * 0.5;
-        const jitterY = (Math.random() - 0.5) * 0.5;
-        
-        // 平滑移动到目标位置
-        this.tornadoCenter.x += (targetPos.x - this.tornadoCenter.x) * 0.008 + jitterX;
-        this.tornadoCenter.y += (targetPos.y - this.tornadoCenter.y) * 0.008 + jitterY;
-      }
-    }
-
-    const world = GameState.config.world;
-    this.tornadoCenter.x = Math.max(200, Math.min(world.width - 200, this.tornadoCenter.x));
-    this.tornadoCenter.y = Math.max(200, Math.min(world.height - 200, this.tornadoCenter.y));
-
-    for (const p of this.particles) {
-      if (p.type === 'debris') {
-        p.orbitAngle += p.orbitSpeed;
-        p.orbitDist *= 0.998;
-        if (p.orbitDist < 10) p.orbitDist = 50 + Math.random() * 150;
-        p.x = this.tornadoCenter.x + p.orbitDist * Math.cos(p.orbitAngle);
-        p.y = this.tornadoCenter.y + p.orbitDist * Math.sin(p.orbitAngle);
-      } else if (p.type === 'dustCloud') {
-        p.vx *= 0.985;
-        p.vy *= 0.985;
-        p.x += p.vx;
-        p.y += p.vy;
-        const dx = p.x - this.tornadoCenter.x;
-        const dy = p.y - this.tornadoCenter.y;
-        const dist = Math.hypot(dx, dy);
-        if (dist > 260) {
-          p.x = this.tornadoCenter.x + (Math.random() - 0.5) * 90;
-          p.y = this.tornadoCenter.y + (Math.random() - 0.5) * 90;
-        }
-      }
-    }
-
-    // 龙卷风周边的碎屑和尘土云
-    if (this.frameCount % 2 === 0 && this.particles.filter(p => p.type === 'dustCloud').length < 28) {
-      const angle = Math.random() * Math.PI * 2;
-      const dist = 25 + Math.random() * 95;
-      this.particles.push({
-        type: 'dustCloud',
-        x: this.tornadoCenter.x + Math.cos(angle) * dist,
-        y: this.tornadoCenter.y + Math.sin(angle) * dist,
-        vx: Math.cos(angle) * (0.45 + Math.random() * 0.3),
-        vy: Math.sin(angle) * (0.45 + Math.random() * 0.3) - 0.25,
-        life: 70 + Math.floor(Math.random() * 40),
-        maxLife: 110,
-        size: 10 + Math.random() * 8,
-        affectedByWind: false
-      });
-    }
-
-    if (this.frameCount % 4 === 0) {
-      const swirlCount = 2;
-      for (let i = 0; i < swirlCount; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const dist = 80 + Math.random() * 180;
-        this.particles.push({
-          type: 'dustCloud',
-          x: this.tornadoCenter.x + Math.cos(angle) * dist,
-          y: this.tornadoCenter.y + Math.sin(angle) * dist,
-          vx: Math.cos(angle + Math.PI / 2) * (0.15 + Math.random() * 0.1),
-          vy: Math.sin(angle + Math.PI / 2) * (0.15 + Math.random() * 0.1),
-          life: 40 + Math.floor(Math.random() * 20),
-          maxLife: 70,
-          size: 6 + Math.random() * 4,
-          affectedByWind: false
-        });
-      }
-    }
-
-    // ═══ 龙卷风周围强降雨粒子 ═══
-    // 每帧生成多个雨滴，在龙卷风周围的圆形区域内
-    const rainRadius = 650 * (this.tornadoScale || 1.0) * 2; // 降雨范围
-    const rainCount = 8; // 每帧生成的雨滴数量
-    
-    for (let i = 0; i < rainCount; i++) {
-      // 在圆形区域内随机位置
-      const angle = Math.random() * Math.PI * 2;
-      const dist = Math.random() * rainRadius;
-      const rx = this.tornadoCenter.x + Math.cos(angle) * dist;
-      const ry = this.tornadoCenter.y + Math.sin(angle) * dist - rainRadius * 0.5; // 从上方生成
-      
-      this.particles.push({
-        type: 'tornadoRain',
-        x: rx,
-        y: ry,
-        vx: 0.5, // 轻微风向偏移
-        vy: 10 + Math.random() * 4, // 垂直下落速度
-        life: 60 + Math.floor(Math.random() * 30),
-        maxLife: 90,
-        size: 1.2 + Math.random() * 0.5,
-        affectedByWind: false,
-        tornadoCenterX: this.tornadoCenter.x, // 记录生成时的龙卷风中心
-        tornadoCenterY: this.tornadoCenter.y,
-        rainRadius: rainRadius // 记录降雨范围
-      });
-    }
-
-  },
 
   // ─── Gameplay 查询接口 ───
   getSpeedMultiplier() {
@@ -785,43 +622,20 @@ export const WeatherSystem = {
   },
 
   getTornadoForce(entityX, entityY) {
-    if (this.current !== 'tornado' || !this.tornadoCenter) return { x: 0, y: 0 };
-    const dx = this.tornadoCenter.x - entityX;
-    const dy = this.tornadoCenter.y - entityY;
-    const dist = Math.hypot(dx, dy);
-    const range = 1800;
-    if (dist > range || dist < 5) return { x: 0, y: 0 };
-
-    const strength = 2.2 * (1 - dist / range);
-    const angle = Math.atan2(dy, dx);
-    const radialX = Math.cos(angle) * strength * 0.6;
-    const radialY = Math.sin(angle) * strength * 0.6;
-    const tangentialX = -Math.sin(angle) * strength * 0.8;
-    const tangentialY = Math.cos(angle) * strength * 0.8;
-    return { x: radialX + tangentialX, y: radialY + tangentialY };
+    return TornadoSystem.getForce(entityX, entityY);
   },
 
   
   getTornadoDamage(entityX, entityY) {
-    if (this.current !== 'tornado' || !this.tornadoCenter) return 0;
-    const dx = this.tornadoCenter.x - entityX;
-    const dy = this.tornadoCenter.y - entityY;
-    const dist = Math.hypot(dx, dy);
-    const funnelR = 280 * this.tornadoScale;
-    
-    // 在漏斗内受到持续伤害（每秒30血）
-    if (dist < funnelR * 0.6) {
-      return 0.5 * (1 - dist / (funnelR * 0.6)); // 越靠近中心伤害越高
-    }
-    // 在漏斗外围也会受到碎屑伤害（每秒9血）
-    if (dist < funnelR * 1.2) {
-      return 0.15 * (1 - (dist - funnelR * 0.6) / (funnelR * 0.6));
-    }
-    return 0;
+    return TornadoSystem.getDamage(entityX, entityY);
   },
 
   getTornadoScale() {
-    return this.tornadoScale || 1.0;
+    return TornadoSystem.getScale();
+  },
+
+  getTornadoEF() {
+    return TornadoSystem.getEF();
   },
 
   getFogRadius() {
@@ -848,7 +662,8 @@ export const WeatherSystem = {
       this.targetWindStrength = 0;
     }
 
-    if (type === 'tornado') this._initTornadoCenter();
+    if (type === 'tornado') TornadoSystem.init();
+    else TornadoSystem.deactivate();
     GameState.weather = type;
     console.log(`🐛 Debug 切换天气: ${def.icon} ${def.name}`);
   },

@@ -9,6 +9,8 @@ import { drawDebug } from './DebugUI.js';
 import { drawGameOver } from './GameOverUI.js';
 import { drawRadioUI, updateRadioAnimation } from './RadioUI.js';
 import { WeatherSystem } from '../core/WeatherSystem.js';
+import { TornadoSystem } from '../core/TornadoSystem.js';
+import { WEATHER_DEFS } from '../core/WeatherDefs.js';
 import { DayNightSystem } from '../core/DayNightSystem.js';
 import { SupportSystem } from '../core/SupportSystem.js';
 import { PostProcess } from './PostProcess.js';
@@ -51,12 +53,12 @@ export const Renderer = {
             console.error('❌ 找不到 gameCanvas!');
             return;
         }
-        // 创建离屏 canvas 用于渲染游戏画面
-        this._offscreenCanvas = document.createElement('canvas');
-        this._offscreenCtx = this._offscreenCanvas.getContext('2d');
+        // 创建离屏 canvas 用于渲染游戏画面（使用 OffscreenCanvas 实现零拷贝上传）
+        this._offscreenCanvas = null; // 将在 resize() 中创建
+        this._offscreenCtx = null;
         
-        // 实际绘制到离屏 canvas
-        this.ctx = this._offscreenCtx;
+        // 先用临时 canvas 避免 null ctx（resize() 会替换）
+        this.ctx = document.createElement('canvas').getContext('2d');
         
         // 初始化后处理管线
         PostProcess.init();
@@ -74,10 +76,30 @@ export const Renderer = {
         const width = rect.width;
         const height = rect.height;
         
-        // 离屏 canvas 使用逻辑尺寸（非 DPR 放大），控制纹理上传开销
-        this._offscreenCanvas.width = width;
-        this._offscreenCanvas.height = height;
+        // 离屏 canvas 使用 DPR 缩放，保证 Retina 屏上文字清晰
+        // 使用 OffscreenCanvas 实现零拷贝上传到 WebGL
+        const canvasWidth = Math.ceil(width * dpr);
+        const canvasHeight = Math.ceil(height * dpr);
         
+        // 仅在尺寸变化时重建 canvas，避免频繁 resize 产生废弃对象
+        const needsRebuild = !this._offscreenCanvas || 
+            this._offscreenCanvas.width !== canvasWidth || 
+            this._offscreenCanvas.height !== canvasHeight;
+        
+        if (needsRebuild) {
+            if (typeof OffscreenCanvas !== 'undefined') {
+                this._offscreenCanvas = new OffscreenCanvas(canvasWidth, canvasHeight);
+            } else {
+                // 降级方案：使用普通 canvas
+                this._offscreenCanvas = document.createElement('canvas');
+                this._offscreenCanvas.width = canvasWidth;
+                this._offscreenCanvas.height = canvasHeight;
+            }
+            this._offscreenCtx = this._offscreenCanvas.getContext('2d');
+            this._offscreenCtx.setTransform(1, 0, 0, 1, 0, 0); // 重置变换
+            this._offscreenCtx.scale(dpr, dpr);
+            this.ctx = this._offscreenCtx; // 同步 this.ctx 引用
+        }
         
         this.logicalWidth = width;
         this.logicalHeight = height;
@@ -1144,8 +1166,12 @@ export const Renderer = {
         const flash = WeatherSystem.lightningFlash > 0 ? WeatherSystem.lightningFlash / 10 : 0;
         PostProcess.updateLightning(flash);
 
-        // 火光/爆炸闪光强度
+        // 火光/爆炸闪光强度（带距离衰减）
         let fireGlowIntensity = 0;
+        const player = GameState.player;
+        const playerX = player ? player.x : 0;
+        const playerY = player ? player.y : 0;
+        const maxFireDistance = 800; // 最大影响距离（像素）
         
         // 死神打击爆炸
         if (SupportSystem.reaperStrikes && SupportSystem.reaperStrikes.length > 0) {
@@ -1153,7 +1179,13 @@ export const Renderer = {
                 if (strike.phase === 'exploded') {
                     const explosionProgress = 1 - (strike.fadeOutTimer / 240);
                     if (explosionProgress < 0.3) {
-                        fireGlowIntensity = Math.max(fireGlowIntensity, 1.0 - (explosionProgress / 0.3));
+                        // 计算距离衰减
+                        const dx = strike.x - playerX;
+                        const dy = strike.y - playerY;
+                        const dist = Math.hypot(dx, dy);
+                        const distanceFactor = Math.max(0, 1 - dist / maxFireDistance);
+                        const intensity = (1.0 - (explosionProgress / 0.3)) * distanceFactor;
+                        fireGlowIntensity = Math.max(fireGlowIntensity, intensity);
                     }
                 }
             }
@@ -1165,14 +1197,68 @@ export const Renderer = {
                 if (ex.type === 'flash' || ex.type === 'muzzle_flash') {
                     const lifeRatio = ex.life / (ex.maxLife || 1);
                     if (lifeRatio > 0.2) {
+                        // 计算距离衰减
+                        const dx = ex.x - playerX;
+                        const dy = ex.y - playerY;
+                        const dist = Math.hypot(dx, dy);
+                        const distanceFactor = Math.max(0, 1 - dist / maxFireDistance);
                         const glow = ex.type === 'flash' ? 1.0 : 0.6;
-                        fireGlowIntensity = Math.max(fireGlowIntensity, glow * lifeRatio);
+                        const intensity = glow * lifeRatio * distanceFactor;
+                        fireGlowIntensity = Math.max(fireGlowIntensity, intensity);
                     }
                 }
             }
         }
         
         PostProcess.updateFireGlow(fireGlowIntensity);
+
+        // 积水反射强度（基于天气）
+        let rainIntensity = 0;
+        const currentDef = WeatherSystem.getWeatherDef();
+        const transitionProgress = WeatherSystem.transitionProgress;
+        
+        // 计算雨水强度
+        const getRainIntensity = (def) => {
+            if (!def) return 0;
+            // 雨天和酸雨都有积水效果
+            if (def.particleType === 'rain' || def.particleType === 'acid') {
+                // 归一化到 0-1，最大密度 24
+                return Math.min(1, (def.particleDensity || 0) / 24);
+            }
+            return 0;
+        };
+        
+        if (currentDef) {
+            const currentRain = getRainIntensity(currentDef);
+            
+            // 过渡期间：获取前一个天气定义并插值
+            if (WeatherSystem.transitioning && transitionProgress < 1) {
+                // 获取前一个天气定义
+                const prevDef = WeatherSystem.previous ? 
+                    WEATHER_DEFS[WeatherSystem.previous] : null;
+                const prevRain = prevDef ? getRainIntensity(prevDef) : 0;
+                rainIntensity = prevRain * (1 - transitionProgress) + currentRain * transitionProgress;
+            } else {
+                rainIntensity = currentRain;
+            }
+        }
+        
+        PostProcess.updateRain(rainIntensity);
+
+        // 龙卷风浓雾 — 基于玩家到龙卷风中心的距离
+        let tornadoFogIntensity = 0;
+        if (WeatherSystem.current === 'tornado' && TornadoSystem.center && GameState.player) {
+            const dx = GameState.player.x - TornadoSystem.center.x;
+            const dy = GameState.player.y - TornadoSystem.center.y;
+            const dist = Math.hypot(dx, dy);
+            const fogRange = 4000; // 4000px 内开始起雾
+            if (dist < fogRange) {
+                tornadoFogIntensity = 1.0 - (dist / fogRange);
+                // 非线性增强：越近越浓
+                tornadoFogIntensity = tornadoFogIntensity * tornadoFogIntensity;
+            }
+        }
+        PostProcess.updateTornadoFog(tornadoFogIntensity);
     },
 
     render() {
