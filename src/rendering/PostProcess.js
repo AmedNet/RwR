@@ -54,35 +54,16 @@ uniform float u_vignetteIntensity;
 uniform float u_contrast;
 uniform float u_saturation;
 
-// 昼夜系统
-uniform float u_dayNightDarkness;
-uniform vec3 u_dayNightTint;
-uniform float u_dayNightTintAlpha;
-
 // 闪电
 uniform float u_lightningFlash;
 
-// 天气系统
+// 火光增强
+uniform float u_fireGlowIntensity;
 
 varying vec2 v_uv;
 
 float luminance(vec3 color) {
     return dot(color, vec3(0.299, 0.587, 0.114));
-}
-
-float hash(vec2 p) {
-    return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
-}
-
-float noise(vec2 p) {
-    vec2 i = floor(p);
-    vec2 f = fract(p);
-    f = f * f * (3.0 - 2.0 * f);
-    float a = hash(i);
-    float b = hash(i + vec2(1.0, 0.0));
-    float c = hash(i + vec2(0.0, 1.0));
-    float d = hash(i + vec2(1.0, 1.0));
-    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 }
 
 
@@ -96,11 +77,6 @@ void main() {
     vec2 uv = v_uv;
     vec3 color = texture2D(u_scene, uv).rgb;
     
-    // 昼夜环境色调
-    if (u_dayNightDarkness > 0.01) {
-        color = mix(color, color * u_dayNightTint, u_dayNightTintAlpha * 0.5);
-    }
-    
     // 闪电
     if (u_lightningFlash > 0.0) {
         color += vec3(1.0) * u_lightningFlash * 0.3;
@@ -110,6 +86,22 @@ void main() {
     // Bloom
     vec3 bloom = texture2D(u_bloom, uv).rgb;
     color += bloom * u_bloomIntensity;
+    
+    // 火光/爆炸闪光增强 — 检测暖色高亮区域并添加辉光
+    if (u_fireGlowIntensity > 0.01) {
+        float lum2 = luminance(color);
+        // 暖色检测：红色通道占比高
+        float warmth = clamp((color.r - color.b) * 1.5, 0.0, 1.0);
+        // 高亮区域
+        float brightMask = smoothstep(0.4, 0.9, lum2);
+        // 火光强度 = 暖色 × 亮度
+        float fireMask = warmth * brightMask * u_fireGlowIntensity;
+        if (fireMask > 0.005) {
+            // 用场景原始颜色做火光扩散（不依赖bloom）
+            vec3 fireGlow = color * vec3(1.0, 0.6, 0.2) * fireMask * 2.0;
+            color += fireGlow;
+        }
+    }
     
     // 对比度和饱和度
     color = (color - 0.5) * u_contrast + 0.5;
@@ -145,21 +137,19 @@ export const PostProcess = {
     height: 0,
     
     params: {
-        bloomIntensity: 0.12,
-        bloomThreshold: 0.85,
+        bloomIntensity: 0.22,
+        bloomThreshold: 0.65,
         vignetteIntensity: 0.2,
         contrast: 1.03,
         saturation: 1.05
     },
     
-    dayNightData: {
-        darkness: 0,
-        tint: [0, 0, 0],
-        tintAlpha: 0
-    },
-    
     lightningData: {
         flash: 0
+    },
+    
+    fireGlowData: {
+        intensity: 0
     },
     
     init() {
@@ -223,11 +213,9 @@ export const PostProcess = {
         cache.vignetteIntensity = gl.getUniformLocation(this.compositeProgram, "u_vignetteIntensity");
         cache.contrast = gl.getUniformLocation(this.compositeProgram, "u_contrast");
         cache.saturation = gl.getUniformLocation(this.compositeProgram, "u_saturation");
-        cache.dayNightDarkness = gl.getUniformLocation(this.compositeProgram, "u_dayNightDarkness");
-        cache.dayNightTint = gl.getUniformLocation(this.compositeProgram, "u_dayNightTint");
-        cache.dayNightTintAlpha = gl.getUniformLocation(this.compositeProgram, "u_dayNightTintAlpha");
         cache.lightningFlash = gl.getUniformLocation(this.compositeProgram, "u_lightningFlash");
-        
+        cache.fireGlowIntensity = gl.getUniformLocation(this.compositeProgram, "u_fireGlowIntensity");
+
         this._cachedUniforms = cache;
     },
     
@@ -334,14 +322,12 @@ export const PostProcess = {
         this._bloomW = 0;
     },
     
-    updateDayNight(darkness, tint, tintAlpha) {
-        this.dayNightData.darkness = darkness;
-        this.dayNightData.tint = tint;
-        this.dayNightData.tintAlpha = tintAlpha;
-    },
-    
     updateLightning(flash) {
         this.lightningData.flash = flash;
+    },
+    
+    updateFireGlow(intensity) {
+        this.fireGlowData.intensity = intensity;
     },
     
     apply(sourceCanvas) {
@@ -356,7 +342,7 @@ export const PostProcess = {
         gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, sourceCanvas);
         gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-        
+
         // Pass 1: 亮度提取
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.brightFBO);
         gl.viewport(0, 0, bw, bh);
@@ -391,19 +377,16 @@ export const PostProcess = {
         gl.activeTexture(gl.TEXTURE1);
         gl.bindTexture(gl.TEXTURE_2D, this.blurTexture);
         gl.uniform1i(u.bloom, 1);
-        
+
         gl.uniform2f(u.resolution, this.width, this.height);
         gl.uniform1f(u.time, this.time);
         gl.uniform1f(u.bloomIntensity, this.params.bloomIntensity);
         gl.uniform1f(u.vignetteIntensity, this.params.vignetteIntensity);
         gl.uniform1f(u.contrast, this.params.contrast);
         gl.uniform1f(u.saturation, this.params.saturation);
-        
-        gl.uniform1f(u.dayNightDarkness, this.dayNightData.darkness);
-        gl.uniform3f(u.dayNightTint, this.dayNightData.tint[0], this.dayNightData.tint[1], this.dayNightData.tint[2]);
-        gl.uniform1f(u.dayNightTintAlpha, this.dayNightData.tintAlpha);
-        
+
         gl.uniform1f(u.lightningFlash, this.lightningData.flash);
+        gl.uniform1f(u.fireGlowIntensity, this.fireGlowData.intensity);
         
         gl.drawArrays(gl.TRIANGLES, 0, 6);
     },

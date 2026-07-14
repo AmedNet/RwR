@@ -18,6 +18,8 @@ export const Renderer = {
     ctx: null,
     _offscreenCanvas: null,
     _offscreenCtx: null,
+    _dayNightCanvas: null,
+    _dayNightCtx: null,
     logicalWidth: 0,
     logicalHeight: 0,
     weaponImages: {}, // 武器贴图缓存 { weaponId: HTMLImageElement }
@@ -84,6 +86,12 @@ export const Renderer = {
         GameState.viewport.height = height;
         // 调整后处理 canvas 尺寸
         PostProcess.resize(width, height);
+
+        // 同步昼夜遮罩 canvas 尺寸
+        if (this._dayNightCanvas) {
+            this._dayNightCanvas.width = Math.ceil(width);
+            this._dayNightCanvas.height = Math.ceil(height);
+        }
         
         console.log(`📐 画布尺寸: ${width}x${height}`);
     },
@@ -1079,18 +1087,92 @@ export const Renderer = {
         }
     },
 
-
-    // 更新昼夜和闪电数据到着色器
-    _updateShaderLighting() {
-        // 昼夜系统数据
+    _renderDayNightOverlay() {
         const darkness = DayNightSystem.getAmbientDarkness();
-        const tint = DayNightSystem.getTint();
-        const tintRGB = [tint.r / 255, tint.g / 255, tint.b / 255];
-        PostProcess.updateDayNight(darkness, tintRGB, tint.a);
-        
+        if (darkness < 0.01 && DayNightSystem.lightSources.length === 0) return;
+
+        const w = this.width;
+        const h = this.height;
+
+        if (!this._dayNightCanvas) {
+            this._dayNightCanvas = document.createElement('canvas');
+            this._dayNightCanvas.width = Math.ceil(w);
+            this._dayNightCanvas.height = Math.ceil(h);
+            this._dayNightCtx = this._dayNightCanvas.getContext('2d');
+        }
+
+        const offCtx = this._dayNightCtx;
+        offCtx.clearRect(0, 0, w, h);
+
+        if (darkness > 0.01) {
+            const tint = DayNightSystem.getTint();
+            offCtx.fillStyle = `rgba(${tint.r},${tint.g},${tint.b},${tint.a})`;
+            offCtx.fillRect(0, 0, w, h);
+
+            if (DayNightSystem.lightSources.length > 0) {
+                offCtx.save();
+                offCtx.globalCompositeOperation = 'destination-out';
+
+                for (const light of DayNightSystem.lightSources) {
+                    const pos = this.toScreen(light.x, light.y);
+                    const lifeRatio = light.life / light.maxLife;
+                    const currentRadius = light.radius * lifeRatio;
+
+                    if (currentRadius < 1) continue;
+
+                    const gradient = offCtx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, currentRadius);
+                    gradient.addColorStop(0, `rgba(0,0,0,${lifeRatio})`);
+                    gradient.addColorStop(0.5, `rgba(0,0,0,${lifeRatio * 0.5})`);
+                    gradient.addColorStop(1, 'rgba(0,0,0,0)');
+
+                    offCtx.fillStyle = gradient;
+                    offCtx.beginPath();
+                    offCtx.arc(pos.x, pos.y, currentRadius, 0, Math.PI * 2);
+                    offCtx.fill();
+                }
+
+                offCtx.restore();
+            }
+        }
+
+        this.ctx.drawImage(this._dayNightCanvas, 0, 0);
+    },
+
+    // 更新闪电和火光数据到着色器
+    _updateShaderLighting() {
         // 闪电数据
         const flash = WeatherSystem.lightningFlash > 0 ? WeatherSystem.lightningFlash / 10 : 0;
         PostProcess.updateLightning(flash);
+
+        // 火光/爆炸闪光强度
+        let fireGlowIntensity = 0;
+        
+        // 死神打击爆炸
+        if (SupportSystem.reaperStrikes && SupportSystem.reaperStrikes.length > 0) {
+            for (const strike of SupportSystem.reaperStrikes) {
+                if (strike.phase === 'exploded') {
+                    const explosionProgress = 1 - (strike.fadeOutTimer / 240);
+                    if (explosionProgress < 0.3) {
+                        fireGlowIntensity = Math.max(fireGlowIntensity, 1.0 - (explosionProgress / 0.3));
+                    }
+                }
+            }
+        }
+        
+        // 手雷/枪口闪光（来自 EffectsManager）
+        if (EffectsManager.explosions && EffectsManager.explosions.length > 0) {
+            for (const ex of EffectsManager.explosions) {
+                if (ex.type === 'flash' || ex.type === 'muzzle_flash') {
+                    const lifeRatio = ex.life / (ex.maxLife || 1);
+                    if (lifeRatio > 0.2) {
+                        const glow = ex.type === 'flash' ? 1.0 : 0.6;
+                        fireGlowIntensity = Math.max(fireGlowIntensity, glow * lifeRatio);
+                    }
+                }
+            }
+        }
+        
+        PostProcess.updateFireGlow(fireGlowIntensity);
     },
 
     render() {
@@ -1127,11 +1209,13 @@ export const Renderer = {
                 // 昼夜渲染层
                 this.ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
                 this.ctx.fillRect(0, 0, this.width, this.height);
+                this._updateShaderLighting();
             } else {
                 this._drawOverlay();
             }
-            drawGameOver(this.ctx, this);
             this._updateShaderLighting();
+            drawGameOver(this.ctx, this);
+            this._renderDayNightOverlay();
         PostProcess.apply(this._offscreenCanvas, this);
             return;
         }
@@ -1140,6 +1224,7 @@ export const Renderer = {
         if (GameState.debugOpen) {
             drawDebug(this.ctx, this);
             this._updateShaderLighting();
+            this._renderDayNightOverlay();
         PostProcess.apply(this._offscreenCanvas, this);
             return;
         }
@@ -1154,6 +1239,7 @@ export const Renderer = {
             WeatherSystem.drawWeatherEdgeEffects(this.ctx, this);
             drawRadioUI(this.ctx, this);
             this._updateShaderLighting();
+            this._renderDayNightOverlay();
         PostProcess.apply(this._offscreenCanvas, this);
             return;
         }
@@ -1167,6 +1253,7 @@ export const Renderer = {
                 drawInventory(this.ctx, this);
             }
             this._updateShaderLighting();
+            this._renderDayNightOverlay();
         PostProcess.apply(this._offscreenCanvas, this);
             return;
         }
@@ -1182,6 +1269,7 @@ export const Renderer = {
         
         // 应用后处理效果并输出到 WebGL canvas
         this._updateShaderLighting();
+        this._renderDayNightOverlay();
         PostProcess.apply(this._offscreenCanvas, this);
     },
 

@@ -188,7 +188,13 @@ export class Player extends Entity {
         SoundManager.playThrow(this);
 
         weapon.ammo--;
-        if (weapon.ammo <= 0) GameState.inventory[grenadeSlot] = null;
+        if (weapon.ammo <= 0) {
+            GameState.inventory[grenadeSlot] = null;
+            // 若扔掉的是当前手持武器，自动切回其他可用武器（否则会卡在空槽位拿棍）
+            if (grenadeSlot === GameState.activeWeaponSlot) {
+                this.autoSwitchToNextWeapon();
+            }
+        }
     }
 
     hasOnlyKnife() {
