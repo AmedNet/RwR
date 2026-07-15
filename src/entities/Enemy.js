@@ -26,5 +26,6 @@ export class Enemy extends CombatAI {
         this.setRank(rollRandomRank());
         const rankBonus = this.rank * 0.05;
         this.setClass(rollRandomClass(rankBonus));
+        this.setHelmet(this.rank);
     }
 }

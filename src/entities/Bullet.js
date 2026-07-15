@@ -6,7 +6,7 @@ import * as SoundManager from '../utils/SoundManager.js';
 import { WeatherSystem } from '../core/WeatherSystem.js';
 
 export class Bullet extends Entity {
-    constructor(x, y, vx, vy, isEnemy, damage, isPlayer = false, knockback = 0, bulletRadius = null, maxRange = null, penetration = null, explosion = null, hasTrail = false, bulletColor = null, bulletGlow = null, shooter = null) {
+    constructor(x, y, vx, vy, isEnemy, damage, isPlayer = false, knockback = 0, bulletRadius = null, maxRange = null, penetration = null, explosion = null, hasTrail = false, bulletColor = null, bulletGlow = null, shooter = null, weaponType = null) {
         const config = GameState.config.bullet;
         super(x, y, {
             radius: bulletRadius || config.radius,
@@ -43,6 +43,9 @@ export class Bullet extends Entity {
 
         // 射击者引用（用于判断击杀归属）
         this.shooter = shooter;
+
+        // 武器类型（用于头盔跳弹判定）
+        this.weaponType = weaponType;
     }
 
     update() {

@@ -159,6 +159,27 @@ export function drawDebug(ctx, renderer) {
             renderer.debugButtons.push({ x: rowX, y, w: btnW, h: btnH, action: btn.action });
             rowX += btnW + btnGap;
         });
+        y += btnH + 20;
+
+        // FPS显示开关
+        const fpsBtnW = 200;
+        const fpsBtnH = 40;
+        const fpsBtnX = cx - fpsBtnW / 2;
+        const fpsOn = GameState.debugShowFPS;
+        ctx.fillStyle = fpsOn ? '#4CAF50' : '#3a3a3a';
+        ctx.beginPath();
+        ctx.roundRect(fpsBtnX, y, fpsBtnW, fpsBtnH, 6);
+        ctx.fill();
+        ctx.strokeStyle = fpsOn ? '#81C784' : 'rgba(255,255,255,0.15)';
+        ctx.lineWidth = fpsOn ? 2 : 1;
+        ctx.stroke();
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 14px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const fpsText = fpsOn ? `\u{1F4CA} \u5E27\u7387\u663E\u793A: \u5F00 (${GameState.fps} FPS)` : '\u{1F4CA} \u5E27\u7387\u663E\u793A: \u5173';
+        ctx.fillText(fpsText, fpsBtnX + fpsBtnW / 2, y + fpsBtnH / 2);
+        renderer.debugButtons.push({ x: fpsBtnX, y, w: fpsBtnW, h: fpsBtnH, action: 'toggleFPS' });
 
     } else if (currentTab === 1) {
         // === 天气页 ===

@@ -57,8 +57,6 @@ uniform float u_saturation;
 // 闪电
 uniform float u_lightningFlash;
 
-// 火光增强
-uniform float u_fireGlowIntensity;
 // 积水反射
 uniform float u_rainIntensity;
 // 龙卷风浓雾
@@ -101,21 +99,6 @@ void main() {
     vec3 bloom = texture2D(u_bloom, uv).rgb;
     color += bloom * u_bloomIntensity;
     
-    // 火光/爆炸闪光增强 — 检测暖色高亮区域并添加辉光
-    if (u_fireGlowIntensity > 0.01) {
-        float lum2 = luminance(color);
-        // 暖色检测：红色通道占比高
-        float warmth = clamp((color.r - color.b) * 1.5, 0.0, 1.0);
-        // 高亮区域
-        float brightMask = smoothstep(0.4, 0.9, lum2);
-        // 火光强度 = 暖色 × 亮度
-        float fireMask = warmth * brightMask * u_fireGlowIntensity;
-        if (fireMask > 0.005) {
-            // 用场景原始颜色做火光扩散（不依赖bloom）
-            vec3 fireGlow = color * vec3(1.0, 0.6, 0.2) * fireMask * 2.0;
-            color += fireGlow;
-        }
-    }
     // 积水反射 — 屏幕底部区域（微妙的地面湿润效果）
     float puddleMask = smoothstep(0.25, 0.0, uv.y);
     if (puddleMask > 0.01 && u_rainIntensity > 0.01) {
@@ -190,10 +173,6 @@ export const PostProcess = {
         flash: 0
     },
     
-    fireGlowData: {
-        intensity: 0
-    },
-
     rainData: {
         intensity: 0
     },
@@ -264,7 +243,6 @@ export const PostProcess = {
         cache.contrast = gl.getUniformLocation(this.compositeProgram, "u_contrast");
         cache.saturation = gl.getUniformLocation(this.compositeProgram, "u_saturation");
         cache.lightningFlash = gl.getUniformLocation(this.compositeProgram, "u_lightningFlash");
-        cache.fireGlowIntensity = gl.getUniformLocation(this.compositeProgram, "u_fireGlowIntensity");
         cache.rainIntensity = gl.getUniformLocation(this.compositeProgram, "u_rainIntensity");
         cache.tornadoFog = gl.getUniformLocation(this.compositeProgram, "u_tornadoFog");
 
@@ -378,10 +356,6 @@ export const PostProcess = {
         this.lightningData.flash = flash;
     },
     
-    updateFireGlow(intensity) {
-        this.fireGlowData.intensity = intensity;
-    },
-
     updateRain(intensity) {
         this.rainData.intensity = intensity;
     },
@@ -449,7 +423,6 @@ export const PostProcess = {
         gl.uniform1f(u.saturation, this.params.saturation);
 
         gl.uniform1f(u.lightningFlash, this.lightningData.flash);
-        gl.uniform1f(u.fireGlowIntensity, this.fireGlowData.intensity);
         gl.uniform1f(u.rainIntensity, this.rainData.intensity);
         gl.uniform1f(u.tornadoFog, this.tornadoFogData.intensity);
         

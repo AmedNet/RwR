@@ -16,6 +16,7 @@ import { UnitClass, getClassConfig } from '../core/ClassSystem.js';
 import { WeatherSystem } from '../core/WeatherSystem.js';
 import { rollLoot } from '../core/LootRegistry.js';
 import { LootPickup } from './LootPickup.js';
+import { rollHelmet, rollHelmetVariant, getHelmetConfig, getHelmetVariantImagePath, HelmetTier } from '../core/HelmetSystem.js';
 
 export class CombatAI extends Entity {
     // AI 角色常量
@@ -90,6 +91,8 @@ export class CombatAI extends Entity {
         this.weapons = [null, null, null, null];
         this.activeWeaponSlot = 1;
         this.weaponImages = {};
+        // 头盔贴图
+        this.loadHelmetImage();
         this.weaponImagesLoaded = {};
         this.reloadImages = {};
         this.reloadImagesLoaded = {};
@@ -110,6 +113,12 @@ export class CombatAI extends Entity {
         // 龙卷风伤害累积
         this.tornadoDamageAccumulator = 0;
         this.tornadoDamageTimer = 0;
+        // 移动方向记录（用于头盔镜像）
+        this._prevX = x;       // 上一帧X坐标（用于头盔镜像）
+        this._lastMoveDir = 1;  // 1=右, -1=左
+        // 头盔系统
+        this.helmet = HelmetTier.NONE;
+        this.helmetVariant = 0;
     }
 
     // ─── 军衔系统方法 ───
@@ -129,6 +138,16 @@ export class CombatAI extends Entity {
         this.health = this.maxHealth;
         this.damage = Math.floor(this.damage * config.damageMultiplier);
         this.speed = this.speed * config.speedMultiplier;
+    }
+
+    // 头盔系统
+    setHelmet(rank) {
+        this.helmet = rollHelmet(rank);
+        this.helmetVariant = rollHelmetVariant(this.helmet);
+    }
+
+    hasHelmet() {
+        return this.helmet !== HelmetTier.NONE;
     }
 
     // 弹药兵：给附近队友施加弹药补给增益
@@ -286,6 +305,25 @@ export class CombatAI extends Entity {
         for (const w of this.weapons) {
             if (w && w.config && w.config.imagePath) {
                 this.loadWeaponImage(w.id, w.config.imagePath, w.config.reloadImagePath);
+            }
+        }
+    }
+
+    // 加载所有头盔变体贴图
+    loadHelmetImage() {
+        this.helmetImages = {};
+        this.helmetImagesLoaded = {};
+        for (const tier of [HelmetTier.STEEL, HelmetTier.TITANIUM]) {
+            const config = getHelmetConfig(tier);
+            const variants = config.variants || [];
+            this.helmetImages[tier] = [];
+            this.helmetImagesLoaded[tier] = [];
+            for (let i = 0; i < variants.length; i++) {
+                const img = new Image();
+                img.src = variants[i].imagePath;
+                this.helmetImages[tier].push(img);
+                this.helmetImagesLoaded[tier].push(false);
+                img.onload = () => { this.helmetImagesLoaded[tier][i] = true; };
             }
         }
     }
@@ -957,7 +995,8 @@ export class CombatAI extends Entity {
             weapon.config.hasTrail === true,
             weapon.config.bulletColor,
             weapon.config.bulletGlow,
-            this
+            this,
+            weapon.config.type
         ));
     }
 
@@ -1004,22 +1043,30 @@ export class CombatAI extends Entity {
     }
 
     draw(ctx) {
+        const weaponAngle = this.getWeaponDrawAngle();
+
+        // 更新移动方向（用于头盔镜像）
+        if (this.x !== this._prevX) {
+            this._lastMoveDir = this.x > this._prevX ? 1 : -1;
+        }
+        this._prevX = this.x;
+        
         if (this.dying) {
             const progress = 1 - this.deathTimer / 15;
             ctx.save();
             ctx.globalAlpha = 1 - progress * 0.85;
             const s = 1 - progress * 0.4;
             ctx.scale(s, s);
-            this.drawBody(ctx);
+            this.drawBody(ctx, weaponAngle);
             ctx.restore();
             return;
         }
-        this.drawBody(ctx);
-        this.drawWeapon(ctx);
+        this.drawBody(ctx, weaponAngle);
+        this.drawWeapon(ctx, weaponAngle);
         this.drawStatusEffects(ctx);
     }
 
-    drawBody(ctx) {
+    drawBody(ctx, weaponAngle) {
         ctx.save();
         ctx.beginPath();
         ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
@@ -1031,6 +1078,7 @@ export class CombatAI extends Entity {
         if (this.rank > AIRank.PRIVATE) {
             this.drawRankStars(ctx);
         }
+
         // 中心图标表示兵种，使用描边颜色
         const classConfig = getClassConfig(this.unitClass);
         ctx.fillStyle = this.getRoleStroke();
@@ -1038,6 +1086,36 @@ export class CombatAI extends Entity {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(classConfig.icon, 0, 0);
+        
+        // 绘制头盔（贴图版本，覆盖在图标上方，根据朝向镜像）
+        if (this.hasHelmet() && this.helmetImagesLoaded[this.helmet] && this.helmetImagesLoaded[this.helmet][this.helmetVariant]) {
+            const r = this.radius;
+            // 头盔贴图参数（易于调整）
+            const helmetScale = 2.7;
+            const helmetOffsetX = 0;
+            const helmetOffsetY = -r * 0.4;
+            const drawSize = r * helmetScale;
+            
+            // 根据武器指向方向决定是否镜像
+            const facingLeft = Math.cos(weaponAngle) < 0;
+            
+            const centerX = helmetOffsetX;
+            const centerY = -drawSize / 2 + helmetOffsetY + drawSize / 2;
+            ctx.save();
+            ctx.translate(centerX, centerY);
+            if (facingLeft) {
+                ctx.scale(-1, 1);
+            }
+            ctx.drawImage(
+                this.helmetImages[this.helmet][this.helmetVariant],
+                -drawSize / 2,
+                -drawSize / 2,
+                drawSize,
+                drawSize
+            );
+            ctx.restore();
+        }
+        
         ctx.restore();
     }
 
@@ -1064,11 +1142,17 @@ export class CombatAI extends Entity {
         return '#E040FB';
     }
 
-    drawWeapon(ctx) {
+
+    getWeaponDrawAngle() {
+        const { target } = this.getClosestTarget();
+        return target
+            ? Math.atan2(target.y - this.y, target.x - this.x)
+            : (this._lastMoveDir < 0 ? Math.PI * 3 / 4 : Math.PI / 4);
+    }
+
+    drawWeapon(ctx, weaponAngle) {
         const weapon = this.getActiveWeapon();
         if (!weapon) return;
-        const { target } = this.getClosestTarget();
-        const weaponAngle = target ? Math.atan2(target.y - this.y, target.x - this.x) : Math.PI / 4;
         const weaponImage = this.getWeaponImage(weapon.id, weapon.isReloading);
 
         ctx.save();
@@ -1096,6 +1180,9 @@ export class CombatAI extends Entity {
         const slowDuration = STATUS_EFFECT_CONFIG.SLOW.DEFAULT_DURATION;
         this.addStatusEffect(new SlowEffect(slowDuration));
         const distance = GameState.player ? Math.hypot(this.x - GameState.player.x, this.y - GameState.player.y) : 0;
+        if (this.hasHelmet()) {
+            SoundManager.playHelmetHit(distance);
+        }
         if (this.health <= 0) {
             this.health = 0;
             if (!this.dying) {

@@ -57,6 +57,10 @@ export const GameState = {
     debugTab: 0, // Debug面板当前标签页 (0=玩家, 1=天气, 2=昼夜, 3=战利品, 4=音效)
     debugKey9Pressed: false, // 追踪9键状态（用于组合键）
     debugShowTornado: false, // 小地图上显示龙卷风位置
+    debugShowFPS: false, // 显示实时帧率
+    fps: 0, // 当前帧率
+    _fpsFrames: 0, // FPS计算用帧计数器
+    _fpsLastTime: 0, // FPS计算用上次时间戳
     // 电台系统
     radioOpen: false, // 电台界面是否打开
     radioSelectedIndex: 0, // 电台选中的支援类型索引

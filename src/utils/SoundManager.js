@@ -610,6 +610,48 @@ export function playBulletHit(source) {
   src2.start(n);
 }
 
+// 子弹击中头盔的金属闷响（当啷）
+export function playHelmetHit(source = 0) {
+  const c = getCtx(), n = c.currentTime;
+  const vol = getDistanceVolume(source, 1000, 1.5);
+  if (vol <= 0) return;
+  // 较低沉、带金属刮擦质感的"当啷"，去掉清脆高频卡榫声
+  for (const dt of [0, 0.05]) {
+    const t = n + dt;
+    const f = 1500 + Math.random() * 400;
+    playRingRaw(c, t, f, 0.10, 0.28 * vol, 'triangle');
+    playRingRaw(c, t, f * 1.34, 0.08, 0.14 * vol, 'sine');
+    const nb = mkNoise(c, 0.05, 'white'), ns = c.createBufferSource();
+    ns.buffer = nb;
+    const nf = c.createBiquadFilter();
+    nf.type = 'bandpass'; nf.frequency.value = f * 1.2; nf.Q.value = 1.2;
+    const ng = c.createGain();
+    ng.gain.setValueAtTime(0.18 * vol, t);
+    ng.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+    ns.connect(nf).connect(ng).connect(masterGain);
+    ns.start(t); ns.stop(t + 0.05);
+  }
+}
+
+// 子弹跳弹的金属尖响 + 火花噪声
+export function playRicochet(source = 0) {
+  const c = getCtx(), n = c.currentTime;
+  const vol = getDistanceVolume(source, 1000, 1.5);
+  if (vol <= 0) return;
+  const f = 3000 + Math.random() * 800;
+  playRingRaw(c, n, f, 0.18, 0.3 * vol, 'triangle');
+  playRingRaw(c, n, f * 1.5, 0.12, 0.15 * vol, 'sine');
+  const nb = mkNoise(c, 0.06, 'white'), ns = c.createBufferSource();
+  ns.buffer = nb;
+  const nf = c.createBiquadFilter();
+  nf.type = 'highpass'; nf.frequency.value = 4000;
+  const ng = c.createGain();
+  ng.gain.setValueAtTime(0.12 * vol, n);
+  ng.gain.exponentialRampToValueAtTime(0.001, n + 0.06);
+  ns.connect(nf).connect(ng).connect(masterGain);
+  ns.start(n); ns.stop(n + 0.06);
+}
+
 // 播放弹壳单次落地撞击音效（每次弹跳触发一次）
 export function playShellLand(type = 'pistol', bounceIndex = 0, source = 0) {
   const c = getCtx(), n = c.currentTime;

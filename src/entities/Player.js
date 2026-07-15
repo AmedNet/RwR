@@ -468,7 +468,7 @@ export class Player extends Entity {
                     knockback, pelletRadius, maxRange,
                     null, null, false,
                     weapon.config.bulletColor, weapon.config.bulletGlow,
-                    this
+                    this, weapon.config.type
                 ));
             }
         } else if (weapon.config.arcRange) {
@@ -510,7 +510,7 @@ export class Player extends Entity {
                 false, weapon.config.damage, true,
                 knockback, bulletRadius, null, penetration, explosion, hasTrail,
                 weapon.config.bulletColor, weapon.config.bulletGlow,
-                this
+                this, weapon.config.type
             ));
         }
         // 播放枪声音效 + 枪口火焰

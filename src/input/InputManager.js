@@ -660,6 +660,9 @@ export const InputManager = {
                                     console.log(DayNightSystem.paused ? '\u23F8 \u663C\u591C\u5FAA\u73AF\u6682\u505C' : '\u25B6 \u663C\u591C\u5FAA\u73AF\u7EE7\u7EED');
                                 } else if (btn.action === 'toggleTornadoRadar') {
                                     GameState.debugShowTornado = !GameState.debugShowTornado;
+                                } else if (btn.action === 'toggleFPS') {
+                                    GameState.debugShowFPS = !GameState.debugShowFPS;
+                                    console.log(GameState.debugShowFPS ? '\u{1F41B} \u5E27\u7387\u663E\u793A\u5F00\u542F' : '\u{1F41B} \u5E27\u7387\u663E\u793A\u5173\u95ED');
                                     console.log(GameState.debugShowTornado ? '\u{1F41B} \u9F99\u5377\u98CE\u96F7\u8FBE\u5F00\u542F' : '\u{1F41B} \u9F99\u5377\u98CE\u96F7\u8FBE\u5173\u95ED');
                                 } else if (btn.action === 'spawnLoot') {
                                     // 刷出指定稀有度的随机战利品

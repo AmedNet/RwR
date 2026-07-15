@@ -339,6 +339,14 @@ function resetGame() {
 
 // ---------- 游戏循环 ----------
 function gameLoop() {
+    // FPS计算
+    const now = performance.now();
+    GameState._fpsFrames++;
+    if (now - GameState._fpsLastTime >= 1000) {
+        GameState.fps = GameState._fpsFrames;
+        GameState._fpsFrames = 0;
+        GameState._fpsLastTime = now;
+    }
     // 更新特效（粒子、伤害数字等）
     EffectsManager.update();
     // 更新天气系统

@@ -484,6 +484,35 @@ export const EffectsManager = {
         });
     },
 
+    // 生成跳弹特效（金属火花 + 灰色"resist!"文字）
+    spawnRicochetEffect(x, y) {
+        // 银白色金属火花
+        const sparkColors = ['#E0E0E0', '#BDBDBD', '#CFD8DC', '#FFFFFF', '#90A4AE'];
+        for (let i = 0; i < 8; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 2 + Math.random() * 3;
+            this.particles.push({
+                x, y,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed - 1.5,
+                life: 15 + Math.random() * 10,
+                maxLife: 25,
+                color: sparkColors[Math.floor(Math.random() * sparkColors.length)],
+                size: 1.5 + Math.random() * 2,
+                type: ParticleType.SPARK
+            });
+        }
+        // 灰色 "resist!" 伤害数字
+        this.damageNumbers.push({
+            x, y: y - 10,
+            text: 'resist!',
+            isRicochet: true,
+            life: 40,
+            maxLife: 40,
+            vy: -2.5
+        });
+    },
+
     // 生成血液喷溅效果（命中时调用）
     // hitX, hitY: 命中位置
     // bulletVx, bulletVy: 子弹速度方向（决定溅射方向）
@@ -870,8 +899,10 @@ export const EffectsManager = {
             // 阴影
             ctx.fillStyle = 'rgba(0,0,0,0.6)';
             ctx.fillText(d.text, 1, 1);
-            // 文字颜色：治疗数字用亮绿色
-            if (d.isHeal) {
+            // 文字颜色：跳弹用灰色，治疗用亮绿色
+            if (d.isRicochet) {
+                ctx.fillStyle = '#B0BEC5';
+            } else if (d.isHeal) {
                 ctx.fillStyle = '#69F0AE';
             } else {
                 ctx.fillStyle = d.isPlayer ? '#ff5252' : '#4CAF50';

@@ -1169,52 +1169,6 @@ export const Renderer = {
         const flash = WeatherSystem.lightningFlash > 0 ? WeatherSystem.lightningFlash / 10 : 0;
         PostProcess.updateLightning(flash);
 
-        // 火光/爆炸闪光强度（带距离衰减）
-        let fireGlowIntensity = 0;
-        const player = GameState.player;
-        const playerX = player ? player.x : 0;
-        const playerY = player ? player.y : 0;
-        const maxFireDistance = 800; // 最大影响距离（像素）
-
-        // 死神打击爆炸
-        if (SupportSystem.reaperStrikes && SupportSystem.reaperStrikes.length > 0) {
-            for (const strike of SupportSystem.reaperStrikes) {
-                if (strike.phase === 'exploded') {
-                    const explosionProgress = 1 - (strike.fadeOutTimer / 240);
-                    if (explosionProgress < 0.3) {
-                        // 计算距离衰减
-                        const dx = strike.x - playerX;
-                        const dy = strike.y - playerY;
-                        const dist = Math.hypot(dx, dy);
-                        const distanceFactor = Math.max(0, 1 - dist / maxFireDistance);
-                        const intensity = (1.0 - (explosionProgress / 0.3)) * distanceFactor;
-                        fireGlowIntensity = Math.max(fireGlowIntensity, intensity);
-                    }
-                }
-            }
-        }
-
-        // 手雷/枪口闪光（来自 EffectsManager）
-        if (EffectsManager.explosions && EffectsManager.explosions.length > 0) {
-            for (const ex of EffectsManager.explosions) {
-                if (ex.type === 'flash' || ex.type === 'muzzle_flash') {
-                    const lifeRatio = ex.life / (ex.maxLife || 1);
-                    if (lifeRatio > 0.2) {
-                        // 计算距离衰减
-                        const dx = ex.x - playerX;
-                        const dy = ex.y - playerY;
-                        const dist = Math.hypot(dx, dy);
-                        const distanceFactor = Math.max(0, 1 - dist / maxFireDistance);
-                        const glow = ex.type === 'flash' ? 1.0 : 0.6;
-                        const intensity = glow * lifeRatio * distanceFactor;
-                        fireGlowIntensity = Math.max(fireGlowIntensity, intensity);
-                    }
-                }
-            }
-        }
-
-        PostProcess.updateFireGlow(fireGlowIntensity);
-
         // 积水反射强度（基于天气）
         let rainIntensity = 0;
         const currentDef = WeatherSystem.getWeatherDef();
@@ -1355,6 +1309,19 @@ export const Renderer = {
         WeatherSystem.drawOverlay(this.ctx, this);
         WeatherSystem.drawWeatherEdgeEffects(this.ctx, this);
         this._renderHUD();
+
+        // FPS显示
+        if (GameState.debugShowFPS) {
+            this.ctx.save();
+            this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            this.ctx.fillRect(8, 8, 90, 28);
+            this.ctx.fillStyle = GameState.fps >= 50 ? '#4CAF50' : GameState.fps >= 30 ? '#FF9800' : '#f44336';
+            this.ctx.font = 'bold 16px monospace';
+            this.ctx.textAlign = 'left';
+            this.ctx.textBaseline = 'middle';
+            this.ctx.fillText(GameState.fps + ' FPS', 16, 22);
+            this.ctx.restore();
+        }
 
         // 应用后处理效果并输出到 WebGL canvas
         this._updateShaderLighting();

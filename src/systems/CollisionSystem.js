@@ -3,9 +3,10 @@ import { GameState } from '../core/GameState.js';
 import { EventBus } from '../core/EventBus.js';
 import { Terrain } from '../core/Map.js';
 import { EffectsManager, ParticleType } from '../utils/EffectsManager.js';
-import { playExplosion, playBulletHit } from '../utils/SoundManager.js';
+import { playExplosion, playBulletHit, playRicochet } from '../utils/SoundManager.js';
 import { getRankConfig, AIRank } from '../core/RankSystem.js';
 import { SupportSystem } from '../core/SupportSystem.js';
+import { getHelmetConfig, HelmetTier, tryRicochet } from '../core/HelmetSystem.js';
 
 /** 碰撞特效配置常量 */
 const COLLISION_FX = {
@@ -227,6 +228,18 @@ export const CollisionSystem = {
     },
 
     _onBulletHitTeammate(bullet, teammate, teammates, index) {
+        // 头盔跳弹/减伤判定
+        if (teammate.hasHelmet && teammate.hasHelmet() && teammate.helmet !== HelmetTier.NONE) {
+            const weaponType = bullet.weaponType || null;
+            if (tryRicochet(teammate.helmet, weaponType)) {
+                bullet.alive = false;
+                EffectsManager.spawnRicochetEffect(bullet.x, bullet.y);
+                playRicochet(teammate);
+                return;
+            }
+            const helmetCfg = getHelmetConfig(teammate.helmet);
+            bullet.damage = Math.floor(bullet.damage * (1 - helmetCfg.damageReduction));
+        }
         teammate.takeDamage(bullet.damage, bullet.x, bullet.y);
         EffectsManager.spawnBloodSplatter(bullet.x, bullet.y, bullet.vx, bullet.vy, bullet.damage);
         playBulletHit(teammate);
@@ -239,6 +252,20 @@ export const CollisionSystem = {
     },
 
     _onBulletHitEnemy(bullet, enemy, player, enemies, index) {
+        // 头盔跳弹/减伤判定
+        if (enemy.hasHelmet && enemy.hasHelmet() && enemy.helmet !== HelmetTier.NONE) {
+            const weaponType = bullet.weaponType || null;
+            if (tryRicochet(enemy.helmet, weaponType)) {
+                // 跳弹：完全免伤
+                bullet.alive = false;
+                EffectsManager.spawnRicochetEffect(bullet.x, bullet.y);
+                playRicochet(enemy);
+                return;
+            }
+            // 减伤：降低子弹伤害
+            const helmetCfg = getHelmetConfig(enemy.helmet);
+            bullet.damage = Math.floor(bullet.damage * (1 - helmetCfg.damageReduction));
+        }
         const wasDying = enemy.dying;
         enemy.takeDamage(bullet.damage, bullet.x, bullet.y);
         if (bullet.knockback > 0) {
