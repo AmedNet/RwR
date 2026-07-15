@@ -12,6 +12,8 @@ import { EffectsManager } from '../utils/EffectsManager.js';
 import * as SoundManager from '../utils/SoundManager.js';
 import { SlowEffect, STATUS_EFFECT_CONFIG } from '../utils/StatusEffects.js';
 import { WeatherSystem } from '../core/WeatherSystem.js';
+import { Rarity } from '../core/LootRegistry.js';
+import { LootPickup } from './LootPickup.js';
 export class Player extends Entity {
     // 类常量
     static SWITCH_ANIM_DURATION = 15;
@@ -116,7 +118,7 @@ export class Player extends Entity {
     switchWeapon(slot) {
         if (slot < 0 || slot > 6 || slot === GameState.activeWeaponSlot || !GameState.inventory[slot]) return false;
         const current = GameState.getActiveWeapon();
-        if (current) {
+        if (current && !current.isLoot) {
             current.isReloading = false;
             current.clearJustEmptied(); // 切换武器时清除打空标记
         }
@@ -124,11 +126,13 @@ export class Player extends Entity {
         this.switchAnimTimer = this.switchAnimDuration;
         this.switchFromSlot = GameState.activeWeaponSlot;
         GameState.activeWeaponSlot = slot;
-        SoundManager.playWeaponSwitch(GameState.inventory[slot].config.type, this);
-        
+        const newItem = GameState.inventory[slot];
+        if (!newItem.isLoot) {
+            SoundManager.playWeaponSwitch(newItem.config.type, this);
+        }
+
         // 切换到非狙击枪时，立即重置瞄准状态
-        const newWeapon = GameState.inventory[slot];
-        if (newWeapon && !newWeapon.config.scope) {
+        if (newItem && !newItem.isLoot && !newItem.config.scope) {
             GameState.scopeState.idleTimer = 0;
             GameState.scopeState.isScoped = false;
             GameState.camera.targetZoom = 1;
@@ -140,7 +144,7 @@ export class Player extends Entity {
 
     reload() {
         const weapon = GameState.getActiveWeapon();
-        if (weapon) {
+        if (weapon && !weapon.isLoot) {
             // startReload 返回 true 表示换弹成功开始
             const reloadStarted = weapon.startReload();
             if (reloadStarted) {
@@ -174,11 +178,11 @@ export class Player extends Entity {
         const logicalH = canvas ? canvas.clientHeight : 600;
         const cx = logicalW / 2;
         const cy = logicalH / 2;
-        
+
         // 使用与 Renderer.toScreen() 相同的转换公式
         const screenX = (this.x - cam.x) * zoom + cx * (1 - zoom) - offsetX;
         const screenY = (this.y - cam.y) * zoom + cy * (1 - zoom) - offsetY;
-        
+
         // 反向计算世界坐标：从屏幕坐标还原目标位置
         const targetWorldX = (mouse.x - cx * (1 - zoom) + offsetX) / zoom + cam.x;
         const targetWorldY = (mouse.y - cy * (1 - zoom) + offsetY) / zoom + cam.y;
@@ -233,7 +237,7 @@ export class Player extends Entity {
             return;
         }
         const weapon = GameState.getActiveWeapon();
-        if (weapon) {
+        if (weapon && !weapon.isLoot) {
             weapon.updateReload();
             weapon.updateRecoilAndSpread();
         }
@@ -243,31 +247,31 @@ export class Player extends Entity {
     }
 
     /** 处理移动逻辑，返回是否正在移动 */
-   _updateMovement() {
-       const keys = GameState.keys;
-       let dx = 0, dy = 0;
-       if (keys.w) dy -= 1;
-       if (keys.s) dy += 1;
-       if (keys.a) dx -= 1;
-       if (keys.d) dx += 1;
-       const currentWeather = WeatherSystem.current;
+    _updateMovement() {
+        const keys = GameState.keys;
+        let dx = 0, dy = 0;
+        if (keys.w) dy -= 1;
+        if (keys.s) dy += 1;
+        if (keys.a) dx -= 1;
+        if (keys.d) dx += 1;
+        const currentWeather = WeatherSystem.current;
         const isSnow = currentWeather === 'snow' || currentWeather === 'blizzard';
         // 初始化滑移速度（惰性）
         if (this.slipVX === undefined) { this.slipVX = 0; this.slipVY = 0; }
 
         if (dx !== 0 || dy !== 0) {
-           const len = Math.sqrt(dx * dx + dy * dy);
-           dx /= len; dy /= len;
-           const speedFactor = GameState.map ? GameState.map.getSpeedFactor(this.x, this.y) : 1;
-           const heldWeapon = GameState.getActiveWeapon();
-           const launcherSlowdown = (heldWeapon && heldWeapon.config.type === 'launcher' && !heldWeapon.config.noSlowdown) ? Player.LAUNCHER_SLOWDOWN : 1;
-           const weatherSpeed = WeatherSystem.getSpeedMultiplier();
-           const slipFactor = isSnow ? 0.82 : 1.0;
-           const finalSpeed = this.speed * speedFactor * launcherSlowdown * this.getSpeedMultiplier() * weatherSpeed * slipFactor;
-           const moveX = dx * finalSpeed;
-           const moveY = dy * finalSpeed;
-           const newX = this.x + moveX;
-           const newY = this.y + moveY;
+            const len = Math.sqrt(dx * dx + dy * dy);
+            dx /= len; dy /= len;
+            const speedFactor = GameState.map ? GameState.map.getSpeedFactor(this.x, this.y) : 1;
+            const heldWeapon = GameState.getActiveWeapon();
+            const launcherSlowdown = (heldWeapon && heldWeapon.config.type === 'launcher' && !heldWeapon.config.noSlowdown) ? Player.LAUNCHER_SLOWDOWN : 1;
+            const weatherSpeed = WeatherSystem.getSpeedMultiplier();
+            const slipFactor = isSnow ? 0.82 : 1.0;
+            const finalSpeed = this.speed * speedFactor * launcherSlowdown * this.getSpeedMultiplier() * weatherSpeed * slipFactor;
+            const moveX = dx * finalSpeed;
+            const moveY = dy * finalSpeed;
+            const newX = this.x + moveX;
+            const newY = this.y + moveY;
             if (GameState.map && !GameState.map.isWalkable(newX, newY, this.radius)) {
                 if (GameState.map.isWalkable(newX, this.y, this.radius)) this.x = newX;
                 else if (GameState.map.isWalkable(this.x, newY, this.radius)) this.y = newY;
@@ -302,23 +306,23 @@ export class Player extends Entity {
         // 天气风力影响
         const windForce = WeatherSystem.getWindForce();
         const tornadoForce = WeatherSystem.getTornadoForce(this.x, this.y);
-        
+
         // 龙卷风伤害 - 累积机制，每0.5秒触发一次
         const tornadoDmg = WeatherSystem.getTornadoDamage(this.x, this.y);
         if (tornadoDmg > 0 && this.alive) {
-          this.tornadoDamageAccumulator += tornadoDmg;
-          this.tornadoDamageTimer++;
-          
-          // 每30帧（0.5秒）触发一次伤害
-          if (this.tornadoDamageTimer >= 30) {
-            this.takeDamage(this.tornadoDamageAccumulator);
+            this.tornadoDamageAccumulator += tornadoDmg;
+            this.tornadoDamageTimer++;
+
+            // 每30帧（0.5秒）触发一次伤害
+            if (this.tornadoDamageTimer >= 30) {
+                this.takeDamage(this.tornadoDamageAccumulator);
+                this.tornadoDamageAccumulator = 0;
+                this.tornadoDamageTimer = 0;
+            }
+        } else {
+            // 不在龙卷风范围内时重置累积器
             this.tornadoDamageAccumulator = 0;
             this.tornadoDamageTimer = 0;
-          }
-        } else {
-          // 不在龙卷风范围内时重置累积器
-          this.tornadoDamageAccumulator = 0;
-          this.tornadoDamageTimer = 0;
         }
         const windScale = currentWeather === 'windStorm' || currentWeather === 'sandstorm' ? 0.12 : 0.3;
         this.x += windForce.x * windScale + tornadoForce.x;
@@ -332,7 +336,7 @@ export class Player extends Entity {
 
     /** 处理瞄准镜/开镜逻辑 */
     _updateAiming(weapon, isMoving) {
-        if (weapon && weapon.config.scope) {
+        if (weapon && !weapon.isLoot && weapon.config.scope) {
             if (!isMoving) {
                 GameState.scopeState.idleTimer++;
                 if (GameState.scopeState.idleTimer >= weapon.config.scope.activateDelay) {
@@ -384,7 +388,7 @@ export class Player extends Entity {
                 this.burstTimer = Player.BURST_INTERVAL;
             }
         }
-        if (!weapon) return;
+        if (!weapon || weapon.isLoot) return;
         const fireMode = weapon.config.fireMode || FireMode.SEMI;
         const mouseDown = GameState.mouse.down;
         const mouseJustPressed = mouseDown && !this.lastMouseDown;
@@ -413,7 +417,7 @@ export class Player extends Entity {
         // UI界面打开时禁止开火
         if (GameState.arsenalOpen || GameState.inventoryOpen || GameState.debugOpen || GameState.radioOpen) return;
         const weapon = GameState.getActiveWeapon();
-        if (!weapon || !weapon.canShoot()) return;
+        if (!weapon || weapon.isLoot || !weapon.canShoot()) return;
 
         // 手雷类型武器不能射击，只能用G键投掷
         if (weapon.config.type === 'grenade') return;
@@ -489,7 +493,7 @@ export class Player extends Entity {
             // 获取穿透配置（狙击枪用）
             const penetration = weapon.config.penetration || null;
             // 获取爆炸配置（M82/AT4用）
-            const explosion = (weapon.config.explosionRadius && weapon.config.explosionDamage) 
+            const explosion = (weapon.config.explosionRadius && weapon.config.explosionDamage)
                 ? { radius: weapon.config.explosionRadius, damage: weapon.config.explosionDamage }
                 : null;
             // 获取拖尾配置（AT4用）
@@ -554,72 +558,72 @@ export class Player extends Entity {
     // 使用医疗包
     useMedical(weapon) {
         if (!weapon || weapon.config.type !== 'medical') return;
-        
+
         const healAmount = weapon.config.healAmount || 30;
         const currentSlot = GameState.activeWeaponSlot;
-        
+
         // 优先治疗自己（只要自己不满血）
         if (this.health < this.maxHealth) {
             this.health = Math.min(this.health + healAmount, this.maxHealth);
             console.log(`💊 使用医疗包，恢复 ${healAmount} 血量`);
             EffectsManager.spawnHealEffect(this.x, this.y, healAmount);
             weapon.consumeAmmo(); // 消耗医疗包
-            
+
             // 如果医疗包用完，清空槽位并切换武器
             if (weapon.ammo <= 0) {
                 GameState.inventory[currentSlot] = null;
                 this.autoSwitchToNextWeapon();
             }
-            
+
             this.shootCooldown = Player.MEDICAL_HEAL_COOLDOWN;
             return;
         }
-        
+
         // 自己满血时，检测面前是否有队友可以治疗
         const mouse = GameState.mouse;
         const screenX = this.x - GameState.camera.x;
         const screenY = this.y - GameState.camera.y;
         const angle = Math.atan2(mouse.y - screenY, mouse.x - screenX);
-        
+
         // 检测鼠标方向上的队友（距离 < 100）
         let nearestTeammate = null;
         let nearestDist = Player.MEDICAL_RANGE;
-        
+
         for (const teammate of GameState.teammates) {
             if (!teammate.alive) continue;
             const dx = teammate.x - this.x;
             const dy = teammate.y - this.y;
             const dist = Math.hypot(dx, dy);
-            
+
             // 检查是否在鼠标方向附近（角度差 < 30度）
             const angleToTeammate = Math.atan2(dy, dx);
             let angleDiff = Math.abs(angleToTeammate - angle);
             if (angleDiff > Math.PI) angleDiff = Math.PI * 2 - angleDiff;
-            
+
             if (dist < nearestDist && angleDiff < Player.MEDICAL_ANGLE_THRESHOLD) {
                 nearestDist = dist;
                 nearestTeammate = teammate;
             }
         }
-        
+
         if (nearestTeammate && nearestTeammate.health < nearestTeammate.maxHealth) {
             nearestTeammate.health = Math.min(nearestTeammate.health + healAmount, nearestTeammate.maxHealth);
             console.log(`💊 为队友 ${nearestTeammate.id || '队友'} 恢复 ${healAmount} 血量`);
             EffectsManager.spawnHealEffect(nearestTeammate.x, nearestTeammate.y, healAmount);
             weapon.consumeAmmo(); // 消耗医疗包
-            
+
             // 如果医疗包用完，清空槽位并切换武器
             if (weapon.ammo <= 0) {
                 GameState.inventory[currentSlot] = null;
                 this.autoSwitchToNextWeapon();
             }
-            
+
             this.shootCooldown = Player.MEDICAL_HEAL_COOLDOWN;
         } else {
             console.log('💊 血量已满，面前无需要治疗的队友');
         }
     }
-    
+
     // 自动切换到下一个可用武器
     autoSwitchToNextWeapon() {
         for (let i = 0; i < GameState.inventory.length; i++) {
@@ -642,20 +646,32 @@ export class Player extends Entity {
         if (this.health <= 0) {
             this.health = 0;
             this.alive = false;
-            
-            // 死亡时掉落所有武器（初始手枪 beretta92 除外）
+
+            // 死亡时掉落所有武器（初始手枪 beretta92 除外），战利品保留在背包中
             const droppedWeapons = new Set(); // 追踪已掉落的武器，避免重复
             for (let i = 0; i < GameState.inventory.length; i++) {
-                const weapon = GameState.inventory[i];
-                if (weapon && weapon.id !== 'beretta92' && !droppedWeapons.has(weapon.id)) {
-                    // 在玩家位置附近随机偏移掉落
-                    const offsetX = (Math.random() - 0.5) * 60;
-                    const offsetY = (Math.random() - 0.5) * 60;
-                    GameState.weaponPickups.push(new WeaponPickup(this.x + offsetX, this.y + offsetY, weapon));
-                    droppedWeapons.add(weapon.id);
+                const item = GameState.inventory[i];
+                if (!item) continue;
+                if (item.isLoot) {
+                    // 稀有及以上战利品：100% 掉落到地面
+                    if (item.config.rarity === Rarity.RARE || item.config.rarity === Rarity.LEGENDARY) {
+                        const offsetX = (Math.random() - 0.5) * 60;
+                        const offsetY = (Math.random() - 0.5) * 60;
+                        GameState.lootPickups.push(new LootPickup(this.x + offsetX, this.y + offsetY, item.lootId));
+                        GameState.inventory[i] = null;
+                    }
+                    // 普通/优良战利品：保留在背包中
+                } else {
+                    // 武器：掉落（beretta92 除外）
+                    if (item.id !== 'beretta92' && !droppedWeapons.has(item.id)) {
+                        const offsetX = (Math.random() - 0.5) * 60;
+                        const offsetY = (Math.random() - 0.5) * 60;
+                        GameState.weaponPickups.push(new WeaponPickup(this.x + offsetX, this.y + offsetY, item));
+                        droppedWeapons.add(item.id);
+                    }
                 }
             }
-            
+
             GameState.gameOver = true;
             EventBus.emit('game_over', { reason: 'player_died' });
             SoundManager.playDie();
@@ -681,10 +697,6 @@ export class Player extends Entity {
 
         const weapon = this.getCurrentWeapon();
         if (!weapon) {
-            ctx.beginPath();
-            ctx.moveTo(0, 0);
-            ctx.lineTo(Math.cos(angle) * 30, Math.sin(angle) * 30);
-            ctx.strokeStyle = '#333'; ctx.lineWidth = 6; ctx.stroke();
             ctx.fillStyle = '#FFD700';
             ctx.font = '16px sans-serif';
             ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -721,11 +733,6 @@ export class Player extends Entity {
             ctx.rotate(-recoilRotate); // 枪口上抬（逆时针）
             ctx.drawImage(weaponImage, -drawW * 0.15 - recoilBack, -drawH / 2 + yOffset, drawW, drawH);
             ctx.restore();
-        } else {
-            ctx.beginPath();
-            ctx.moveTo(0, 0);
-            ctx.lineTo(Math.cos(angle) * 30, Math.sin(angle) * 30);
-            ctx.strokeStyle = '#333'; ctx.lineWidth = 6; ctx.stroke();
         }
 
         ctx.fillStyle = '#FFD700';

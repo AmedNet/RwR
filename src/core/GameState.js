@@ -9,6 +9,7 @@ export const GameState = {
     grenades: [],
     capturePoints: [],
     weaponPickups: [], // 地面掉落的武器
+    lootPickups: [],   // 地面掉落的战利品
     arsenal: null, // 军械库实例
     arsenalOpen: false, // 军械库界面是否打开
     inventory: [null, null, null, null, null, null, null], // 背包，7个位置，存储 Weapon 实例或 null
@@ -39,6 +40,8 @@ export const GameState = {
     teammateRespawnQueue: [], // 等待重生的队友 { x, y, timer }
     // 武器系统
     activeWeaponSlot: 0, // 当前装备的背包位置 (0-6)
+    inventorySelectedSlot: -1, // 背包界面中选中的格子索引（-1=未选中）
+    inventoryHitAreas: [], // 背包格子点击热区 [{x,y,w,h,index}]
     arsenalSelectedSlot: 0, // 军械库中选中的背包位置
     arsenalSelectedIndex: 0, // 军械库中选中的商品索引
     arsenalCategory: 0,      // 军械库当前分类索引 (0=重武器, 1=轻武器, 2=其他, 3=副武器)
@@ -51,6 +54,7 @@ export const GameState = {
 
     // Debug系统
     debugOpen: false, // Debug面板是否打开
+    debugTab: 0, // Debug面板当前标签页 (0=玩家, 1=天气, 2=昼夜, 3=战利品, 4=音效)
     debugKey9Pressed: false, // 追踪9键状态（用于组合键）
     debugShowTornado: false, // 小地图上显示龙卷风位置
     // 电台系统
@@ -85,6 +89,7 @@ export const GameState = {
         this.teammates = [];
         this.bullets = [];
         this.weaponPickups = [];
+        this.lootPickups = [];
         // 据点不重置，它们是地图的一部分，由 initCapturePoints 一次性生成
         this.kills = 0;
         this.score = 0;
@@ -93,6 +98,8 @@ export const GameState = {
         // 初始化：背包第1格放 Beretta 92
         this.inventory = [new Weapon('beretta92'), null, null, null, null, null, null];
         this.activeWeaponSlot = 0;
+this.inventorySelectedSlot = -1;
+this.inventoryHitAreas = [];
         this.arsenalSelectedSlot = 0;
         this.arsenalSelectedIndex = 0;
         this.inventoryOpen = false;
@@ -110,5 +117,6 @@ export const GameState = {
         this.radioAnimProgress = 0;
         this.radioAnimating = false;
         this.radioClosing = false;
+        this.debugTab = 0;
     }
 };

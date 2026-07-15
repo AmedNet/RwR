@@ -5,6 +5,9 @@ import { WeaponRegistry } from '../core/WeaponRegistry.js';
 import { UIManager } from '../rendering/UIManager.js';
 import { Renderer } from '../rendering/Renderer.js';
 import { WeaponPickup } from '../entities/WeaponPickup.js';
+import { LootPickup } from '../entities/LootPickup.js';
+import { LootRegistry, Rarity } from '../core/LootRegistry.js';
+import { LootItem } from '../core/LootItem.js';
 import { playPickup, playUISound, playRadioClose } from '../utils/SoundManager.js';
 import { WeatherSystem } from '../core/WeatherSystem.js';
 import { DayNightSystem } from '../core/DayNightSystem.js';
@@ -17,13 +20,12 @@ export const InputManager = {
 
         document.addEventListener('keydown', (e) => {
             const key = e.key.toLowerCase();
-            
+
             // ====== 死亡状态处理 ======
             if (GameState.gameOver) {
                 if (GameState.arsenalOpen) {
                     GameState.arsenalOpen = false;
                 }
-                // 阵亡时关闭电台
                 if (GameState.radioOpen) {
                     GameState.radioOpen = false;
                     GameState.radioAnimating = false;
@@ -34,7 +36,6 @@ export const InputManager = {
                     e.preventDefault();
                     return;
                 }
-                // 数字键 1-6 选择据点复活
                 const num = parseInt(e.key);
                 if (num >= 1 && num <= 6) {
                     const playerPoints = GameState.capturePoints.filter(p => p.owner === 'player');
@@ -52,118 +53,163 @@ export const InputManager = {
                 return;
             }
 
-           // ====== 菜单打开时的处理 ======
-           if (GameState.inventoryOpen || GameState.arsenalOpen) {
-               // 关闭菜单
-               if (key === 'e') {
-                   GameState.arsenalOpen = false;
-                   playUISound('click');
-                   e.preventDefault();
-                   return;
-               }
-               if (key === 'q') {
-                   GameState.inventoryOpen = false;
-                   playUISound('click');
-                   e.preventDefault();
-                   return;
-               }
-// 军械库：↑ 键切换上一个分类
-if (GameState.arsenalOpen && key === 'arrowup') {
-    GameState.arsenalCategory = (GameState.arsenalCategory + 6) % 7;
-    GameState.arsenalSelectedIndex = 0;
-    GameState.arsenalScrollOffset = 0;
-    e.preventDefault();
-    return;
-}
-// 军械库：↓ 键切换下一个分类
-if (GameState.arsenalOpen && key === 'arrowdown') {
-    GameState.arsenalCategory = (GameState.arsenalCategory + 1) % 7;
-    GameState.arsenalSelectedIndex = 0;
-    GameState.arsenalScrollOffset = 0;
-    e.preventDefault();
-    return;
-}
-// 军械库：W 键选择上一个商品（当前分类内）
-if (GameState.arsenalOpen && key === 'w') {
-    const items = InputManager._getCategoryItems();
-    if (items.length > 0) {
-        GameState.arsenalSelectedIndex = (GameState.arsenalSelectedIndex - 1 + items.length) % items.length;
-        InputManager._scrollToSelected(68, 6, 8, 320);
-    }
-    e.preventDefault();
-    return;
-}
-// 军械库：S 键选择下一个商品（当前分类内）
-if (GameState.arsenalOpen && key === 's') {
-    const items = InputManager._getCategoryItems();
-    if (items.length > 0) {
-        GameState.arsenalSelectedIndex = (GameState.arsenalSelectedIndex + 1) % items.length;
-        InputManager._scrollToSelected(68, 6, 8, 320);
-    }
-    e.preventDefault();
-    return;
-}
-        // 军械库购买：B 键购买选中商品
-        if (GameState.arsenalOpen && key === 'b') {
-            const items = InputManager._getCategoryItems();
-            if (items.length === 0) { e.preventDefault(); return; }
-            const [selectedId, config] = items[GameState.arsenalSelectedIndex];
-            const slot = GameState.arsenalSelectedSlot;
-            
-            if (GameState.rp >= config.buyPrice) {
-                if (!GameState.inventory[slot]) {
-                    // 空格子：直接创建新武器
-                    GameState.inventory[slot] = new Weapon(selectedId);
-                    GameState.rp -= config.buyPrice;
-                    console.log(`💰 购买 ${config.name}！`);
-                } else if (GameState.inventory[slot].id === selectedId) {
-                    const weapon = GameState.inventory[slot];
-                    // 堆叠武器（如火箭筒）：增加堆叠数
-                    if (config.maxStack && config.maxStack > 1) {
-                        if (weapon.stackCount < config.maxStack) {
-                            weapon.addStack(1);
-                            GameState.rp -= config.buyPrice;
-                            console.log(`💰 补充 ${config.name} 弹药（${weapon.stackCount}/${config.maxStack}）！`);
-                        }
-                    } else {
-                        // 普通武器：补充弹药
-                        const maxAmmo = config.magSize;
-                        if (weapon.ammo < maxAmmo) {
-                            weapon.ammo = maxAmmo;
-                            GameState.rp -= config.buyPrice;
-                            console.log(`💰 补充 ${config.name} 弹药！`);
-                        }
-                    }
-                }
-                UIManager.updateAll(GameState);
-            }
-            e.preventDefault();
-            return;
-        }
-                // 军械库出售：X 键出售选中武器
-                if (GameState.arsenalOpen && key === 'x') {
-                    const slot = GameState.arsenalSelectedSlot;
-                    const weapon = GameState.inventory[slot];
-                    if (weapon && weapon.config.sellPrice > 0) {
-                        GameState.rp += weapon.config.sellPrice;
-                        GameState.inventory[slot] = null;
-                        // 如果出售的是当前武器，切换到其他武器
-                        if (GameState.activeWeaponSlot === slot) {
-                            for (let i = 0; i < 7; i++) {
-                                if (GameState.inventory[i]) {
-                                    GameState.activeWeaponSlot = i;
-                                    break;
-                                }
-                            }
-                        }
-                        console.log('💰 出售武器！');
-                        UIManager.updateAll(GameState);
-                    }
+            // ====== 菜单打开时的处理 ======
+            if (GameState.inventoryOpen || GameState.arsenalOpen) {
+                // 关闭菜单
+                if (key === 'e') {
+                    GameState.arsenalOpen = false;
+                    playUISound('click');
                     e.preventDefault();
                     return;
                 }
-                // 数字键 1-7 选择背包位置（军械库中）
+                if (key === 'q') {
+                    GameState.inventoryOpen = false;
+                    GameState.inventorySelectedSlot = -1;
+                    playUISound('click');
+                    e.preventDefault();
+                    return;
+                }
+
+                // === 背包界面专属按键 ===
+                if (GameState.inventoryOpen) {
+                    // D 键：丢弃选中物品到脚下
+                    if (key === 'd') {
+                        const selSlot = GameState.inventorySelectedSlot;
+                        if (selSlot >= 0 && selSlot < 7 && GameState.inventory[selSlot]) {
+                            const item = GameState.inventory[selSlot];
+                            const player = GameState.player;
+                            if (player && player.alive) {
+                                if (item.isLoot) {
+                                    const offsetX = (Math.random() - 0.5) * 30;
+                                    const offsetY = (Math.random() - 0.5) * 30;
+                                    GameState.lootPickups.push(new LootPickup(player.x + offsetX, player.y + offsetY, item.lootId));
+                                    console.log(`\u{1F5D1}\uFE0F \u4E22\u5F03\u6218\u5229\u54C1 ${item.config.name}`);
+                                } else {
+                                    const droppedPickup = new WeaponPickup(player.x, player.y, item);
+                                    GameState.weaponPickups.push(droppedPickup);
+                                    console.log(`\u{1F5D1}\uFE0F \u4E22\u5F03\u6B66\u5668 ${item.config.name}`);
+                                }
+                                GameState.inventory[selSlot] = null;
+                                GameState.inventorySelectedSlot = -1;
+                                if (GameState.activeWeaponSlot === selSlot) {
+                                    for (let j = 0; j < 7; j++) {
+                                        if (GameState.inventory[j]) {
+                                            GameState.activeWeaponSlot = j;
+                                            break;
+                                        }
+                                    }
+                                }
+                                playUISound('click');
+                                UIManager.updateAll(GameState);
+                            }
+                        }
+                        e.preventDefault();
+                        return;
+                    }
+                }
+
+                // === 军械库专属按键 ===
                 if (GameState.arsenalOpen) {
+                    // \u2191 \u952E\u5207\u6362\u5206\u7C7B
+                    if (key === 'arrowup') {
+                        GameState.arsenalCategory = (GameState.arsenalCategory + 6) % 7;
+                        GameState.arsenalSelectedIndex = 0;
+                        GameState.arsenalScrollOffset = 0;
+                        e.preventDefault();
+                        return;
+                    }
+                    // \u2193 \u952E\u5207\u6362\u5206\u7C7B
+                    if (key === 'arrowdown') {
+                        GameState.arsenalCategory = (GameState.arsenalCategory + 1) % 7;
+                        GameState.arsenalSelectedIndex = 0;
+                        GameState.arsenalScrollOffset = 0;
+                        e.preventDefault();
+                        return;
+                    }
+                    // W \u952E\u9009\u62E9\u4E0A\u4E00\u4E2A\u5546\u54C1
+                    if (key === 'w') {
+                        const items = InputManager._getCategoryItems();
+                        if (items.length > 0) {
+                            GameState.arsenalSelectedIndex = (GameState.arsenalSelectedIndex - 1 + items.length) % items.length;
+                            InputManager._scrollToSelected(68, 6, 8, 320);
+                        }
+                        e.preventDefault();
+                        return;
+                    }
+                    // S \u952E\u9009\u62E9\u4E0B\u4E00\u4E2A\u5546\u54C1
+                    if (key === 's') {
+                        const items = InputManager._getCategoryItems();
+                        if (items.length > 0) {
+                            GameState.arsenalSelectedIndex = (GameState.arsenalSelectedIndex + 1) % items.length;
+                            InputManager._scrollToSelected(68, 6, 8, 320);
+                        }
+                        e.preventDefault();
+                        return;
+                    }
+                    // B \u952E\u8D2D\u4E70
+                    if (key === 'b') {
+                        const items = InputManager._getCategoryItems();
+                        if (items.length === 0) { e.preventDefault(); return; }
+                        const [selectedId, config] = items[GameState.arsenalSelectedIndex];
+                        const slot = GameState.arsenalSelectedSlot;
+                        if (GameState.rp >= config.buyPrice) {
+                            if (!GameState.inventory[slot]) {
+                                GameState.inventory[slot] = new Weapon(selectedId);
+                                GameState.rp -= config.buyPrice;
+                                console.log(`\u{1F4B0} \u8D2D\u4E70 ${config.name}\uFF01`);
+                            } else if (GameState.inventory[slot].id === selectedId) {
+                                const weapon = GameState.inventory[slot];
+                                if (config.maxStack && config.maxStack > 1) {
+                                    if (weapon.stackCount < config.maxStack) {
+                                        weapon.addStack(1);
+                                        GameState.rp -= config.buyPrice;
+                                        console.log(`\u{1F4B0} \u8865\u5145 ${config.name} \u5F39\u836F\uFF08${weapon.stackCount}/${config.maxStack}\uFF09\uFF01`);
+                                    }
+                                } else {
+                                    const maxAmmo = config.magSize;
+                                    if (weapon.ammo < maxAmmo) {
+                                        weapon.ammo = maxAmmo;
+                                        GameState.rp -= config.buyPrice;
+                                        console.log(`\u{1F4B0} \u8865\u5145 ${config.name} \u5F39\u836F\uFF01`);
+                                    }
+                                }
+                            }
+                            UIManager.updateAll(GameState);
+                        }
+                        e.preventDefault();
+                        return;
+                    }
+                    // X \u952E\u51FA\u552E\uFF08\u6B66\u5668 + \u6218\u5229\u54C1\uFF09
+                    if (key === 'x') {
+                        const slot = GameState.arsenalSelectedSlot;
+                        const item = GameState.inventory[slot];
+                        if (item && item.isLoot) {
+                            // \u51FA\u552E\u6218\u5229\u54C1
+                            GameState.rp += item.config.value;
+                            GameState.inventory[slot] = null;
+                            if (GameState.activeWeaponSlot === slot) {
+                                for (let i = 0; i < 7; i++) {
+                                    if (GameState.inventory[i]) { GameState.activeWeaponSlot = i; break; }
+                                }
+                            }
+                            console.log(`\u{1F4B0} \u51FA\u552E\u6218\u5229\u54C1 ${item.config.name}\uFF0C+$${item.config.value}`);
+                            UIManager.updateAll(GameState);
+                        } else if (item && item.config.sellPrice > 0) {
+                            // \u51FA\u552E\u6B66\u5668
+                            GameState.rp += item.config.sellPrice;
+                            GameState.inventory[slot] = null;
+                            if (GameState.activeWeaponSlot === slot) {
+                                for (let i = 0; i < 7; i++) {
+                                    if (GameState.inventory[i]) { GameState.activeWeaponSlot = i; break; }
+                                }
+                            }
+                            console.log('\u{1F4B0} \u51FA\u552E\u6B66\u5668\uFF01');
+                            UIManager.updateAll(GameState);
+                        }
+                        e.preventDefault();
+                        return;
+                    }
+                    // \u6570\u5B57\u952E 1-7 \u9009\u62E9\u80CC\u5305\u4F4D\u7F6E
                     const num = parseInt(e.key);
                     if (num >= 1 && num <= 7) {
                         GameState.arsenalSelectedSlot = num - 1;
@@ -171,10 +217,18 @@ if (GameState.arsenalOpen && key === 's') {
                         return;
                     }
                 }
-                return;
+                // F键不拦截，让它穿透到下面的拾取逻辑
+                if (key === 'f') {
+                    // 关闭菜单后拾取
+                    GameState.inventoryOpen = false;
+                    GameState.arsenalOpen = false;
+                    // 不 return，让 F 键继续向下执行到拾取逻辑
+                } else {
+                    return;
+                }
             }
 
-            // ====== 电台界面打开时的处理 ======
+            // ====== \u7535\u53F0\u754C\u9762 ======
             if (GameState.radioOpen) {
                 if (key === 'escape') {
                     GameState.radioClosing = true;
@@ -211,7 +265,6 @@ if (GameState.arsenalOpen && key === 's') {
                     e.preventDefault();
                     return;
                 }
-                // G键：长按关闭电台（与正常分支相同的置位逻辑）
                 if (key === 'g') {
                     if (!GameState.radioGKeyPressed) {
                         GameState.radioGKeyPressed = true;
@@ -224,15 +277,13 @@ if (GameState.arsenalOpen && key === 's') {
                 return;
             }
 
-            // ====== Debug面板打开时的处理 ======
+            // ====== Debug\u9762\u677F ======
             if (GameState.debugOpen) {
-                // ESC 关闭Debug面板
                 if (key === 'escape') {
                     GameState.debugOpen = false;
                     e.preventDefault();
                     return;
                 }
-                // 9键按下时按1键关闭
                 if (key === '1' && GameState.debugKey9Pressed) {
                     GameState.debugOpen = false;
                     GameState.debugKey9Pressed = false;
@@ -242,36 +293,28 @@ if (GameState.arsenalOpen && key === 's') {
                 return;
             }
 
-            // ====== 正常游戏操作 ======
-            
-            // 9键追踪（用于组合键）
-            if (key === '9') {
-                GameState.debugKey9Pressed = true;
-            }
-            
-            // 9+1 组合键打开Debug面板
+            // ====== \u6B63\u5E38\u6E38\u620F\u64CD\u4F5C ======
+            if (key === '9') { GameState.debugKey9Pressed = true; }
             if (key === '1' && GameState.debugKey9Pressed) {
                 GameState.debugOpen = true;
                 GameState.debugKey9Pressed = false;
-                console.log('🐛 打开Debug面板');
+                console.log('\u{1F41B} \u6253\u5F00Debug\u9762\u677F');
                 e.preventDefault();
                 return;
             }
-            
-            // K键自杀
             if (key === 'k') {
                 if (GameState.player && GameState.player.alive) {
-                    GameState.suicideDeath = true; // 标记为自杀
+                    GameState.suicideDeath = true;
                     GameState.player.alive = false;
                     GameState.player.health = 0;
                     GameState.gameOver = true;
-                    console.log('💀 玩家自杀');
+                    console.log('\u{1F480} \u73A9\u5BB6\u81EA\u6740');
                 }
                 e.preventDefault();
                 return;
             }
-            
-            // 数字键 1-7：切换武器
+
+            // \u6570\u5B57\u952E 1-7\uFF1A\u5207\u6362\u6B66\u5668
             const num = parseInt(e.key);
             if (num >= 1 && num <= 7) {
                 if (GameState.player && GameState.inventory[num - 1]) {
@@ -281,7 +324,6 @@ if (GameState.arsenalOpen && key === 's') {
                 return;
             }
 
-            // G 键：长按打开电台（在 main.js gameLoop 中检测长按）
             if (key === 'g') {
                 if (!GameState.radioGKeyPressed) {
                     GameState.radioGKeyPressed = true;
@@ -291,23 +333,21 @@ if (GameState.arsenalOpen && key === 's') {
                 e.preventDefault();
                 return;
             }
-
-            // R 键：换弹
             if (key === 'r') {
-                if (GameState.player) {
-                    GameState.player.reload();
-                }
+                if (GameState.player) { GameState.player.reload(); }
                 e.preventDefault();
                 return;
             }
 
-            // F 键：拾取地面武器
+            // F \u952E\uFF1A\u62FE\u53D6\u5730\u9762\u6B66\u5668/\u6218\u5229\u54C1
             if (key === 'f') {
                 if (GameState.player && GameState.player.alive) {
                     const player = GameState.player;
                     let nearestPickup = null;
                     let nearestDist = Infinity;
+                    let pickupType = null; // 'weapon' or 'loot'
 
+                    // \u641C\u7D22\u6B66\u5668\u6389\u843D\u7269
                     for (const pickup of GameState.weaponPickups) {
                         if (!pickup.alive) continue;
                         if (pickup.canPickup(player)) {
@@ -315,38 +355,69 @@ if (GameState.arsenalOpen && key === 's') {
                             if (dist < nearestDist) {
                                 nearestDist = dist;
                                 nearestPickup = pickup;
+                                pickupType = 'weapon';
+                            }
+                        }
+                    }
+                    // \u641C\u7D22\u6218\u5229\u54C1\u6389\u843D\u7269
+                    for (const loot of GameState.lootPickups) {
+                        if (!loot.alive) continue;
+                        if (loot.canPickup(player)) {
+                            const dist = Math.hypot(loot.x - player.x, loot.y - player.y);
+                            if (dist < nearestDist) {
+                                nearestDist = dist;
+                                nearestPickup = loot;
+                                pickupType = 'loot';
                             }
                         }
                     }
 
                     if (nearestPickup) {
-                        // 找到空背包槽位
+                        // \u627E\u5230\u7A7A\u80CC\u5305\u69FD\u4F4D
                         let targetSlot = -1;
                         for (let i = 0; i < GameState.inventory.length; i++) {
-                            if (!GameState.inventory[i]) {
-                                targetSlot = i;
-                                break;
-                            }
+                            if (!GameState.inventory[i]) { targetSlot = i; break; }
                         }
 
-                        if (targetSlot >= 0) {
-                            // 放入空槽位
-                            GameState.inventory[targetSlot] = nearestPickup.weapon;
-                            console.log(`🔫 拾取 ${nearestPickup.weapon.config.name} 到槽位 ${targetSlot + 1}`);
-                        } else {
-                            // 背包满了，替换当前武器
-                            const currentSlot = GameState.activeWeaponSlot;
-                            const oldWeapon = GameState.inventory[currentSlot];
-
-                            // 丢弃当前武器到地面
-                            if (oldWeapon) {
-                                const droppedPickup = new WeaponPickup(player.x, player.y, oldWeapon);
-                                GameState.weaponPickups.push(droppedPickup);
-                                console.log(`🔄 丢弃 ${oldWeapon.config.name}`);
+                        if (pickupType === 'loot') {
+                            const lootItem = new LootItem(nearestPickup.lootId);
+                            if (targetSlot >= 0) {
+                                GameState.inventory[targetSlot] = lootItem;
+                                console.log(`\u{1F381} \u62FE\u53D6\u6218\u5229\u54C1 ${lootItem.config.name} \u5230\u69FD\u4F4D ${targetSlot + 1}`);
+                            } else {
+                                // \u80CC\u5305\u6EE1\u4E86\uFF0C\u66FF\u6362\u5F53\u524D\u7269\u54C1
+                                const currentSlot = GameState.activeWeaponSlot;
+                                const oldItem = GameState.inventory[currentSlot];
+                                if (oldItem) {
+                                    if (oldItem.isLoot) {
+                                        GameState.lootPickups.push(new LootPickup(player.x, player.y, oldItem.lootId));
+                                    } else {
+                                        GameState.weaponPickups.push(new WeaponPickup(player.x, player.y, oldItem));
+                                    }
+                                    console.log(`\u{1F504} \u4E22\u5F03 ${oldItem.config.name}`);
+                                }
+                                GameState.inventory[currentSlot] = lootItem;
+                                console.log(`\u{1F381} \u62FE\u53D6\u6218\u5229\u54C1 ${lootItem.config.name} \u66FF\u6362\u5F53\u524D\u7269\u54C1`);
                             }
-
-                            GameState.inventory[currentSlot] = nearestPickup.weapon;
-                            console.log(`🔫 拾取 ${nearestPickup.weapon.config.name} 替换当前武器`);
+                        } else {
+                            // \u62FE\u53D6\u6B66\u5668
+                            if (targetSlot >= 0) {
+                                GameState.inventory[targetSlot] = nearestPickup.weapon;
+                                console.log(`\u{1F52B} \u62FE\u53D6 ${nearestPickup.weapon.config.name} \u5230\u69FD\u4F4D ${targetSlot + 1}`);
+                            } else {
+                                const currentSlot = GameState.activeWeaponSlot;
+                                const oldWeapon = GameState.inventory[currentSlot];
+                                if (oldWeapon) {
+                                    if (oldWeapon.isLoot) {
+                                        GameState.lootPickups.push(new LootPickup(player.x, player.y, oldWeapon.lootId));
+                                    } else {
+                                        GameState.weaponPickups.push(new WeaponPickup(player.x, player.y, oldWeapon));
+                                    }
+                                    console.log(`\u{1F504} \u4E22\u5F03 ${oldWeapon.config.name}`);
+                                }
+                                GameState.inventory[currentSlot] = nearestPickup.weapon;
+                                console.log(`\u{1F52B} \u62FE\u53D6 ${nearestPickup.weapon.config.name} \u66FF\u6362\u5F53\u524D\u6B66\u5668`);
+                            }
                         }
 
                         nearestPickup.alive = false;
@@ -358,35 +429,33 @@ if (GameState.arsenalOpen && key === 's') {
                 return;
             }
 
-          // E 键：打开/关闭军械库
-          if (key === 'e') {
-              const arsenal = GameState.arsenal;
-              const player = GameState.player;
-              if (arsenal && player && arsenal.contains(player)) {
-                  GameState.arsenalOpen = !GameState.arsenalOpen;
-                   playUISound('click');
-                  console.log(GameState.arsenalOpen ? '🔫 打开军械库' : '🔫 关闭军械库');
-              }
-              e.preventDefault();
-              return;
-          }
+            // E \u952E\uFF1A\u6253\u5F00/\u5173\u95ED\u519B\u69B0\u5E93
+            if (key === 'e') {
+                const arsenal = GameState.arsenal;
+                const player = GameState.player;
+                if (arsenal && player && arsenal.contains(player)) {
+                    GameState.arsenalOpen = !GameState.arsenalOpen;
+                    playUISound('click');
+                    console.log(GameState.arsenalOpen ? '\u{1F52B} \u6253\u5F00\u519B\u69B0\u5E93' : '\u{1F52B} \u5173\u95ED\u519B\u69B0\u5E93');
+                }
+                e.preventDefault();
+                return;
+            }
 
-          // Q 键：打开/关闭背包
-          if (key === 'q') {
-              GameState.inventoryOpen = !GameState.inventoryOpen;
-               playUISound('click');
-              console.log(GameState.inventoryOpen ? '🎒 打开背包' : '🎒 关闭背包');
-              e.preventDefault();
-              return;
-          }
+            // Q \u952E\uFF1A\u6253\u5F00/\u5173\u95ED\u80CC\u5305
+            if (key === 'q') {
+                GameState.inventoryOpen = !GameState.inventoryOpen;
+                playUISound('click');
+                console.log(GameState.inventoryOpen ? '\u{1F392} \u6253\u5F00\u80CC\u5305' : '\u{1F392} \u5173\u95ED\u80CC\u5305');
+                e.preventDefault();
+                return;
+            }
 
-            // WASD 移动
+            // WASD \u79FB\u52A8
             if (key in GameState.keys) {
                 GameState.keys[key] = true;
                 e.preventDefault();
             }
-
-            // 空格/鼠标点击射击
             if (key === ' ' || key === 'space') {
                 if (GameState.player) GameState.player.shoot();
                 e.preventDefault();
@@ -399,12 +468,9 @@ if (GameState.arsenalOpen && key === 's') {
                 GameState.keys[key] = false;
                 e.preventDefault();
             }
-            // G键释放：短按投手雷
             if (key === 'g' && GameState.radioGKeyPressed) {
                 if (GameState.radioGKeyTimer < 18 && !GameState.radioOpen && !GameState.gameOver && !GameState.radioGKeyConsumed) {
-                    if (GameState.player) {
-                        GameState.player.throwGrenade();
-                    }
+                    if (GameState.player) { GameState.player.throwGrenade(); }
                 }
                 GameState.radioGKeyPressed = false;
                 GameState.radioGKeyConsumed = false;
@@ -412,25 +478,20 @@ if (GameState.arsenalOpen && key === 's') {
             }
         });
 
-        // 鼠标移动
+        // \u9F20\u6807\u79FB\u52A8
         canvas.addEventListener('mousemove', (e) => {
             const rect = canvas.getBoundingClientRect();
-            const logicalWidth = canvas.clientWidth;
-            const logicalHeight = canvas.clientHeight;
-            const scaleX = logicalWidth / rect.width;
-            const scaleY = logicalHeight / rect.height;
+            const scaleX = canvas.clientWidth / rect.width;
+            const scaleY = canvas.clientHeight / rect.height;
             GameState.mouse.x = (e.clientX - rect.left) * scaleX;
             GameState.mouse.y = (e.clientY - rect.top) * scaleY;
 
-            // 环境音效滑块拖拽
             if (GameState.ambientSliderDragging && Renderer.ambientSlider) {
                 const ambSlider = Renderer.ambientSlider;
                 const clickX = (e.clientX - rect.left) * scaleX;
                 const ratio = (clickX - ambSlider.x) / ambSlider.w;
                 AmbientSoundManager.setMasterVolume(Math.max(0, Math.min(1, ratio)));
             }
-
-            // 昼夜滑块拖拽
             if (GameState.debugSliderDragging && Renderer.debugSlider) {
                 const slider = Renderer.debugSlider;
                 const clickX2 = (e.clientX - rect.left) * scaleX;
@@ -439,181 +500,242 @@ if (GameState.arsenalOpen && key === 's') {
             }
         });
 
-// 鼠标点击射击/投掷
-canvas.addEventListener('mousedown', (e) => {
-    if (e.button === 0) {
-        GameState.mouse.down = true;
-        
-        // 电台界面点击处理
-        if (GameState.radioOpen) {
-            const rect = canvas.getBoundingClientRect();
-            const logicalWidth = canvas.clientWidth;
-            const logicalHeight = canvas.clientHeight;
-            const scaleX = logicalWidth / rect.width;
-            const scaleY = logicalHeight / rect.height;
-            const clickX = (e.clientX - rect.left) * scaleX;
-            const clickY = (e.clientY - rect.top) * scaleY;
+        // \u9F20\u6807\u70B9\u51FB
+        canvas.addEventListener('mousedown', (e) => {
+            if (e.button === 0) {
+                GameState.mouse.down = true;
 
-            const cam = GameState.camera;
-            const zoom = cam.zoom || 1;
-            const offsetX = cam.offsetX || 0;
-            const offsetY = cam.offsetY || 0;
-            const canvasW = canvas.clientWidth || 800;
-            const canvasH = canvas.clientHeight || 600;
-            const cx = canvasW / 2;
-            const cy = canvasH / 2;
-            const worldX = (clickX - cx * (1 - zoom) + offsetX) / zoom + cam.x;
-            const worldY = (clickY - cy * (1 - zoom) + offsetY) / zoom + cam.y;
-
-            const panelW = 260;
-            const panelX = 20;
-            const panelTop = 60;
-            const headerH = 48;
-            const itemH = 56;
-            const itemGap = 4;
-            const listTop = panelTop + headerH + 8;
-            const available = SupportSystem.getPlayerAvailableSupport();
-
-            let hitCard = false;
-            for (let i = 0; i < available.length; i++) {
-                const scrollOffset = GameState.radioScrollOffset || 0;
-                const iy = listTop + i * (itemH + itemGap) - scrollOffset;
-                if (clickX >= panelX + 6 && clickX <= panelX + panelW - 6 &&
-                    clickY >= iy && clickY <= iy + itemH) {
-                    hitCard = true;
-                    GameState.radioSelectedIndex = i;
-                    if (available[i].canCall && GameState.radioTargetWorld) {
-                        SupportSystem.callSupport(available[i].type, GameState.radioTargetWorld.x, GameState.radioTargetWorld.y);
-                        GameState.radioClosing = true;
-                        GameState.radioAnimating = true;
-                        playRadioClose();
+                // \u7535\u53F0\u754C\u9762\u70B9\u51FB
+                if (GameState.radioOpen) {
+                    const rect = canvas.getBoundingClientRect();
+                    const logicalWidth = canvas.clientWidth;
+                    const logicalHeight = canvas.clientHeight;
+                    const scaleX = logicalWidth / rect.width;
+                    const scaleY = logicalHeight / rect.height;
+                    const clickX = (e.clientX - rect.left) * scaleX;
+                    const clickY = (e.clientY - rect.top) * scaleY;
+                    // Tab 切换
+                    if (Renderer.debugTabs) {
+                        for (const tab of Renderer.debugTabs) {
+                            if (clickX >= tab.x && clickX <= tab.x + tab.w &&
+                                clickY >= tab.y && clickY <= tab.y + tab.h) {
+                                GameState.debugTab = tab.id;
+                                playUISound('click');
+                                e.preventDefault();
+                                return;
+                            }
+                        }
                     }
-                    break;
-                }
-            }
 
-            if (!hitCard) {
-                GameState.radioTargetWorld = { x: worldX, y: worldY };
-            }
-            e.preventDefault();
-            return;
-        }
-
-        // 死亡界面：点击据点复活
-        if (GameState.gameOver && !GameState.permanentDefeat && GameState.respawnHitAreas) {
-            const rect = canvas.getBoundingClientRect();
-            const scaleX2 = canvas.clientWidth / rect.width;
-            const scaleY2 = canvas.clientHeight / rect.height;
-            const clickX = (e.clientX - rect.left) * scaleX2;
-            const clickY = (e.clientY - rect.top) * scaleY2;
-            for (const area of GameState.respawnHitAreas) {
-                if (Math.hypot(clickX - area.x, clickY - area.y) < area.r) {
-                    window.dispatchEvent(new CustomEvent('respawnPlayer', { detail: { pointIndex: area.index } }));
-                    e.preventDefault();
-                    return;
-                }
-            }
-        }
-
-        // Debug面板点击处理
-        if (GameState.debugOpen) {
-            const rect = canvas.getBoundingClientRect();
-            const logicalWidth = canvas.clientWidth;
-            const logicalHeight = canvas.clientHeight;
-            const scaleX = logicalWidth / rect.width;
-            const scaleY = logicalHeight / rect.height;
-            const clickX = (e.clientX - rect.left) * scaleX;
-            const clickY = (e.clientY - rect.top) * scaleY;
-
-            // 检查是否点击了环境音效滑块
-            if (Renderer.ambientSlider) {
-                const ambSlider = Renderer.ambientSlider;
-                const ambHandleDist = Math.hypot(clickX - ambSlider.handleX, clickY - (ambSlider.y + ambSlider.h / 2));
-                if (ambHandleDist < ambSlider.handleR + 5) {
-                    GameState.ambientSliderDragging = true;
-                    e.preventDefault();
-                    return;
-                }
-                if (clickX >= ambSlider.x && clickX <= ambSlider.x + ambSlider.w &&
-                    clickY >= ambSlider.y - 10 && clickY <= ambSlider.y + ambSlider.h + 10) {
-                    const ratio = (clickX - ambSlider.x) / ambSlider.w;
-                    AmbientSoundManager.setMasterVolume(Math.max(0, Math.min(1, ratio)));
-                    e.preventDefault();
-                    return;
-                }
-            }
-
-            // 检查是否点击了时间滑块
-            if (Renderer.debugSlider) {
-                const slider = Renderer.debugSlider;
-                const handleDist = Math.hypot(clickX - slider.handleX, clickY - (slider.y + slider.h / 2));
-                if (handleDist < slider.handleR + 5) {
-                    // 点击了滑块手柄，进入拖拽模式
-                    GameState.debugSliderDragging = true;
-                    DayNightSystem.paused = true; // 拖拽时暂停自动推进
-                    e.preventDefault();
-                    return;
-                }
-                // 点击了滑块轨道（但不在手柄上），直接跳转到该位置
-                if (clickX >= slider.x && clickX <= slider.x + slider.w &&
-                    clickY >= slider.y - 10 && clickY <= slider.y + slider.h + 10) {
-                    const ratio = (clickX - slider.x) / slider.w;
-                    DayNightSystem.setTime(Math.max(0, Math.min(1, ratio)));
-                    DayNightSystem.paused = true;
-                    e.preventDefault();
-                    return;
-                }
-            }
-
-            if (Renderer.debugButtons) {
-                for (const btn of Renderer.debugButtons) {
-                    if (clickX >= btn.x && clickX <= btn.x + btn.w &&
-                        clickY >= btn.y && clickY <= btn.y + btn.h) {
-                        if (btn.value) {
-                            GameState.rp += btn.value;
-                            console.log(`🐛 增加 ${btn.value} RP`);
-                            UIManager.updateAll(GameState);
-                        } else if (btn.action === 'heal') {
-                            if (GameState.player) {
-                                GameState.player.health = GameState.player.maxHealth;
-                                console.log('🐛 满血');
+                    const cam = GameState.camera;
+                    const zoom = cam.zoom || 1;
+                    const offsetX = cam.offsetX || 0;
+                    const offsetY = cam.offsetY || 0;
+                    const canvasW = canvas.clientWidth || 800;
+                    const canvasH = canvas.clientHeight || 600;
+                    const cx = canvasW / 2;
+                    const cy = canvasH / 2;
+                    const worldX = (clickX - cx * (1 - zoom) + offsetX) / zoom + cam.x;
+                    const worldY = (clickY - cy * (1 - zoom) + offsetY) / zoom + cam.y;
+                    const panelW = 260;
+                    const panelX = 20;
+                    const panelTop = 60;
+                    const headerH = 48;
+                    const itemH = 56;
+                    const itemGap = 4;
+                    const listTop = panelTop + headerH + 8;
+                    const available = SupportSystem.getPlayerAvailableSupport();
+                    let hitCard = false;
+                    for (let i = 0; i < available.length; i++) {
+                        const scrollOffset = GameState.radioScrollOffset || 0;
+                        const iy = listTop + i * (itemH + itemGap) - scrollOffset;
+                        if (clickX >= panelX + 6 && clickX <= panelX + panelW - 6 &&
+                            clickY >= iy && clickY <= iy + itemH) {
+                            hitCard = true;
+                            GameState.radioSelectedIndex = i;
+                            if (available[i].canCall && GameState.radioTargetWorld) {
+                                SupportSystem.callSupport(available[i].type, GameState.radioTargetWorld.x, GameState.radioTargetWorld.y);
+                                GameState.radioClosing = true;
+                                GameState.radioAnimating = true;
+                                playRadioClose();
                             }
-                        } else if (btn.action === 'rankUp') {
-                            if (GameState.player) {
-                                GameState.player.addRank();
-                                console.log(`🐛 军衔提升! ${GameState.player.getRankName()}`);
-                            }
-                        } else if (btn.weather) {
-                            WeatherSystem.setWeather(btn.weather);
-                       } else if (btn.action === 'toggleDayNight') {
-                           DayNightSystem.togglePause();
-                           console.log(DayNightSystem.paused ? '⏸ 昼夜循环暂停' : '▶ 昼夜循环继续');
-                       } else if (btn.action === 'toggleTornadoRadar') {
-                           GameState.debugShowTornado = !GameState.debugShowTornado;
-                           console.log(GameState.debugShowTornado ? '🐛 龙卷风雷达开启' : '🐛 龙卷风雷达关闭');
-                       }
-                       break;
+                            break;
+                        }
+                    }
+                    if (!hitCard) {
+                        GameState.radioTargetWorld = { x: worldX, y: worldY };
+                    }
+                    e.preventDefault();
+                    return;
+                }
+
+                // \u6B7B\u4EA1\u754C\u9762\u70B9\u51FB\u636E\u70B9
+                if (GameState.gameOver && !GameState.permanentDefeat && GameState.respawnHitAreas) {
+                    const rect = canvas.getBoundingClientRect();
+                    const scaleX2 = canvas.clientWidth / rect.width;
+                    const scaleY2 = canvas.clientHeight / rect.height;
+                    const clickX = (e.clientX - rect.left) * scaleX2;
+                    const clickY = (e.clientY - rect.top) * scaleY2;
+                    for (const area of GameState.respawnHitAreas) {
+                        if (Math.hypot(clickX - area.x, clickY - area.y) < area.r) {
+                            window.dispatchEvent(new CustomEvent('respawnPlayer', { detail: { pointIndex: area.index } }));
+                            e.preventDefault();
+                            return;
+                        }
                     }
                 }
-            }
-            e.preventDefault();
-            return;
-        }
 
-        // 正常射击
-        if (GameState.player) {
-            const weapon = GameState.getActiveWeapon();
-            if (weapon && weapon.config.type === 'grenade') {
-                GameState.player.throwGrenade();
-            } else {
-                GameState.player.shoot();
-            }
-        }
-        e.preventDefault();
-    }
-});
+                // Debug\u9762\u677F\u70B9\u51FB
+                if (GameState.debugOpen) {
+                    const rect = canvas.getBoundingClientRect();
+                    const logicalWidth = canvas.clientWidth;
+                    const logicalHeight = canvas.clientHeight;
+                    const scaleX = logicalWidth / rect.width;
+                    const scaleY = logicalHeight / rect.height;
+                    const clickX = (e.clientX - rect.left) * scaleX;
+                    const clickY = (e.clientY - rect.top) * scaleY;
+                    // Tab 切换
+                    if (Renderer.debugTabs) {
+                        for (const tab of Renderer.debugTabs) {
+                            if (clickX >= tab.x && clickX <= tab.x + tab.w &&
+                                clickY >= tab.y && clickY <= tab.y + tab.h) {
+                                GameState.debugTab = tab.id;
+                                playUISound('click');
+                                e.preventDefault();
+                                return;
+                            }
+                        }
+                    }
 
-        // 鼠标释放
+                    if (Renderer.ambientSlider) {
+                        const ambSlider = Renderer.ambientSlider;
+                        const ambHandleDist = Math.hypot(clickX - ambSlider.handleX, clickY - (ambSlider.y + ambSlider.h / 2));
+                        if (ambHandleDist < ambSlider.handleR + 5) {
+                            GameState.ambientSliderDragging = true;
+                            e.preventDefault();
+                            return;
+                        }
+                        if (clickX >= ambSlider.x && clickX <= ambSlider.x + ambSlider.w &&
+                            clickY >= ambSlider.y - 10 && clickY <= ambSlider.y + ambSlider.h + 10) {
+                            const ratio = (clickX - ambSlider.x) / ambSlider.w;
+                            AmbientSoundManager.setMasterVolume(Math.max(0, Math.min(1, ratio)));
+                            e.preventDefault();
+                            return;
+                        }
+                    }
+                    if (Renderer.debugSlider) {
+                        const slider = Renderer.debugSlider;
+                        const handleDist = Math.hypot(clickX - slider.handleX, clickY - (slider.y + slider.h / 2));
+                        if (handleDist < slider.handleR + 5) {
+                            GameState.debugSliderDragging = true;
+                            DayNightSystem.paused = true;
+                            e.preventDefault();
+                            return;
+                        }
+                        if (clickX >= slider.x && clickX <= slider.x + slider.w &&
+                            clickY >= slider.y - 10 && clickY <= slider.y + slider.h + 10) {
+                            const ratio = (clickX - slider.x) / slider.w;
+                            DayNightSystem.setTime(Math.max(0, Math.min(1, ratio)));
+                            DayNightSystem.paused = true;
+                            e.preventDefault();
+                            return;
+                        }
+                    }
+                    if (Renderer.debugButtons) {
+                        for (const btn of Renderer.debugButtons) {
+                            if (clickX >= btn.x && clickX <= btn.x + btn.w &&
+                                clickY >= btn.y && clickY <= btn.y + btn.h) {
+                                if (btn.value) {
+                                    GameState.rp += btn.value;
+                                    console.log(`\u{1F41B} \u589E\u52A0 ${btn.value} RP`);
+                                    UIManager.updateAll(GameState);
+                                } else if (btn.action === 'heal') {
+                                    if (GameState.player) { GameState.player.health = GameState.player.maxHealth; console.log('\u{1F41B} \u6EE1\u8840'); }
+                                } else if (btn.action === 'rankUp') {
+                                    if (GameState.player) { GameState.player.addRank(); console.log(`\u{1F41B} \u519B\u8854\u63D0\u5347! ${GameState.player.getRankName()}`); }
+                                } else if (btn.weather) {
+                                    WeatherSystem.setWeather(btn.weather);
+                                } else if (btn.action === 'toggleDayNight') {
+                                    DayNightSystem.togglePause();
+                                    console.log(DayNightSystem.paused ? '\u23F8 \u663C\u591C\u5FAA\u73AF\u6682\u505C' : '\u25B6 \u663C\u591C\u5FAA\u73AF\u7EE7\u7EED');
+                                } else if (btn.action === 'toggleTornadoRadar') {
+                                    GameState.debugShowTornado = !GameState.debugShowTornado;
+                                    console.log(GameState.debugShowTornado ? '\u{1F41B} \u9F99\u5377\u98CE\u96F7\u8FBE\u5F00\u542F' : '\u{1F41B} \u9F99\u5377\u98CE\u96F7\u8FBE\u5173\u95ED');
+                                } else if (btn.action === 'spawnLoot') {
+                                    // 刷出指定稀有度的随机战利品
+                                    const player = GameState.player;
+                                    if (player) {
+                                        const items = Object.values(LootRegistry).filter(i => i.rarity === btn.rarity);
+                                        if (items.length > 0) {
+                                            const item = items[Math.floor(Math.random() * items.length)];
+                                            const offsetX = (Math.random() - 0.5) * 80;
+                                            const offsetY = (Math.random() - 0.5) * 80;
+                                            GameState.lootPickups.push(new LootPickup(player.x + offsetX, player.y + offsetY, item.id));
+                                            console.log(`\u{1F381} \u5237\u51FA ${item.name}`);
+                                        }
+                                    }
+                                } else if (btn.action === 'spawnAllLoot') {
+                                    // 刷出所有稀有度各一个
+                                    const player = GameState.player;
+                                    if (player) {
+                                        const rarities = [Rarity.COMMON, Rarity.UNCOMMON, Rarity.RARE, Rarity.LEGENDARY];
+                                        let count = 0;
+                                        for (const rarity of rarities) {
+                                            const items = Object.values(LootRegistry).filter(i => i.rarity === rarity);
+                                            if (items.length > 0) {
+                                                const item = items[Math.floor(Math.random() * items.length)];
+                                                const angle = (count / 4) * Math.PI * 2;
+                                                const dist = 60;
+                                                const offsetX = Math.cos(angle) * dist;
+                                                const offsetY = Math.sin(angle) * dist;
+                                                GameState.lootPickups.push(new LootPickup(player.x + offsetX, player.y + offsetY, item.id));
+                                                count++;
+                                            }
+                                        }
+                                        console.log(`\u{1F31F} \u5237\u51FA 4 \u4E2A\u6218\u5229\u54C1`);
+                                    }
+                                }
+                                break;
+                            }
+                        }
+                    }
+                    e.preventDefault();
+                    return;
+                }
+
+                // === \u80CC\u5305\u754C\u9762\u70B9\u51FB\u9009\u4E2D\u683C\u5B50 ===
+                if (GameState.inventoryOpen && GameState.inventoryHitAreas) {
+                    const rect = canvas.getBoundingClientRect();
+                    const scaleX = canvas.clientWidth / rect.width;
+                    const scaleY = canvas.clientHeight / rect.height;
+                    const clickX = (e.clientX - rect.left) * scaleX;
+                    const clickY = (e.clientY - rect.top) * scaleY;
+
+                    for (const area of GameState.inventoryHitAreas) {
+                        if (clickX >= area.x && clickX <= area.x + area.w &&
+                            clickY >= area.y && clickY <= area.y + area.h) {
+                            GameState.inventorySelectedSlot = area.index;
+                            playUISound('click');
+                            e.preventDefault();
+                            return;
+                        }
+                    }
+                }
+
+                // \u6B63\u5E38\u5C04\u51FB
+                if (GameState.player) {
+                    const weapon = GameState.getActiveWeapon();
+                    if (weapon && weapon.config.type === 'grenade') {
+                        GameState.player.throwGrenade();
+                    } else {
+                        GameState.player.shoot();
+                    }
+                }
+                e.preventDefault();
+            }
+        });
+
+        // \u9F20\u6807\u91CA\u653E
         canvas.addEventListener('mouseup', (e) => {
             if (e.button === 0) {
                 GameState.mouse.down = false;
@@ -622,22 +744,49 @@ canvas.addEventListener('mousedown', (e) => {
             }
         });
 
-        // 窗口失焦时重置鼠标状态
-        window.addEventListener('blur', () => {
-            GameState.mouse.down = false;
+        window.addEventListener('blur', () => { GameState.mouse.down = false; });
+
+        // \u53F3\u952E\u83DC\u5355
+        canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            if (GameState.radioOpen) {
+                GameState.radioClosing = true;
+                GameState.radioAnimating = true;
+                playRadioClose();
+                return;
+            }
+            // \u80CC\u5305\u754C\u9762\uFF1A\u53F3\u952E\u4E22\u5F03\u9009\u4E2D\u7269\u54C1\u5230\u811A\u4E0B
+            if (GameState.inventoryOpen) {
+                const selSlot = GameState.inventorySelectedSlot;
+                if (selSlot >= 0 && selSlot < 7 && GameState.inventory[selSlot]) {
+                    const item = GameState.inventory[selSlot];
+                    const player = GameState.player;
+                    if (player && player.alive) {
+                        if (item.isLoot) {
+                            const offsetX = (Math.random() - 0.5) * 30;
+                            const offsetY = (Math.random() - 0.5) * 30;
+                            GameState.lootPickups.push(new LootPickup(player.x + offsetX, player.y + offsetY, item.lootId));
+                            console.log(`\u{1F5D1}\uFE0F \u4E22\u5F03\u6218\u5229\u54C1 ${item.config.name}`);
+                        } else {
+                            const droppedPickup = new WeaponPickup(player.x, player.y, item);
+                            GameState.weaponPickups.push(droppedPickup);
+                            console.log(`\u{1F5D1}\uFE0F \u4E22\u5F03\u6B66\u5668 ${item.config.name}`);
+                        }
+                        GameState.inventory[selSlot] = null;
+                        GameState.inventorySelectedSlot = -1;
+                        if (GameState.activeWeaponSlot === selSlot) {
+                            for (let j = 0; j < 7; j++) {
+                                if (GameState.inventory[j]) { GameState.activeWeaponSlot = j; break; }
+                            }
+                        }
+                        playUISound('click');
+                        UIManager.updateAll(GameState);
+                    }
+                }
+            }
         });
 
-        canvas.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        // 右键关闭电台
-        if (GameState.radioOpen) {
-            GameState.radioClosing = true;
-            GameState.radioAnimating = true;
-            playRadioClose();
-        }
-    });
-
-        // 军械库鼠标滚轮滚动
+        // \u519B\u69B0\u5E93\u9F20\u6807\u6EDA\u8F6E
         canvas.addEventListener('wheel', (e) => {
             if (GameState.arsenalOpen) {
                 const scrollStep = 40;
@@ -647,16 +796,15 @@ canvas.addEventListener('mousedown', (e) => {
         }, { passive: false });
     },
 
-    // 军械库：获取当前分类的商品列表（7个细分分类）
     _getCategoryItems() {
         const categories = [
-            { types: ['pistol'] },                          // 手枪
-            { types: ['rifle'] },                           // 步枪
-            { types: ['smg'] },                             // 冲锋枪
-            { types: ['shotgun'] },                         // 霰弹枪
-            { types: ['sniper'] },                          // 狙击枪
-            { types: ['launcher'] },                        // 重武器
-            { types: ['melee', 'grenade', 'medical'] }      // 其他
+            { types: ['pistol'] },
+            { types: ['rifle'] },
+            { types: ['smg'] },
+            { types: ['shotgun'] },
+            { types: ['sniper'] },
+            { types: ['launcher'] },
+            { types: ['melee', 'grenade', 'medical'] }
         ];
         const cat = categories[GameState.arsenalCategory] || categories[0];
         return Object.entries(WeaponRegistry).filter(([, config]) =>
@@ -664,18 +812,14 @@ canvas.addEventListener('mousedown', (e) => {
         );
     },
 
-    // 军械库自动滚动到选中项
     _scrollToSelected(itemH, rowGap, listTop, viewportHeight) {
         const index = GameState.arsenalSelectedIndex;
         const itemTop = index * (itemH + rowGap);
         const itemBottom = itemTop + itemH;
         const scroll = GameState.arsenalScrollOffset || 0;
-
         if (itemTop < scroll) {
-            // 选中项在视口上方，向上滚动
             GameState.arsenalScrollOffset = itemTop;
         } else if (itemBottom > scroll + viewportHeight) {
-            // 选中项在视口下方，向下滚动
             GameState.arsenalScrollOffset = itemBottom - viewportHeight;
         }
     }

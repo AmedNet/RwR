@@ -56,13 +56,13 @@ export const Renderer = {
         // 创建离屏 canvas 用于渲染游戏画面（使用 OffscreenCanvas 实现零拷贝上传）
         this._offscreenCanvas = null; // 将在 resize() 中创建
         this._offscreenCtx = null;
-        
+
         // 先用临时 canvas 避免 null ctx（resize() 会替换）
         this.ctx = document.createElement('canvas').getContext('2d');
-        
+
         // 初始化后处理管线
         PostProcess.init();
-        
+
         console.log('✅ Renderer 初始化成功');
     },
 
@@ -75,17 +75,17 @@ export const Renderer = {
         const dpr = window.devicePixelRatio || 1;
         const width = rect.width;
         const height = rect.height;
-        
+
         // 离屏 canvas 使用 DPR 缩放，保证 Retina 屏上文字清晰
         // 使用 OffscreenCanvas 实现零拷贝上传到 WebGL
         const canvasWidth = Math.ceil(width * dpr);
         const canvasHeight = Math.ceil(height * dpr);
-        
+
         // 仅在尺寸变化时重建 canvas，避免频繁 resize 产生废弃对象
-        const needsRebuild = !this._offscreenCanvas || 
-            this._offscreenCanvas.width !== canvasWidth || 
+        const needsRebuild = !this._offscreenCanvas ||
+            this._offscreenCanvas.width !== canvasWidth ||
             this._offscreenCanvas.height !== canvasHeight;
-        
+
         if (needsRebuild) {
             if (typeof OffscreenCanvas !== 'undefined') {
                 this._offscreenCanvas = new OffscreenCanvas(canvasWidth, canvasHeight);
@@ -100,7 +100,7 @@ export const Renderer = {
             this._offscreenCtx.scale(dpr, dpr);
             this.ctx = this._offscreenCtx; // 同步 this.ctx 引用
         }
-        
+
         this.logicalWidth = width;
         this.logicalHeight = height;
         // 同步视口尺寸到 GameState（供天气系统等使用）
@@ -114,7 +114,7 @@ export const Renderer = {
             this._dayNightCanvas.width = Math.ceil(width);
             this._dayNightCanvas.height = Math.ceil(height);
         }
-        
+
         console.log(`📐 画布尺寸: ${width}x${height}`);
     },
 
@@ -221,6 +221,9 @@ export const Renderer = {
 
         for (const pickup of GameState.weaponPickups) {
             if (pickup.alive) this._drawAtWorldPos(pickup, false);
+        }
+        for (const loot of GameState.lootPickups) {
+            if (loot.alive) this._drawAtWorldPos(loot, false);
         }
 
         for (const g of GameState.grenades) {
@@ -1172,7 +1175,7 @@ export const Renderer = {
         const playerX = player ? player.x : 0;
         const playerY = player ? player.y : 0;
         const maxFireDistance = 800; // 最大影响距离（像素）
-        
+
         // 死神打击爆炸
         if (SupportSystem.reaperStrikes && SupportSystem.reaperStrikes.length > 0) {
             for (const strike of SupportSystem.reaperStrikes) {
@@ -1190,7 +1193,7 @@ export const Renderer = {
                 }
             }
         }
-        
+
         // 手雷/枪口闪光（来自 EffectsManager）
         if (EffectsManager.explosions && EffectsManager.explosions.length > 0) {
             for (const ex of EffectsManager.explosions) {
@@ -1209,14 +1212,14 @@ export const Renderer = {
                 }
             }
         }
-        
+
         PostProcess.updateFireGlow(fireGlowIntensity);
 
         // 积水反射强度（基于天气）
         let rainIntensity = 0;
         const currentDef = WeatherSystem.getWeatherDef();
         const transitionProgress = WeatherSystem.transitionProgress;
-        
+
         // 计算雨水强度
         const getRainIntensity = (def) => {
             if (!def) return 0;
@@ -1227,14 +1230,14 @@ export const Renderer = {
             }
             return 0;
         };
-        
+
         if (currentDef) {
             const currentRain = getRainIntensity(currentDef);
-            
+
             // 过渡期间：获取前一个天气定义并插值
             if (WeatherSystem.transitioning && transitionProgress < 1) {
                 // 获取前一个天气定义
-                const prevDef = WeatherSystem.previous ? 
+                const prevDef = WeatherSystem.previous ?
                     WEATHER_DEFS[WeatherSystem.previous] : null;
                 const prevRain = prevDef ? getRainIntensity(prevDef) : 0;
                 rainIntensity = prevRain * (1 - transitionProgress) + currentRain * transitionProgress;
@@ -1242,7 +1245,7 @@ export const Renderer = {
                 rainIntensity = currentRain;
             }
         }
-        
+
         PostProcess.updateRain(rainIntensity);
 
         // 龙卷风浓雾 — 基于玩家到龙卷风中心的距离
@@ -1302,7 +1305,7 @@ export const Renderer = {
             this._updateShaderLighting();
             drawGameOver(this.ctx, this);
             this._renderDayNightOverlay();
-        PostProcess.apply(this._offscreenCanvas, this);
+            PostProcess.apply(this._offscreenCanvas, this);
             return;
         }
 
@@ -1311,7 +1314,7 @@ export const Renderer = {
             drawDebug(this.ctx, this);
             this._updateShaderLighting();
             this._renderDayNightOverlay();
-        PostProcess.apply(this._offscreenCanvas, this);
+            PostProcess.apply(this._offscreenCanvas, this);
             return;
         }
 
@@ -1326,7 +1329,7 @@ export const Renderer = {
             drawRadioUI(this.ctx, this);
             this._updateShaderLighting();
             this._renderDayNightOverlay();
-        PostProcess.apply(this._offscreenCanvas, this);
+            PostProcess.apply(this._offscreenCanvas, this);
             return;
         }
 
@@ -1340,7 +1343,7 @@ export const Renderer = {
             }
             this._updateShaderLighting();
             this._renderDayNightOverlay();
-        PostProcess.apply(this._offscreenCanvas, this);
+            PostProcess.apply(this._offscreenCanvas, this);
             return;
         }
 
@@ -1352,7 +1355,7 @@ export const Renderer = {
         WeatherSystem.drawOverlay(this.ctx, this);
         WeatherSystem.drawWeatherEdgeEffects(this.ctx, this);
         this._renderHUD();
-        
+
         // 应用后处理效果并输出到 WebGL canvas
         this._updateShaderLighting();
         this._renderDayNightOverlay();

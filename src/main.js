@@ -197,7 +197,7 @@ function initCapturePoints() {
     }
     GameState.capturePoints = allPoints;
     console.log(`🚩 生成 ${allPoints.length} 个据点（玩家${playerPoints.length} / 敌人${enemyPoints.length}）`);
-    
+
     // 生成军械库（在友方后方，即玩家据点的左侧）
     initArsenal(playerPoints);
 }
@@ -207,20 +207,20 @@ function initArsenal(playerPoints) {
     const map = GameState.map;
     const worldW = CONFIG.world.width;
     const worldH = CONFIG.world.height;
-    
+
     // 找到最左侧的玩家据点作为参考
     let leftMostPoint = null;
     let minX = Infinity;
-    
+
     for (const p of playerPoints) {
         if (p.x < minX) {
             minX = p.x;
             leftMostPoint = p;
         }
     }
-    
+
     let arsenalX, arsenalY;
-    
+
     if (leftMostPoint) {
         // 在最左侧玩家据点的左后方生成
         arsenalX = Math.max(GAME_CONSTANTS.ARSENAL_MIN_X, leftMostPoint.x - GAME_CONSTANTS.ARSENAL_OFFSET);
@@ -230,7 +230,7 @@ function initArsenal(playerPoints) {
         arsenalX = GAME_CONSTANTS.ARSENAL_OFFSET;
         arsenalY = worldH / 2;
     }
-    
+
     // 确保位置可通行
     if (map && !map.isWalkable(arsenalX, arsenalY, GAME_CONSTANTS.ARSENAL_RADIUS)) {
         // 尝试附近位置
@@ -246,7 +246,7 @@ function initArsenal(playerPoints) {
             }
         }
     }
-    
+
     GameState.arsenal = new Arsenal(arsenalX, arsenalY);
     console.log(`🔫 军械库生成于 (${Math.round(arsenalX)}, ${Math.round(arsenalY)})`);
 }
@@ -257,7 +257,7 @@ function spawnTeammate(spawnPoint, minDistance = 150) {
     const world = GameState.config.world;
     const map = GameState.map;
     const player = GameState.player;
-    
+
     // 如果指定了生成点，在生成点周围生成
     let centerX, centerY;
     if (spawnPoint) {
@@ -270,7 +270,7 @@ function spawnTeammate(spawnPoint, minDistance = 150) {
         centerX = world.width / 2;
         centerY = world.height / 2;
     }
-    
+
     // 尝试在生成点周围找到可通行的位置，保持最小距离
     for (let attempt = 0; attempt < GAME_CONSTANTS.SPAWN_SEARCH_ATTEMPTS; attempt++) {
         const angle = Math.random() * Math.PI * 2;
@@ -283,7 +283,7 @@ function spawnTeammate(spawnPoint, minDistance = 150) {
             return new Teammate(x, y, config);
         }
     }
-    
+
     // Fallback：用更大的随机偏移
     const fallbackAngle = Math.random() * Math.PI * 2;
     const fallbackDist = minDistance + Math.random() * 100;
@@ -296,12 +296,12 @@ function spawnTeammate(spawnPoint, minDistance = 150) {
 function resetGame() {
     GameState.reset();
     const config = GameState.config;
-    
+
     // 寻找最近的己方据点，如果没有则回中心
     let spawnX = config.world.width / 2;
     let spawnY = config.world.height / 2;
     let minDist = Infinity;
-    
+
     for (const point of GameState.capturePoints) {
         if (point.owner === 'player') {
             const d = Math.hypot(point.x - spawnX, point.y - spawnY);
@@ -312,7 +312,7 @@ function resetGame() {
             }
         }
     }
-    
+
     // 创建玩家
     GameState.player = new Player(spawnX, spawnY, config.player);
 
@@ -348,10 +348,10 @@ function gameLoop() {
     DayNightSystem.update();
     // 更新环境音效
     AmbientSoundManager.update();
-    
+
     // 更新支援系统
     SupportSystem.update();
-    
+
     // G键长按检测（打开/关闭电台）
     if (GameState.radioGKeyPressed && !GameState.radioGKeyConsumed && !GameState.gameOver) {
         GameState.radioGKeyTimer++;
@@ -389,8 +389,8 @@ function gameLoop() {
             GameState.radioGKeyTimer = 0;
         }
     }
-    
-    
+
+
     // 敌方AI支援决策
     if (!GameState.gameOver) {
         const aiDecision = SupportSystem.aiShouldCallSupport();
@@ -411,7 +411,7 @@ function gameLoop() {
         targetY = Math.max(0, Math.min(world.height - canvasHeight, targetY));
         GameState.camera.x = targetX;
         GameState.camera.y = targetY;
-        
+
         // 平滑归零 camera offset
         GameState.camera.offsetX *= 0.9;
         GameState.camera.offsetY *= 0.9;
@@ -429,6 +429,7 @@ function gameLoop() {
     for (const bullet of GameState.bullets) bullet.update();
     for (const grenade of GameState.grenades) grenade.update();
     for (const pickup of GameState.weaponPickups) pickup.update();
+    for (const loot of GameState.lootPickups) loot.update();
     CollisionSystem.checkAll();
 
     // ---- 过滤死亡实体 ----
@@ -436,6 +437,7 @@ function gameLoop() {
     GameState.bullets = GameState.bullets.filter(b => b.alive);
     GameState.grenades = GameState.grenades.filter(g => g.alive);
     GameState.weaponPickups = GameState.weaponPickups.filter(p => p.alive);
+    GameState.lootPickups = GameState.lootPickups.filter(p => p.alive);
     // 过滤死亡的队友（手雷炸死等场景），确保重生时 length 检查正确
     GameState.teammates = GameState.teammates.filter(t => t.alive);
 
@@ -487,8 +489,8 @@ function init() {
         if (GameState.teammates.length < maxCount) {
             // 随机选择一个己方据点生成新队友
             const playerPoints = getPlayerPoints();
-            const spawnPoint = playerPoints.length > 0 
-                ? playerPoints[Math.floor(Math.random() * playerPoints.length)] 
+            const spawnPoint = playerPoints.length > 0
+                ? playerPoints[Math.floor(Math.random() * playerPoints.length)]
                 : null;
             const t = spawnTeammate(spawnPoint, GAME_CONSTANTS.RANK_UP_SPAWN_MIN_DIST);
             if (t) {
@@ -524,7 +526,7 @@ function init() {
     // ---- 手雷爆炸监听 ----
     window.addEventListener('grenade_explode', (e) => {
         const { x, y, radius, damage } = e.detail;
-        
+
         // 爆炸效果
         EffectsManager.spawnGrenadeExplosion(x, y, radius);
 
@@ -587,7 +589,7 @@ function init() {
     AmbientSoundManager.init();
     // 初始化小地图
     Minimap.init();
-    
+
     // 初始化支援系统
     SupportSystem.init();
 
@@ -602,7 +604,7 @@ function init() {
 function updateTeammateRespawns() {
     const config = GameState.config.teammate;
     const queue = GameState.teammateRespawnQueue;
-    
+
     for (let i = queue.length - 1; i >= 0; i--) {
         queue[i].timer--;
         if (queue[i].timer <= 0) {
@@ -628,7 +630,7 @@ function updateTeammateRespawns() {
                     spawnY = GameState.config.world.height / 2;
                 }
             }
-            
+
             // 确保不超过最大数量
             if (GameState.teammates.length < config.maxCount) {
                 const t = new Teammate(spawnX, spawnY, config);
@@ -648,10 +650,10 @@ function respawnPlayer(pointIndex) {
     const config = GameState.config;
     // 寻找己方据点
     const playerPoints = getPlayerPoints();
-    
+
     let spawnX = config.world.width / 2;
     let spawnY = config.world.height / 2;
-    
+
     if (pointIndex !== undefined && playerPoints[pointIndex]) {
         // 选择指定据点
         const point = playerPoints[pointIndex];
@@ -667,7 +669,7 @@ function respawnPlayer(pointIndex) {
     } else {
         console.log('⚠️ 无己方据点，在中心重生');
     }
-    
+
     // 非自杀死亡：清空背包，只保留初始手枪
     if (!GameState.suicideDeath) {
         console.log('💔 阵亡损失：背包物品已清空');
@@ -676,13 +678,13 @@ function respawnPlayer(pointIndex) {
     } else {
         console.log('✅ 自杀：保留背包物品');
     }
-    
+
     // 重置自杀标记
     GameState.suicideDeath = false;
-    
+
     // 保留当前军衔（阵亡不降级）
     const savedRank = GameState.player ? GameState.player.rank : 0;
-    
+
     // 重置玩家状态（位置、血量等）
     GameState.player = new Player(spawnX, spawnY, config.player);
     GameState.player.rank = savedRank;

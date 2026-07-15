@@ -14,6 +14,8 @@ import { SlowEffect, AmmoBuffEffect, HealAuraEffect, STATUS_EFFECT_CONFIG } from
 import { AIRank, getRankConfig } from '../core/RankSystem.js';
 import { UnitClass, getClassConfig } from '../core/ClassSystem.js';
 import { WeatherSystem } from '../core/WeatherSystem.js';
+import { rollLoot } from '../core/LootRegistry.js';
+import { LootPickup } from './LootPickup.js';
 
 export class CombatAI extends Entity {
     // AI 角色常量
@@ -1083,13 +1085,6 @@ export class CombatAI extends Entity {
                 ctx.rotate(weaponAngle);
             }
             ctx.drawImage(weaponImage, -drawW * 0.15, -drawH / 2, drawW, drawH);
-        } else {
-            ctx.beginPath();
-            ctx.moveTo(0, 0);
-            ctx.lineTo(Math.cos(weaponAngle) * CombatAI.MELEE_LINE_LENGTH, Math.sin(weaponAngle) * CombatAI.MELEE_LINE_LENGTH);
-            ctx.strokeStyle = '#555';
-            ctx.lineWidth = CombatAI.MELEE_LINE_WIDTH;
-            ctx.stroke();
         }
         ctx.restore();
     }
@@ -1109,6 +1104,8 @@ export class CombatAI extends Entity {
                     this.dying = true;
                     this.deathTimer = 15;
                     EffectsManager.spawnParticles(this.x, this.y, ParticleType.EXPLOSION, 15);
+                    // 掉落战利品
+                    this.dropLootOnDeath();
                 } else {
                     // 队友：立即死亡，让 CollisionSystem 正常触发重生队列
                     this.alive = false;
@@ -1137,5 +1134,24 @@ export class CombatAI extends Entity {
             GameState.weaponPickups.push(new WeaponPickup(this.x, this.y, weapon));
             this.weapons[slot] = null;
         }
+    }
+
+    // 死亡时掉落战利品
+    dropLootOnDeath() {
+        // 只有敌人才掉落战利品
+        if (this.faction !== 'enemy') return;
+        
+        const lootIds = rollLoot(this.rank);
+        if (lootIds.length === 0) return;
+        
+        for (const lootId of lootIds) {
+            // 在死亡位置附近随机偏移
+            const offsetX = (Math.random() - 0.5) * 40;
+            const offsetY = (Math.random() - 0.5) * 40;
+            GameState.lootPickups.push(new LootPickup(this.x + offsetX, this.y + offsetY, lootId));
+        }
+        
+        // 生成掉落特效
+        EffectsManager.spawnParticles(this.x, this.y, ParticleType.EXPLOSION, 8);
     }
 }

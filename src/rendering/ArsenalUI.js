@@ -1,16 +1,24 @@
 // src/rendering/ArsenalUI.js
 import { GameState } from '../core/GameState.js';
 import { WeaponRegistry } from '../core/WeaponRegistry.js';
+import { RARITY_COLORS, RARITY_NAMES } from '../core/LootRegistry.js';
+
+function hexToRgba(hex, alpha) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r},${g},${b},${alpha})`;
+}
 
 // 7个细分分类
 const CATEGORIES = [
-    { name: '手枪',   color: '#78909C', types: ['pistol'] },
-    { name: '步枪',   color: '#4CAF50', types: ['rifle'] },
+    { name: '手枪', color: '#78909C', types: ['pistol'] },
+    { name: '步枪', color: '#4CAF50', types: ['rifle'] },
     { name: '冲锋枪', color: '#8BC34A', types: ['smg'] },
     { name: '霰弹枪', color: '#FF9800', types: ['shotgun'] },
     { name: '狙击枪', color: '#2196F3', types: ['sniper'] },
     { name: '重武器', color: '#f44336', types: ['launcher'] },
-    { name: '其他',   color: '#9E9E9E', types: ['melee', 'grenade', 'medical'] }
+    { name: '其他', color: '#9E9E9E', types: ['melee', 'grenade', 'medical'] }
 ];
 
 // 获取武器类型的中文名称
@@ -274,23 +282,26 @@ export function drawArsenalShop(ctx, renderer) {
     for (let i = 0; i < 7; i++) {
         const sx = slotStartX + i * (slotSize + slotGap);
         const isSlotSel = i === GameState.arsenalSelectedSlot;
+        const weapon = GameState.inventory[i];
+        const isLootItem = weapon && weapon.isLoot;
 
         ctx.fillStyle = isSlotSel ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.04)';
         ctx.fillRect(sx, slotY, slotSize, slotSize);
 
         if (isSlotSel) {
-            ctx.shadowColor = catColor;
+            ctx.shadowColor = isLootItem ? (RARITY_COLORS[weapon.config.rarity] || catColor) : catColor;
             ctx.shadowBlur = 6;
-            ctx.strokeStyle = catColor;
+            ctx.strokeStyle = isLootItem ? (RARITY_COLORS[weapon.config.rarity] || catColor) : catColor;
             ctx.lineWidth = 1.5;
+        } else if (isLootItem) {
+            ctx.strokeStyle = hexToRgba(RARITY_COLORS[weapon.config.rarity] || '#ffffff', 0.53) || 'rgba(255,255,255,0.15)';
+            ctx.lineWidth = 1;
         } else {
             ctx.strokeStyle = 'rgba(255,255,255,0.15)';
             ctx.lineWidth = 0.5;
         }
         ctx.strokeRect(sx, slotY, slotSize, slotSize);
         ctx.shadowBlur = 0;
-
-        const weapon = GameState.inventory[i];
         if (weapon) {
             const sImg = renderer.getWeaponImage(weapon.id);
             if (sImg) {
@@ -332,7 +343,13 @@ export function drawArsenalShop(ctx, renderer) {
     // 出售提示
     const selWeapon = GameState.inventory[GameState.arsenalSelectedSlot];
     const sellY = slotY + slotSize + 10;
-    if (selWeapon && selWeapon.config.sellPrice > 0) {
+    if (selWeapon && selWeapon.isLoot) {
+        // 战利品出售
+        ctx.fillStyle = '#ff9800';
+        ctx.font = '13px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(`[X] 出售 ${selWeapon.config.name} \u2192 +$${selWeapon.config.value}`, rightAreaCenterX, sellY);
+    } else if (selWeapon && selWeapon.config.sellPrice > 0) {
         ctx.fillStyle = '#ff9800';
         ctx.font = '13px sans-serif';
         ctx.textAlign = 'center';
