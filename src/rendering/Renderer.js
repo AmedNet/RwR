@@ -226,6 +226,14 @@ export const Renderer = {
             if (loot.alive) this._drawAtWorldPos(loot, false);
         }
 
+
+        // 先绘制尘土（在车辆下面）
+        EffectsManager.drawDustOnly(this.ctx, GameState.camera);
+        
+        // 载具
+        for (const v of GameState.vehicles) {
+            if (v.alive) this._drawAtWorldPos(v, false);
+        }
         for (const g of GameState.grenades) {
             g.draw(this.ctx);
         }
@@ -1094,9 +1102,9 @@ export const Renderer = {
             if (e.alive) this._drawAtWorldPos(e, false);
         }
         for (const t of teammates) {
-            if (t.alive) this._drawAtWorldPos(t, false);
+            if (t.alive && !t.mountedVehicle) this._drawAtWorldPos(t, false);
         }
-        if (player && player.alive) {
+        if (player && player.alive && !player.mountedVehicle) {
             this._drawAtWorldPos(player, true);
         }
     },

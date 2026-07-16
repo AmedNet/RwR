@@ -143,6 +143,7 @@ export class Player extends Entity {
     }
 
     reload() {
+        if (this.mountedVehicle && this.vehicleSeat === 0) return;
         const weapon = GameState.getActiveWeapon();
         if (weapon && !weapon.isLoot) {
             // startReload 返回 true 表示换弹成功开始
@@ -158,6 +159,7 @@ export class Player extends Entity {
     }
 
     throwGrenade() {
+        if (this.mountedVehicle && this.vehicleSeat === 0) return;
         // 从任意槽位查找手雷
         let grenadeSlot = -1;
         for (let i = 0; i < GameState.inventory.length; i++) {
@@ -248,6 +250,40 @@ export class Player extends Entity {
 
     /** 处理移动逻辑，返回是否正在移动 */
     _updateMovement() {
+        // 上车状态：移动载具而非玩家自身
+        if (this.mountedVehicle) {
+            const v = this.mountedVehicle;
+            if (!v.alive) {
+                this.mountedVehicle = null;
+                this.radius = this.config.radius;
+            } else {
+                if (this.vehicleSeat !== 0) {
+                    this.x = v.x;
+                    this.y = v.y;
+                    // 非驾驶座也要减少射击冷却
+                    if (this.shootCooldown > 0) this.shootCooldown--;
+                    return false;
+                }
+                const keys = GameState.keys;
+                const throttle = (keys.w ? 1 : 0) - (keys.s ? 1 : 0);
+                const steering = (keys.d ? 1 : 0) - (keys.a ? 1 : 0);
+                const speedFactor = GameState.map ? GameState.map.getSpeedFactor(v.x, v.y) : 1;
+                const weatherSpeed = WeatherSystem.getSpeedMultiplier();
+                v.updatePhysics(throttle, steering, speedFactor * weatherSpeed);
+                const newX = v.x + v.velocityX;
+                const newY = v.y + v.velocityY;
+                if (!GameState.map || GameState.map.isWalkable(newX, newY, v.radius)) {
+                    v.x = newX;
+                    v.y = newY;
+                } else {
+                    v.hitObstacle();
+                }
+                this.x = v.x;
+                this.y = v.y;
+                if (this.shootCooldown > 0) this.shootCooldown--;
+                return throttle !== 0 || steering !== 0 || Math.abs(v.currentSpeed) > 0.05;
+            }
+        }
         const keys = GameState.keys;
         let dx = 0, dy = 0;
         if (keys.w) dy -= 1;
@@ -414,6 +450,15 @@ export class Player extends Entity {
 
     shoot() {
         if (GameState.gameOver || this.shootCooldown > 0 || this.isSwitching) return;
+        if (this.mountedVehicle && this.vehicleSeat === 0) return;
+        // 记录射击位置（非驾驶座时使用座位世界坐标）
+        let shootX = this.x;
+        let shootY = this.y;
+        if (this.mountedVehicle && this.vehicleSeat > 0) {
+            const seatPos = this.mountedVehicle.getSeatWorldPosition(this.vehicleSeat);
+            shootX = seatPos.x;
+            shootY = seatPos.y;
+        }
         // UI界面打开时禁止开火
         if (GameState.arsenalOpen || GameState.inventoryOpen || GameState.debugOpen || GameState.radioOpen) return;
         const weapon = GameState.getActiveWeapon();
@@ -458,8 +503,8 @@ export class Player extends Entity {
             for (let i = 0; i < pellets; i++) {
                 // 在锥角内均匀随机分布
                 const pelletAngle = baseAngle + (Math.random() - 0.5) * spreadAngle;
-                const spawnX = this.x + Math.cos(pelletAngle) * this.radius;
-                const spawnY = this.y + Math.sin(pelletAngle) * this.radius;
+                const spawnX = shootX + Math.cos(pelletAngle) * this.radius;
+                const spawnY = shootY + Math.sin(pelletAngle) * this.radius;
                 GameState.bullets.push(new Bullet(
                     spawnX, spawnY,
                     Math.cos(pelletAngle) * speed,
@@ -484,7 +529,7 @@ export class Player extends Entity {
             const worldX = (mouse.x - cx * (1 - cam.zoom) + offsetX) / cam.zoom + cam.x;
             const worldY = (mouse.y - cy * (1 - cam.zoom) + offsetY) / cam.zoom + cam.y;
             GameState.bullets.push(new GrenadeBullet(
-                this.x, this.y,
+                shootX, shootY,
                 worldX, worldY,
                 weapon.config,
                 this
@@ -504,8 +549,8 @@ export class Player extends Entity {
                 : 0.6;
             const bulletRadius = GameState.config.bullet.radius * bulletRadiusMult;
             GameState.bullets.push(new Bullet(
-                this.x + Math.cos(baseAngle) * this.radius,
-                this.y + Math.sin(baseAngle) * this.radius,
+                shootX + Math.cos(baseAngle) * this.radius,
+                shootY + Math.sin(baseAngle) * this.radius,
                 Math.cos(baseAngle) * speed, Math.sin(baseAngle) * speed,
                 false, weapon.config.damage, true,
                 knockback, bulletRadius, null, penetration, explosion, hasTrail,
@@ -517,10 +562,10 @@ export class Player extends Entity {
         const weaponType = weapon.config.type;
         if (['pistol', 'rifle', 'smg', 'shotgun', 'sniper', 'launcher'].includes(weaponType)) {
             SoundManager.playShoot(weaponType, this);
-            EffectsManager.spawnMuzzleFlash(this.x, this.y, baseAngle, weaponType);
+            EffectsManager.spawnMuzzleFlash(shootX, shootY, baseAngle, weaponType);
             // 火箭筒：额外生成后焰喷射效果
             if (weaponType === 'launcher' && weapon.config.hasBackblast !== false) {
-                EffectsManager.spawnBackblast(this.x, this.y, baseAngle);
+                EffectsManager.spawnBackblast(shootX, shootY, baseAngle);
             }
         }
 
@@ -646,6 +691,10 @@ export class Player extends Entity {
         if (this.health <= 0) {
             this.health = 0;
             this.alive = false;
+
+            if (this.mountedVehicle) {
+                this.mountedVehicle.unmount(this);
+            }
 
             // 死亡时掉落所有武器（初始手枪 beretta92 除外），战利品保留在背包中
             const droppedWeapons = new Set(); // 追踪已掉落的武器，避免重复

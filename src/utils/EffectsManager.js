@@ -165,6 +165,66 @@ export const EffectsManager = {
         }
     },
 
+    spawnGlassShards(x, y, count = 6) {
+        const colors = ['#d8f3f0', '#a9d8d2', '#7fb6b2', '#eefcf9'];
+        for (let i = 0; i < count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 1.5 + Math.random() * 4;
+            const life = 18 + Math.random() * 18;
+            this.particles.push({
+                x, y,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed - 1.5,
+                life,
+                maxLife: life,
+                color: colors[Math.floor(Math.random() * colors.length)],
+                size: 1.5 + Math.random() * 2.5,
+                type: ParticleType.SPARK
+            });
+        }
+    },
+
+    spawnVehicleExhaust(x, y, driftX = 0, driftY = 0, intensity = 0) {
+        const life = 24 + Math.random() * 18;
+        this.particles.push({
+            x: x + (Math.random() - 0.5) * 3,
+            y: y + (Math.random() - 0.5) * 3,
+            vx: driftX + (Math.random() - 0.5) * 0.35,
+            vy: driftY - 0.25 - Math.random() * 0.3,
+            life,
+            maxLife: 42,
+            color: intensity > 0.65 ? '#4b4d48' : '#6d706b',
+            size: 2.5 + intensity * 2 + Math.random() * 1.5,
+            type: ParticleType.SMOKE
+        });
+    },
+    // 生成车辆行驶时的尘土效果（从车轮位置扬起）
+    spawnVehicleDust(x, y, driftX = 0, driftY = 0, intensity = 0) {
+        const count = Math.floor(2 + intensity * 2);
+        const dustColors = ['#c9b896', '#d4c4a8', '#bfae92', '#e0d0b8'];
+        for (let i = 0; i < count; i++) {
+            const life = 25 + Math.random() * 15;
+            // 向四周随机飞溅，不只是后方
+            const spreadAngle = Math.random() * Math.PI * 2;
+            const spread = 0.8 + Math.random() * 2.0;
+            const baseSize = 1.5 + Math.random() * 2.5;
+            this.particles.push({
+                x: x + (Math.random() - 0.5) * 25,
+                y: y + (Math.random() - 0.5) * 15,
+                vx: driftX * 0.2 + Math.cos(spreadAngle) * spread,
+                vy: driftY * 0.2 + Math.sin(spreadAngle) * spread,
+                life,
+                maxLife: life,
+                color: dustColors[Math.floor(Math.random() * dustColors.length)],
+                size: baseSize,
+                baseSize: baseSize,
+                type: ParticleType.SPARK,
+                isDust: true
+            });
+        }
+    },
+
+
     // 生成手雷爆炸效果
     spawnGrenadeExplosion(x, y, radius) {
         // 冲击波环
@@ -486,20 +546,21 @@ export const EffectsManager = {
 
     // 生成跳弹特效（金属火花 + 灰色"resist!"文字）
     spawnRicochetEffect(x, y) {
-        // 银白色金属火花
-        const sparkColors = ['#E0E0E0', '#BDBDBD', '#CFD8DC', '#FFFFFF', '#90A4AE'];
-        for (let i = 0; i < 8; i++) {
+        // 银白色金属火花（增强版）
+        const sparkColors = ['#FFFFFF', '#E0E0E0', '#BDBDBD', '#CFD8DC', '#FFD700', '#FFA500'];
+        for (let i = 0; i < 15; i++) {  // 增加粒子数量：8 -> 15
             const angle = Math.random() * Math.PI * 2;
-            const speed = 2 + Math.random() * 3;
+            const speed = 3 + Math.random() * 4;  // 增加速度：2-5 -> 3-7
             this.particles.push({
                 x, y,
                 vx: Math.cos(angle) * speed,
-                vy: Math.sin(angle) * speed - 1.5,
-                life: 15 + Math.random() * 10,
-                maxLife: 25,
+                vy: Math.sin(angle) * speed - 2,  // 增加向上初速度
+                life: 25 + Math.random() * 15,  // 延长生命周期：15-25 -> 25-40
+                maxLife: 40,
                 color: sparkColors[Math.floor(Math.random() * sparkColors.length)],
-                size: 1.5 + Math.random() * 2,
-                type: ParticleType.SPARK
+                size: 2.5 + Math.random() * 3,  // 增加粒子尺寸：1.5-3.5 -> 2.5-5.5
+                type: ParticleType.SPARK,
+                isRicochetSpark: true  // 标记为跳弹火花，用于特殊渲染
             });
         }
         // 灰色 "resist!" 伤害数字
@@ -645,7 +706,10 @@ export const EffectsManager = {
             const p = this.particles[i];
             p.x += p.vx;
             p.y += p.vy;
-            p.vy += FX.GRAVITY;
+            // 尘土粒子不受重力影响
+            if (!p.isDust) {
+                p.vy += FX.GRAVITY;
+            }
             p.vx *= FX.DRAG;
             p.vy *= FX.DRAG;
             // 血滴粒子落地检测 → 转为永久血迹
@@ -752,6 +816,38 @@ export const EffectsManager = {
         }
     },
 
+    // 专门绘制尘土粒子（在车辆之前调用，让车辆覆盖尘土）
+    drawDustOnly(ctx, camera) {
+        if (this.particles.length === 0) return;
+        const zoom = camera.zoom || 1;
+        const offsetX = camera.offsetX || 0;
+        const offsetY = camera.offsetY || 0;
+        const logicalW = ctx.canvas.clientWidth || ctx.canvas.width;
+        const logicalH = ctx.canvas.clientHeight || ctx.canvas.height;
+        const cx = logicalW / 2;
+        const cy = logicalH / 2;
+        const toScreen = (wx, wy) => ({
+            x: (wx - camera.x) * zoom + cx * (1 - zoom) - offsetX,
+            y: (wy - camera.y) * zoom + cy * (1 - zoom) - offsetY
+        });
+
+        for (const p of this.particles) {
+            if (!p.isDust) continue;
+            const pos = toScreen(p.x, p.y);
+            const sx = pos.x + this.screenShake.x;
+            const sy = pos.y + this.screenShake.y;
+            const alpha = p.life / p.maxLife;
+            ctx.save();
+            const dustSize = (p.baseSize || p.size) * zoom;
+            ctx.globalAlpha = alpha * 0.8;
+            ctx.fillStyle = p.color;
+            ctx.beginPath();
+            ctx.arc(sx, sy, dustSize, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+    },
+
     // 绘制所有特效
     draw(ctx, camera) {
         const zoom = camera.zoom || 1;
@@ -815,13 +911,15 @@ export const EffectsManager = {
             ctx.restore();
         }
 
-        // 绘制粒子
+        // 绘制粒子（跳过尘土，已在 drawDustOnly 中绘制）
         for (const p of this.particles) {
+            if (p.isDust) continue;
             const pos = toScreen(p.x, p.y);
             const sx = pos.x + this.screenShake.x;
             const sy = pos.y + this.screenShake.y;
             const alpha = p.life / p.maxLife;
             ctx.save();
+            // 普通粒子
             ctx.globalAlpha = alpha;
             ctx.fillStyle = p.color;
             ctx.beginPath();

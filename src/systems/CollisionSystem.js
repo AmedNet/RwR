@@ -47,7 +47,7 @@ export const CollisionSystem = {
     /** 圆与矩形碰撞解决（用于地图房屋/山丘） */
     resolveCircleMap(entity) {
         const map = GameState.map;
-        if (!map) return;
+        if (!map) return null;
         const radius = entity.radius;
         const tileSize = map.tileSize;
         const minCol = Math.floor((entity.x - radius) / tileSize);
@@ -72,33 +72,141 @@ export const CollisionSystem = {
                     } else {
                         entity.x += radius;
                     }
-                    return;
+                    // 返回碰撞点（墙壁上离实体最近的点）
+                    return { x: closestX, y: closestY };
                 }
             }
         }
+        return null;
     },
 
     // ─── 主碰撞检测入口 ───
 
     checkAll() {
-        const { player, enemies, teammates, bullets, map } = GameState;
+        const { player, enemies, teammates, bullets, vehicles, map } = GameState;
         if (!player) return;
-        this._checkEntitiesVsMap(player, enemies, teammates);
+        this._checkEntitiesVsMap(player, enemies, teammates, vehicles);
+        this._checkVehicleImpacts(vehicles, [player, ...enemies, ...teammates]);
         this._checkBulletsVsMap(bullets, map);
         this._checkBulletVsBullet(bullets);
+        this._checkBulletsVsVehicles(bullets, vehicles);
         this._checkBulletsVsEntities(bullets, player, enemies, teammates);
         GameState.bullets = GameState.bullets.filter(b => b.alive);
-        // 清理死亡动画结束的敌人
         GameState.enemies = GameState.enemies.filter(e => e.alive);
+        GameState.vehicles = GameState.vehicles.filter(v => v.alive);
     },
 
     // ─── 实体 vs 地图 ───
 
-    _checkEntitiesVsMap(player, enemies, teammates) {
-        const allEntities = [player, ...enemies, ...teammates].filter(e => e && e.alive);
+    _checkEntitiesVsMap(player, enemies, teammates, vehicles = []) {
+        const allEntities = [player, ...enemies, ...teammates, ...vehicles]
+            .filter(e => e && e.alive && !e.mountedVehicle);
         for (const entity of allEntities) {
-            this.resolveCircleMap(entity);
+            const hitPoint = this.resolveCircleMap(entity);
+            // 如果是载具且发生了碰撞，通知载具
+            if (hitPoint && entity.hitObstacle) {
+                entity.hitObstacle(hitPoint);
+            }
         }
+    },
+
+    _checkVehicleImpacts(vehicles, entities) {
+        if (!vehicles || vehicles.length === 0) return;
+        // 车与车碰撞（OBB 贴合分离，每对只处理一次，避免互相镶嵌）
+        for (let i = 0; i < vehicles.length; i++) {
+            const a = vehicles[i];
+            if (!a.alive) continue;
+            for (let j = i + 1; j < vehicles.length; j++) {
+                const b = vehicles[j];
+                if (!b.alive) continue;
+                if (!a.overlapsEntity(b)) continue;
+                this._separateVehiclesOBB(a, b);
+            }
+        }
+
+        for (const vehicle of vehicles) {
+            if (!vehicle.alive) continue;
+            for (const entity of entities) {
+                if (!entity || !entity.alive || entity.mountedVehicle) continue;
+                if (!vehicle.overlapsEntity(entity)) continue;
+                // 先尝试用撞击伤害推开（需要车速）
+                const impactResult = vehicle.tryImpact(entity);
+                if (impactResult) {
+                    EffectsManager.spawnParticles(entity.x, entity.y, ParticleType.HIT, COLLISION_FX.HIT_PARTICLE_COUNT);
+                    EffectsManager.addDamageNumber(entity.x, entity.y, vehicle.impactDamage, entity === GameState.player);
+                } else {
+                    // 车速不足时也把实体推出车体外形，防止穿模
+                    this._pushEntityOutOfVehicle(entity, vehicle);
+                }
+            }
+        }
+    },
+
+    // 按车辆 OBB 朝向，将实体沿最小重叠轴推出车体外
+    _pushEntityOutOfVehicle(entity, vehicle) {
+        const dx = entity.x - vehicle.x;
+        const dy = entity.y - vehicle.y;
+        const ca = Math.cos(vehicle.angle);
+        const sa = Math.sin(vehicle.angle);
+        const forward = dx * ca + dy * sa;
+        const lateral = -dx * sa + dy * ca;
+        const halfF = vehicle.height / 2 + entity.radius;
+        const halfL = vehicle.width / 2 + entity.radius;
+        const overF = halfF - Math.abs(forward);
+        const overL = halfL - Math.abs(lateral);
+        if (overF <= 0 || overL <= 0) return;
+        if (overF < overL) {
+            const sign = forward >= 0 ? 1 : -1;
+            const nx = ca * sign;
+            const ny = sa * sign;
+            entity.x += nx * overF;
+            entity.y += ny * overF;
+        } else {
+            const sign = lateral >= 0 ? 1 : -1;
+            const nx = -sa * sign;
+            const ny = ca * sign;
+            entity.x += nx * overL;
+            entity.y += ny * overL;
+        }
+    },
+
+    // 两个载具按各自 OBB 朝向做最小平移分离（SAT，取两轴最小重叠）
+    _separateVehiclesOBB(a, b) {
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const axes = [
+            { x: Math.cos(a.angle), y: Math.sin(a.angle) },
+            { x: -Math.sin(a.angle), y: Math.cos(a.angle) },
+            { x: Math.cos(b.angle), y: Math.sin(b.angle) },
+            { x: -Math.sin(b.angle), y: Math.cos(b.angle) },
+        ];
+        let minOverlap = Infinity;
+        let mtvX = 0, mtvY = 0;
+        for (const ax of axes) {
+            const aF = Math.abs((dx) * ax.x + (dy) * ax.y);
+            // a 在该轴上的半投影
+            const aHalf = (a.height / 2) * Math.abs((Math.cos(a.angle) * ax.x + Math.sin(a.angle) * ax.y))
+                + (a.width / 2) * Math.abs((-Math.sin(a.angle) * ax.x + Math.cos(a.angle) * ax.y));
+            const bHalf = (b.height / 2) * Math.abs((Math.cos(b.angle) * ax.x + Math.sin(b.angle) * ax.y))
+                + (b.width / 2) * Math.abs((-Math.sin(b.angle) * ax.x + Math.cos(b.angle) * ax.y));
+            const overlap = aHalf + bHalf - aF;
+            if (overlap <= 0) return; // 该轴已分离
+            if (overlap < minOverlap) {
+                minOverlap = overlap;
+                mtvX = ax.x;
+                mtvY = ax.y;
+            }
+        }
+        // 法线方向指向把 b 推离 a
+        if (dx * mtvX + dy * mtvY < 0) {
+            mtvX = -mtvX;
+            mtvY = -mtvY;
+        }
+        const push = minOverlap * 0.5;
+        a.x -= mtvX * push;
+        a.y -= mtvY * push;
+        b.x += mtvX * push;
+        b.y += mtvY * push;
     },
 
     // ─── 子弹 vs 地图 ───
@@ -133,6 +241,38 @@ export const CollisionSystem = {
                 if (Math.sqrt(dx * dx + dy * dy) < b1.radius + b2.radius) {
                     b1.alive = false;
                     b2.alive = false;
+                    break;
+                }
+            }
+        }
+    },
+
+    // ─── 子弹 vs 载具 ───
+
+    _checkBulletsVsVehicles(bullets, vehicles) {
+        if (!vehicles || vehicles.length === 0) return;
+        for (let i = bullets.length - 1; i >= 0; i--) {
+            const bullet = bullets[i];
+            if (!bullet.alive) continue;
+            for (const v of vehicles) {
+                if (!v.alive) continue;
+                // 车内玩家的子弹从车体范围内发射，不应撞回自己的载具。
+                if (bullet.shooter && bullet.shooter.mountedVehicle === v) continue;
+                if (this._bulletHitsCircle(bullet, v)) {
+                    const windshieldHit = v.hitWindshield(bullet);
+                    const damage = windshieldHit ? windshieldHit.damage : bullet.damage;
+                    const hitX = windshieldHit ? windshieldHit.x : bullet.x;
+                    const hitY = windshieldHit ? windshieldHit.y : bullet.y;
+                    v.takeDamage(damage);
+                    if (windshieldHit) {
+                        EffectsManager.spawnGlassShards(hitX, hitY, windshieldHit.shattered ? 24 : 7);
+                        playRicochet(hitX);
+                    } else {
+                        EffectsManager.spawnParticles(hitX, hitY, ParticleType.SPARK, COLLISION_FX.SPARK_PARTICLE_COUNT);
+                        playBulletHit(hitX);
+                    }
+                    EffectsManager.addDamageNumber(hitX, hitY, Math.floor(damage), false);
+                    bullet.alive = false;
                     break;
                 }
             }

@@ -46,9 +46,14 @@ export class CombatAI extends Entity {
     static WANDER_SEARCH_ATTEMPTS = 20;
     static FLANK_RADII = [180, 240, 320];
     static FLANK_OFFSETS = [Math.PI / 2, -Math.PI / 2, Math.PI / 3, -Math.PI / 3, Math.PI];
+    static MOVE_TARGET_CACHE_FRAMES = 10;
+    static MOVE_TARGET_REPLAN_DISTANCE = 70;
+    static MOVE_TARGET_REACHED_DISTANCE = 24;
     static OBSTACLE_DIST_MIN = 100;
     static OBSTACLE_DIST_MAX = 240;
     static OBSTACLE_DIST_FACTOR = 0.35;
+    static OBSTACLE_CACHE_FRAMES = 24;
+    static OBSTACLE_CACHE_REPLAN_DISTANCE = 90;
     // 武器/射击常量
     static WEAPON_DRAW_HEIGHT = 40;
     static MELEE_LINE_LENGTH = 25;
@@ -68,6 +73,8 @@ export class CombatAI extends Entity {
         launcher: 40,    // 火箭筒：0.67秒
         default: 20      // 默认：0.33秒
     };
+    // 载具射击范围
+    static VEHICLE_ENGAGE_RANGE = 500;
 
     constructor(x, y, entityConfig, aiConfig) {
         super(x, y, entityConfig);
@@ -87,6 +94,8 @@ export class CombatAI extends Entity {
         this.wanderTarget = null;
         this.wanderTimer = 0;
         this.stuckState = { timer: 0, lastX: x, lastY: y, fallbackPoints: null };
+        this.moveTargetCache = { point: null, timer: 0 };
+        this.obstacleTargetCache = { point: null, original: null, timer: 0 };
         this.cycleTimer = Math.random() * 1000;
         this.weapons = [null, null, null, null];
         this.activeWeaponSlot = 1;
@@ -119,6 +128,9 @@ export class CombatAI extends Entity {
         // 头盔系统
         this.helmet = HelmetTier.NONE;
         this.helmetVariant = 0;
+        // 载具射击冷却
+        this._vehicleAimTimer = 0;
+        this._vehicleTarget = null;
     }
 
     // ─── 军衔系统方法 ───
@@ -294,6 +306,22 @@ export class CombatAI extends Entity {
         // 倒计时
         if (this.aimTimer > 0) {
             this.aimTimer--;
+            return false;
+        }
+        return true;
+    }
+
+    updateVehicleAim(target) {
+        // 载具中的瞄准逻辑，使用独立的计时器
+        if (this._vehicleTarget !== target) {
+            this._vehicleTarget = target;
+            const weapon = this.getActiveWeapon();
+            // 载具中瞄准更快（移动目标变化快）
+            const delay = Math.floor(this.getAimDelay(weapon) * 0.5);
+            this._vehicleAimTimer = delay;
+        }
+        if (this._vehicleAimTimer > 0) {
+            this._vehicleAimTimer--;
             return false;
         }
         return true;
@@ -554,6 +582,107 @@ export class CombatAI extends Entity {
         evaluateWeaponChoice(this, closestDist, closestTarget);
     }
 
+    // ─── 载具战斗方法 ───
+
+    /**
+     * 在载具中更新AI战斗逻辑（由Vehicle.updatePassengers调用）
+     * @param {import('./Vehicle.js').Vehicle} vehicle
+     */
+    updateVehicleCombat(vehicle) {
+        if (!vehicle || !vehicle.alive || !this.alive) return;
+
+        // 更新座位置（使用座位世界坐标）
+        const seatPos = vehicle.getSeatWorldPosition(this.vehicleSeat);
+        this.x = seatPos.x;
+        this.y = seatPos.y;
+
+        // 更新武器相关
+        this.updateStatusEffects();
+        const weapon = this.getActiveWeapon();
+        if (weapon) {
+            weapon.updateReload();
+            weapon.updateRecoilAndSpread();
+        }
+
+        // 自动换弹
+        if (weapon && weapon.ammo === 0 && !weapon.isReloading && weapon.config.type !== 'melee') {
+            if (weapon.isInfiniteAmmo || weapon.config.type !== 'launcher') {
+                weapon.startReload();
+                if (weapon.isInfiniteAmmo) SoundManager.playReload(weapon.config.type, this);
+            }
+        }
+
+        // 寻找最近的敌人
+        let closestTarget = null;
+        let closestDist = Infinity;
+        const engageRange = CombatAI.VEHICLE_ENGAGE_RANGE;
+        for (const target of this.getTargets()) {
+            if (!target.alive) continue;
+            const d = Math.hypot(target.x - this.x, target.y - this.y);
+            if (d < engageRange && d < closestDist) {
+                if (this.hasLineBetween({ x: this.x, y: this.y }, target)) {
+                    closestTarget = target;
+                    closestDist = d;
+                }
+            }
+        }
+
+        if (!weapon || !closestTarget) return;
+
+        // 武器选择（在载具中只使用主武器槽1）
+        if (this.activeWeaponSlot !== 1 && this.weapons[1]) {
+            this.activeWeaponSlot = 1;
+        }
+
+        // 射击冷却和瞄准
+        if (this.shootCooldown > 0) {
+            this.shootCooldown--;
+        } else if (this.updateVehicleAim(closestTarget)) {
+            // 载具中的射击方向——从座位指向目标
+            const angle = Math.atan2(closestTarget.y - this.y, closestTarget.x - this.x);
+            const speed = weapon.config.bulletSpeed || this.bulletSpeed;
+            const predicted = this.predictTargetPosition(closestTarget, speed);
+            const fireAngle = Math.atan2(predicted.y - this.y, predicted.x - this.x);
+            const angleOffset = weapon.getShotAngleOffset();
+
+            if (weapon.config.type === 'shotgun') {
+                const pellets = weapon.config.pellets || 8;
+                const spreadAngle = weapon.config.spreadAngle || 0.35;
+                for (let i = 0; i < pellets; i++) {
+                    const pelletAngle = fireAngle + (Math.random() - 0.5) * spreadAngle + angleOffset;
+                    this.spawnBullet(pelletAngle, speed, weapon, weapon.config.range || 250);
+                }
+            } else if (weapon.config.arcRange) {
+                GameState.bullets.push(new GrenadeBullet(
+                    this.x, this.y,
+                    predicted.x, predicted.y,
+                    weapon.config,
+                    this
+                ));
+            } else {
+                this.spawnBullet(fireAngle + angleOffset, speed, weapon, null);
+            }
+
+            // 播放枪声和枪口火焰
+            const weaponType = weapon.config.type;
+            if (['pistol', 'rifle', 'smg', 'shotgun', 'sniper', 'launcher'].includes(weaponType)) {
+                SoundManager.playShoot(weaponType, this);
+                EffectsManager.spawnMuzzleFlash(this.x, this.y, fireAngle, weaponType);
+            }
+
+            weapon.consumeAmmo();
+            weapon.applyRecoilAndSpread();
+            this.shootCooldown = weapon.config.shootDelay;
+
+            // 抛壳
+            const noShellTypes = ['melee', 'grenade', 'medical', 'launcher'];
+            if (!noShellTypes.includes(weaponType)) {
+                EffectsManager.spawnShellCasing(this.x, this.y, weaponType);
+                SoundManager.playShellEject(weaponType, this);
+            }
+        }
+    }
+
     update() {
         if (this.dying) {
             this.deathTimer--;
@@ -561,6 +690,11 @@ export class CombatAI extends Entity {
             return;
         }
         if (!this.alive) return;
+        if (this.mountedVehicle) {
+            this.x = this.mountedVehicle.x;
+            this.y = this.mountedVehicle.y;
+            return;
+        }
         this.updateStatusEffects();
         this.savePrevPosition();
 
@@ -601,11 +735,15 @@ export class CombatAI extends Entity {
         const targetMove = this.chooseMoveTarget(closestTarget, closestDist, captureTarget);
 
         if (targetMove) {
-            const moveTarget = this.getMoveTargetAroundObstacles(targetMove);
+            const stableTarget = this.stabilizeMoveTarget(targetMove);
+            const moveTarget = this.getMoveTargetAroundObstacles(stableTarget);
             const originalSpeed = this.speed;
             this.speed *= this.getSpeedMultiplier();
             MovementSystem.moveToward(this, moveTarget.x, moveTarget.y, this.stuckState);
             this.speed = originalSpeed;
+        } else {
+            this.moveTargetCache.point = null;
+            this.obstacleTargetCache.point = null;
         }
 
         if (closestTarget) this.switchWeaponBasedOnCombat(closestTarget, closestDist);
@@ -646,6 +784,24 @@ export class CombatAI extends Entity {
 
         this.cycleTimer++;
         this.tryPickupWeapon();
+    }
+
+    stabilizeMoveTarget(target) {
+        const cache = this.moveTargetCache;
+        const cached = cache.point;
+        const shouldRefresh = !cached ||
+            cache.timer <= 0 ||
+            Math.hypot(target.x - cached.x, target.y - cached.y) > CombatAI.MOVE_TARGET_REPLAN_DISTANCE ||
+            Math.hypot(this.x - cached.x, this.y - cached.y) < CombatAI.MOVE_TARGET_REACHED_DISTANCE;
+
+        if (shouldRefresh) {
+            cache.point = { x: target.x, y: target.y };
+            cache.timer = CombatAI.MOVE_TARGET_CACHE_FRAMES;
+        } else {
+            cache.timer--;
+        }
+
+        return cache.point;
     }
 
     chooseMoveTarget(closestTarget, closestDist, captureTarget) {
@@ -799,7 +955,23 @@ export class CombatAI extends Entity {
 
     getMoveTargetAroundObstacles(target) {
         const map = GameState.map;
-        if (!map || this.hasLineBetween(this, target)) return target;
+        if (!map || this.hasLineBetween(this, target)) {
+            this.obstacleTargetCache.point = null;
+            return target;
+        }
+
+        const cache = this.obstacleTargetCache;
+        if (cache.point && cache.original && cache.timer > 0) {
+            const targetShift = Math.hypot(target.x - cache.original.x, target.y - cache.original.y);
+            const cacheDist = Math.hypot(this.x - cache.point.x, this.y - cache.point.y);
+            if (targetShift < CombatAI.OBSTACLE_CACHE_REPLAN_DISTANCE &&
+                cacheDist > CombatAI.MOVE_TARGET_REACHED_DISTANCE &&
+                map.isWalkable(cache.point.x, cache.point.y, this.radius) &&
+                this.hasLineBetween(this, cache.point)) {
+                cache.timer--;
+                return cache.point;
+            }
+        }
 
         const angle = Math.atan2(target.y - this.y, target.x - this.x);
         const dist = Math.min(CombatAI.OBSTACLE_DIST_MAX, Math.max(CombatAI.OBSTACLE_DIST_MIN, Math.hypot(target.x - this.x, target.y - this.y) * CombatAI.OBSTACLE_DIST_FACTOR));
@@ -822,7 +994,15 @@ export class CombatAI extends Entity {
                 bestScore = score;
             }
         }
-        return best || target;
+        if (!best) {
+            cache.point = null;
+            return target;
+        }
+
+        cache.point = { x: best.x, y: best.y };
+        cache.original = { x: target.x, y: target.y };
+        cache.timer = CombatAI.OBSTACLE_CACHE_FRAMES;
+        return cache.point;
     }
 
     getEngageRange(weapon) {
@@ -901,7 +1081,8 @@ export class CombatAI extends Entity {
                 weapon.consumeAmmo();
                 if (weapon.ammo <= 0) this.weapons[this.activeWeaponSlot] = null;
                 this.shootCooldown = 20;
-                this.healSwitchTimer = 60;            }
+                this.healSwitchTimer = 60;
+            }
             return;
         }
 
@@ -947,14 +1128,14 @@ export class CombatAI extends Entity {
             this.spawnBullet(baseAngle, speed, weapon, null);
         }
 
-       if (['pistol', 'rifle', 'smg', 'shotgun', 'sniper', 'launcher'].includes(weaponType)) {
-           SoundManager.playShoot(weaponType, this);
-           EffectsManager.spawnMuzzleFlash(this.x, this.y, baseAngle, weaponType);
+        if (['pistol', 'rifle', 'smg', 'shotgun', 'sniper', 'launcher'].includes(weaponType)) {
+            SoundManager.playShoot(weaponType, this);
+            EffectsManager.spawnMuzzleFlash(this.x, this.y, baseAngle, weaponType);
             // 火箭筒：额外生成后焰喷射效果
             if (weaponType === 'launcher' && weapon.config.hasBackblast !== false) {
                 EffectsManager.spawnBackblast(this.x, this.y, baseAngle);
             }
-       }
+        }
 
         weapon.consumeAmmo();
         weapon.applyRecoilAndSpread();
@@ -1066,7 +1247,7 @@ export class CombatAI extends Entity {
         this.drawStatusEffects(ctx);
     }
 
-    drawBody(ctx, weaponAngle) {
+    drawBody(ctx, weaponAngle, showRankStars = true) {
         ctx.save();
         ctx.beginPath();
         ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
@@ -1075,7 +1256,7 @@ export class CombatAI extends Entity {
         ctx.strokeStyle = this.getRoleStroke();
         ctx.lineWidth = 3;
         ctx.stroke();
-        if (this.rank > AIRank.PRIVATE) {
+        if (showRankStars && this.rank > AIRank.PRIVATE) {
             this.drawRankStars(ctx);
         }
 
@@ -1185,6 +1366,9 @@ export class CombatAI extends Entity {
         }
         if (this.health <= 0) {
             this.health = 0;
+            if (this.mountedVehicle) {
+                this.mountedVehicle.unmount(this);
+            }
             if (!this.dying) {
                 if (this.faction === 'enemy') {
                     // 敌人：死亡动画（淡出缩小 + 粒子）

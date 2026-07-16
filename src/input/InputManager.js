@@ -8,13 +8,15 @@ import { WeaponPickup } from '../entities/WeaponPickup.js';
 import { LootPickup } from '../entities/LootPickup.js';
 import { LootRegistry, Rarity } from '../core/LootRegistry.js';
 import { LootItem } from '../core/LootItem.js';
-import { playPickup, playUISound, playRadioClose } from '../utils/SoundManager.js';
+import { playPickup, playUISound, playRadioClose, playVehicleHorn } from '../utils/SoundManager.js';
 import { WeatherSystem } from '../core/WeatherSystem.js';
 import { DayNightSystem } from '../core/DayNightSystem.js';
 import { AmbientSoundManager } from '../utils/AmbientSoundManager.js';
 import { SupportSystem } from '../core/SupportSystem.js';
 
 export const InputManager = {
+    seatModifierPressed: false,
+
     setup() {
         const canvas = document.getElementById('gameCanvas');
 
@@ -294,6 +296,26 @@ export const InputManager = {
             }
 
             // ====== \u6B63\u5E38\u6E38\u620F\u64CD\u4F5C ======
+            if (key === 'c') {
+                InputManager.seatModifierPressed = true;
+                e.preventDefault();
+                return;
+            }
+
+            const seatNumber = parseInt(e.key);
+            if (InputManager.seatModifierPressed && Number.isInteger(seatNumber)) {
+                if (seatNumber >= 1 && seatNumber <= 3) {
+                    const player = GameState.player;
+                    if (player && player.mountedVehicle) {
+                        const vehicle = player.mountedVehicle;
+                        vehicle.changeSeat(player, seatNumber - 1);
+                        if (player.vehicleSeat === 0) vehicle.boardNearbyTeammates();
+                    }
+                }
+                e.preventDefault();
+                return;
+            }
+
             if (key === '9') { GameState.debugKey9Pressed = true; }
             if (key === '1' && GameState.debugKey9Pressed) {
                 GameState.debugOpen = true;
@@ -305,6 +327,9 @@ export const InputManager = {
             if (key === 'k') {
                 if (GameState.player && GameState.player.alive) {
                     GameState.suicideDeath = true;
+                    if (GameState.player.mountedVehicle) {
+                        GameState.player.mountedVehicle.unmount(GameState.player);
+                    }
                     GameState.player.alive = false;
                     GameState.player.health = 0;
                     GameState.gameOver = true;
@@ -339,15 +364,52 @@ export const InputManager = {
                 return;
             }
 
-            // F \u952E\uFF1A\u62FE\u53D6\u5730\u9762\u6B66\u5668/\u6218\u5229\u54C1
+            // H 键：吉普车喇叭
+            if (key === 'h') {
+                if (GameState.player && GameState.player.mountedVehicle) {
+                    playVehicleHorn(GameState.player.mountedVehicle);
+                }
+                e.preventDefault();
+                return;
+            }
+
+            // F 键：上下车 / 拾取地面物品
             if (key === 'f') {
                 if (GameState.player && GameState.player.alive) {
                     const player = GameState.player;
+
+                    // 已在车上 → 下车
+                    if (player.mountedVehicle) {
+                        player.mountedVehicle.unmount(player);
+                        console.log('🚙 下车');
+                        e.preventDefault();
+                        return;
+                    }
+
+                    // 未上车 → 检测附近载具
+                    let nearestVehicle = null;
+                    let nearestVehDist = Infinity;
+                    for (const v of GameState.vehicles) {
+                        if (!v.alive || v.occupied) continue;
+                        const dist = Math.hypot(v.x - player.x, v.y - player.y);
+                        if (dist < v.mountRange && dist < nearestVehDist) {
+                            nearestVehDist = dist;
+                            nearestVehicle = v;
+                        }
+                    }
+                    if (nearestVehicle) {
+                        nearestVehicle.mount(player, 0);
+                        nearestVehicle.boardNearbyTeammates();
+                        console.log('🚙 上车！驾驶 ' + nearestVehicle.name + '，乘客 ' + nearestVehicle.occupants.filter(Boolean).length + '/' + nearestVehicle.passengerCapacity);
+                        e.preventDefault();
+                        return;
+                    }
+
                     let nearestPickup = null;
                     let nearestDist = Infinity;
                     let pickupType = null; // 'weapon' or 'loot'
 
-                    // \u641C\u7D22\u6B66\u5668\u6389\u843D\u7269
+                    // 搜索武器掉落物
                     for (const pickup of GameState.weaponPickups) {
                         if (!pickup.alive) continue;
                         if (pickup.canPickup(player)) {
@@ -359,7 +421,7 @@ export const InputManager = {
                             }
                         }
                     }
-                    // \u641C\u7D22\u6218\u5229\u54C1\u6389\u843D\u7269
+                    // 搜索战利品掉落物
                     for (const loot of GameState.lootPickups) {
                         if (!loot.alive) continue;
                         if (loot.canPickup(player)) {
@@ -373,7 +435,7 @@ export const InputManager = {
                     }
 
                     if (nearestPickup) {
-                        // \u627E\u5230\u7A7A\u80CC\u5305\u69FD\u4F4D
+                        // 找到空背包槽位
                         let targetSlot = -1;
                         for (let i = 0; i < GameState.inventory.length; i++) {
                             if (!GameState.inventory[i]) { targetSlot = i; break; }
@@ -383,9 +445,9 @@ export const InputManager = {
                             const lootItem = new LootItem(nearestPickup.lootId);
                             if (targetSlot >= 0) {
                                 GameState.inventory[targetSlot] = lootItem;
-                                console.log(`\u{1F381} \u62FE\u53D6\u6218\u5229\u54C1 ${lootItem.config.name} \u5230\u69FD\u4F4D ${targetSlot + 1}`);
+                                console.log('🎁 拾取战利品 ' + lootItem.config.name + ' 到槽位 ' + (targetSlot + 1));
                             } else {
-                                // \u80CC\u5305\u6EE1\u4E86\uFF0C\u66FF\u6362\u5F53\u524D\u7269\u54C1
+                                // 背包满了，替换当前物品
                                 const currentSlot = GameState.activeWeaponSlot;
                                 const oldItem = GameState.inventory[currentSlot];
                                 if (oldItem) {
@@ -394,16 +456,16 @@ export const InputManager = {
                                     } else {
                                         GameState.weaponPickups.push(new WeaponPickup(player.x, player.y, oldItem));
                                     }
-                                    console.log(`\u{1F504} \u4E22\u5F03 ${oldItem.config.name}`);
+                                    console.log('🔄 丢弃 ' + oldItem.config.name);
                                 }
                                 GameState.inventory[currentSlot] = lootItem;
-                                console.log(`\u{1F381} \u62FE\u53D6\u6218\u5229\u54C1 ${lootItem.config.name} \u66FF\u6362\u5F53\u524D\u7269\u54C1`);
+                                console.log('🎁 拾取战利品 ' + lootItem.config.name + ' 替换当前物品');
                             }
                         } else {
-                            // \u62FE\u53D6\u6B66\u5668
+                            // 拾取武器
                             if (targetSlot >= 0) {
                                 GameState.inventory[targetSlot] = nearestPickup.weapon;
-                                console.log(`\u{1F52B} \u62FE\u53D6 ${nearestPickup.weapon.config.name} \u5230\u69FD\u4F4D ${targetSlot + 1}`);
+                                console.log('🔫 拾取 ' + nearestPickup.weapon.config.name + ' 到槽位 ' + (targetSlot + 1));
                             } else {
                                 const currentSlot = GameState.activeWeaponSlot;
                                 const oldWeapon = GameState.inventory[currentSlot];
@@ -413,10 +475,10 @@ export const InputManager = {
                                     } else {
                                         GameState.weaponPickups.push(new WeaponPickup(player.x, player.y, oldWeapon));
                                     }
-                                    console.log(`\u{1F504} \u4E22\u5F03 ${oldWeapon.config.name}`);
+                                    console.log('🔄 丢弃 ' + oldWeapon.config.name);
                                 }
                                 GameState.inventory[currentSlot] = nearestPickup.weapon;
-                                console.log(`\u{1F52B} \u62FE\u53D6 ${nearestPickup.weapon.config.name} \u66FF\u6362\u5F53\u524D\u6B66\u5668`);
+                                console.log('🔫 拾取 ' + nearestPickup.weapon.config.name + ' 替换当前武器');
                             }
                         }
 
@@ -428,6 +490,7 @@ export const InputManager = {
                 e.preventDefault();
                 return;
             }
+
 
             // E \u952E\uFF1A\u6253\u5F00/\u5173\u95ED\u519B\u69B0\u5E93
             if (key === 'e') {
@@ -464,6 +527,7 @@ export const InputManager = {
 
         document.addEventListener('keyup', (e) => {
             const key = e.key.toLowerCase();
+            if (key === 'c') InputManager.seatModifierPressed = false;
             if (key in GameState.keys) {
                 GameState.keys[key] = false;
                 e.preventDefault();
@@ -747,7 +811,10 @@ export const InputManager = {
             }
         });
 
-        window.addEventListener('blur', () => { GameState.mouse.down = false; });
+        window.addEventListener('blur', () => {
+            GameState.mouse.down = false;
+            InputManager.seatModifierPressed = false;
+        });
 
         // \u53F3\u952E\u83DC\u5355
         canvas.addEventListener('contextmenu', (e) => {

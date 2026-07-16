@@ -38,6 +38,8 @@ export const MovementSystem = {
         if (!moved) {
             moved = this.slideMove(entity, normX, normY, finalSpeed);
         }
+        const safeX = entity.x;
+        const safeY = entity.y;
 
         // 雪地惯性：积累滑移速度
         if (isSnow && moved) {
@@ -76,6 +78,13 @@ export const MovementSystem = {
         const world = GameState.config.world;
         entity.x = Math.max(entity.radius, Math.min(world.width - entity.radius, entity.x));
         entity.y = Math.max(entity.radius, Math.min(world.height - entity.radius, entity.y));
+
+        if (GameState.map && !GameState.map.isWalkable(entity.x, entity.y, entity.radius)) {
+            entity.x = safeX;
+            entity.y = safeY;
+            entity.slipVX = 0;
+            entity.slipVY = 0;
+        }
 
         // 卡住检测
         if (stuckState) {

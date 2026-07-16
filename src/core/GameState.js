@@ -10,6 +10,9 @@ export const GameState = {
     capturePoints: [],
     weaponPickups: [], // 地面掉落的武器
     lootPickups: [],   // 地面掉落的战利品
+    vehicles: [],     // 载具
+    maxVehicles: 4,   // 战场上同时存在的吉普上限
+    vehicleSpawnTimer: 0, // 吉普据点刷新计时器（帧）
     arsenal: null, // 军械库实例
     arsenalOpen: false, // 军械库界面是否打开
     inventory: [null, null, null, null, null, null, null], // 背包，7个位置，存储 Weapon 实例或 null
@@ -94,6 +97,8 @@ export const GameState = {
         this.bullets = [];
         this.weaponPickups = [];
         this.lootPickups = [];
+        this.vehicles = [];
+        this.vehicleSpawnTimer = 0;
         // 据点不重置，它们是地图的一部分，由 initCapturePoints 一次性生成
         this.kills = 0;
         this.score = 0;

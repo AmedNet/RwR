@@ -2,12 +2,69 @@
 import { GameState } from '../core/GameState.js';
 import { RARITY_COLORS, RARITY_NAMES } from '../core/LootRegistry.js';
 
+const vehicleHUDImage = new Image();
+vehicleHUDImage.src = 'src/pkg/vehicle/jeep/jeep_uhd.png';
+let vehicleHUDImageLoaded = false;
+vehicleHUDImage.onload = () => { vehicleHUDImageLoaded = true; };
+
+// 后续调整吉普 HUD 贴图大小时，只需修改 imageSize。
+const VEHICLE_HUD_STYLE = {
+    imageSize: 62,
+    panelWidth: 200,
+    panelHeight: 80,
+    right: 15,
+    bottom: 80
+};
+
+function drawVehicleHUD(ctx, renderer, vehicle) {
+    const { imageSize, panelWidth, panelHeight, right, bottom } = VEHICLE_HUD_STYLE;
+    const panelX = renderer.width - panelWidth - right;
+    const panelY = renderer.height - panelHeight - bottom;
+    const imageX = panelX + 8;
+    const imageY = panelY + (panelHeight - imageSize) / 2;
+    const hpRatio = Math.max(0, Math.min(1, vehicle.health / vehicle.maxHealth));
+    const hpColor = hpRatio > 0.5 ? '#4CAF50' : hpRatio > 0.25 ? '#FF9800' : '#F44336';
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx.beginPath();
+    ctx.roundRect(panelX, panelY, panelWidth, panelHeight, 10);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    if (vehicleHUDImageLoaded) {
+        ctx.drawImage(vehicleHUDImage, imageX, imageY, imageSize, imageSize);
+    }
+
+    const infoX = imageX + imageSize + 10;
+    const barWidth = panelX + panelWidth - infoX - 10;
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 14px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(vehicle.name, infoX, panelY + 24);
+
+    ctx.fillStyle = 'rgba(255,255,255,0.65)';
+    ctx.font = 'bold 12px sans-serif';
+    ctx.fillText(`${Math.ceil(vehicle.health)}/${vehicle.maxHealth}`, infoX, panelY + 43);
+    ctx.fillStyle = 'rgba(255,255,255,0.18)';
+    ctx.fillRect(infoX, panelY + 55, barWidth, 9);
+    ctx.fillStyle = hpColor;
+    ctx.fillRect(infoX, panelY + 55, barWidth * hpRatio, 9);
+}
+
 export function drawWeaponHUD(ctx, renderer) {
     ctx.save();
 
     // 右下角当前物品详情（毛玻璃背景）
     const weapon = GameState.getActiveWeapon();
-    if (weapon) {
+    const drivenVehicle = GameState.player?.vehicleSeat === 0
+        ? GameState.player.mountedVehicle
+        : null;
+    if (drivenVehicle) {
+        drawVehicleHUD(ctx, renderer, drivenVehicle);
+    } else if (weapon) {
         const panelW = 200;
         const panelH = 80;
         const panelX = renderer.width - panelW - 15;

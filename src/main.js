@@ -21,6 +21,8 @@ import { WeatherSystem } from './core/WeatherSystem.js';
 import { DayNightSystem } from './core/DayNightSystem.js';
 import { AmbientSoundManager } from './utils/AmbientSoundManager.js';
 import { SupportSystem } from './core/SupportSystem.js';
+import { Vehicle } from "./entities/Vehicle.js";
+import { VehicleRegistry } from "./core/VehicleRegistry.js";
 
 // ---------- 配置 ----------
 const CONFIG = {
@@ -200,6 +202,73 @@ function initCapturePoints() {
 
     // 生成军械库（在友方后方，即玩家据点的左侧）
     initArsenal(playerPoints);
+}
+
+// ---------- 载具生成 ----------
+// 在指定坐标周围随机可行走处生成一辆吉普，成功返回 true
+function spawnVehicleNear(x, y, spawnRadius = 200) {
+    const map = GameState.map;
+    if (!map) return false;
+    for (let attempts = 0; attempts < 200; attempts++) {
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 80 + Math.random() * (spawnRadius - 80);
+        const wx = x + Math.cos(angle) * dist;
+        const wy = y + Math.sin(angle) * dist;
+        if (!map.isWalkable(wx, wy, VehicleRegistry.jeep.radius)) continue;
+        GameState.vehicles.push(new Vehicle(wx, wy, VehicleRegistry.jeep));
+        return true;
+    }
+    return false;
+}
+
+function initVehicles() {
+    const points = GameState.capturePoints;
+    if (!points || points.length === 0) return;
+    const max = GameState.maxVehicles;
+    console.log("🚙 在据点附近生成吉普车（上限 " + max + " 辆）...");
+
+    // 打乱据点顺序，从每个据点旁尝试生成，直到达到上限
+    const shuffled = [...points].sort(() => Math.random() - 0.5);
+    for (const p of shuffled) {
+        if (GameState.vehicles.length >= max) break;
+        spawnVehicleNear(p.x, p.y);
+    }
+    console.log("✅ 载具生成完成: " + GameState.vehicles.length + " 辆");
+}
+
+// 持续刷新：场上吉普不足上限时，每隔一段时间在随机据点旁补刷
+const VEHICLE_RESPAWN_INTERVAL = 360; // 约 6 秒（60fps）检查一次
+function updateVehicleSpawns() {
+    if (GameState.vehicleSpawnTimer > 0) {
+        GameState.vehicleSpawnTimer--;
+        return;
+    }
+    if (GameState.vehicles.length >= GameState.maxVehicles) {
+        GameState.vehicleSpawnTimer = VEHICLE_RESPAWN_INTERVAL;
+        return;
+    }
+    const points = GameState.capturePoints;
+    if (!points || points.length === 0) {
+        GameState.vehicleSpawnTimer = VEHICLE_RESPAWN_INTERVAL;
+        return;
+    }
+    
+    // 过滤掉距离玩家太近的据点（避免在视野内刷车）
+    const player = GameState.player;
+    const minSpawnDistance = 600; // 至少 600 像素外
+    const safePoints = player && player.alive
+        ? points.filter(p => Math.hypot(p.x - player.x, p.y - player.y) > minSpawnDistance)
+        : points;
+    
+    if (safePoints.length === 0) {
+        // 所有据点都太近，跳过这次刷新
+        GameState.vehicleSpawnTimer = VEHICLE_RESPAWN_INTERVAL;
+        return;
+    }
+    
+    const p = safePoints[Math.floor(Math.random() * safePoints.length)];
+    spawnVehicleNear(p.x, p.y);
+    GameState.vehicleSpawnTimer = VEHICLE_RESPAWN_INTERVAL;
 }
 
 // ---------- 初始化军械库 ----------
@@ -429,6 +498,8 @@ function gameLoop() {
     for (const point of GameState.capturePoints) {
         point.update();
     }
+    // 据点刷新吉普（上限内、炸毁后自动补刷）
+    updateVehicleSpawns();
     // 玩家仅在存活时更新
     if (GameState.player && !GameState.gameOver) GameState.player.update();
     SpawnSystem.update();
@@ -486,6 +557,7 @@ function init() {
     initCapturePoints();
 
     resetGame();
+    initVehicles();
     console.log('✅ 游戏重置完成，准备开始循环');
 
     // ---- 事件监听 ----
@@ -541,7 +613,8 @@ function init() {
         // 破片伤害：对爆炸半径内所有实体造成距离衰减伤害
         const entities = [
             ...GameState.enemies.filter(e => e.alive),
-            ...GameState.teammates.filter(t => t.alive)
+            ...GameState.teammates.filter(t => t.alive),
+            ...GameState.vehicles.filter(v => v.alive)
         ];
         if (GameState.player && GameState.player.alive) {
             entities.push(GameState.player);

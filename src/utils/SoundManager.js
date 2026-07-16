@@ -5,6 +5,12 @@ let actx = null;
 let masterGain = null;
 let audioUnlocked = false;
 let listenerProvider = null;
+let vehicleHornAudio = null;
+let vehicleEngineBuffer = null;
+let vehicleEngineLoadPromise = null;
+// 每辆车独立的引擎音效实例，key 为 vehicle 引用
+const vehicleEngineVoices = new Map();
+let vehicleEngineStartToken = 0;
 
 // 初始化 AudioContext（立即创建，而不是延迟创建）
 function initAudio() {
@@ -59,6 +65,94 @@ export function getAudioContext() {
 
 export function setListenerProvider(provider) {
   listenerProvider = provider;
+}
+
+function getVehicleAudio(path, loop = false) {
+  const audio = new Audio(path);
+  audio.loop = loop;
+  audio.preload = 'auto';
+  return audio;
+}
+
+function loadVehicleEngineBuffer() {
+  if (vehicleEngineBuffer) return Promise.resolve(vehicleEngineBuffer);
+  if (!vehicleEngineLoadPromise) {
+    vehicleEngineLoadPromise = fetch('src/pkg/vehicle/jeep/jeep_loop.wav')
+      .then(response => response.arrayBuffer())
+      .then(data => getCtx().decodeAudioData(data))
+      .then(buffer => {
+        vehicleEngineBuffer = buffer;
+        return buffer;
+      })
+      .catch(error => {
+        vehicleEngineLoadPromise = null;
+        console.warn('发动机音效加载失败:', error);
+        return null;
+      });
+  }
+  return vehicleEngineLoadPromise;
+}
+
+export function startVehicleEngine(vehicle = null) {
+  const c = getCtx();
+  const source = vehicle || 0;
+  const targetVolume = Math.min(0.45, 0.45 * getDistanceVolume(source, 1000, 1.2));
+  
+  // 如果这辆车已有引擎音效，调整音量
+  const existingVoice = vehicleEngineVoices.get(vehicle);
+  if (existingVoice) {
+    const now = c.currentTime;
+    existingVoice.gain.gain.cancelScheduledValues(now);
+    existingVoice.gain.gain.setTargetAtTime(targetVolume, now, 0.08);
+    return;
+  }
+  
+  const startToken = ++vehicleEngineStartToken;
+  loadVehicleEngineBuffer().then(buffer => {
+    if (!buffer || startToken !== vehicleEngineStartToken) return;
+    if (vehicleEngineVoices.has(vehicle)) return; // 已被其他调用创建
+    
+    const now = c.currentTime;
+    const engineSource = c.createBufferSource();
+    const engineGain = c.createGain();
+    engineSource.buffer = buffer;
+    engineSource.loop = true;
+    engineSource.playbackRate.value = 0.82;
+    engineGain.gain.setValueAtTime(0, now);
+    engineGain.gain.linearRampToValueAtTime(targetVolume, now + 0.45);
+    engineSource.connect(engineGain).connect(masterGain);
+    engineSource.start(now);
+    vehicleEngineVoices.set(vehicle, { source: engineSource, gain: engineGain });
+  });
+}
+
+export function updateVehicleEngine(vehicle = null, speedRatio = 0) {
+  const voice = vehicleEngineVoices.get(vehicle);
+  if (!voice) return;
+  const ratio = Math.max(0, Math.min(1, speedRatio));
+  const targetRate = 0.82 + ratio * 0.48;
+  voice.source.playbackRate.setTargetAtTime(targetRate, getCtx().currentTime, 0.08);
+}
+
+export function stopVehicleEngine(vehicle = null) {
+  vehicleEngineStartToken++;
+  const voice = vehicleEngineVoices.get(vehicle);
+  if (!voice) return;
+  const c = getCtx();
+  const now = c.currentTime;
+  vehicleEngineVoices.delete(vehicle);
+  voice.gain.gain.cancelScheduledValues(now);
+  voice.gain.gain.setTargetAtTime(0, now, 0.1);
+  voice.source.stop(now + 0.5);
+}
+
+export function playVehicleHorn(source = 0) {
+  if (!vehicleHornAudio) {
+    vehicleHornAudio = getVehicleAudio('src/pkg/vehicle/jeep/jeep_horn.wav');
+  }
+  vehicleHornAudio.volume = Math.min(0.7, 0.7 * getDistanceVolume(source, 1200, 1.2));
+  vehicleHornAudio.currentTime = 0;
+  vehicleHornAudio.play().catch(() => {});
 }
 
 function getListenerDistance(sourceOrDistance = 0) {
@@ -283,6 +377,65 @@ export function playMelee(source = 0) {
   og.gain.exponentialRampToValueAtTime(.001, n + .12);
   o.connect(og); og.connect(masterGain);
   o.start(n); o.stop(n + .13);
+}
+
+// 播放车门开关音效
+export function playVehicleDoor(source = 0) {
+    const c = getCtx(), n = c.currentTime;
+    const vol = getDistanceVolume(source, 800, 1.2);
+    if (vol <= 0) return;
+    
+    // 金属卡榫声
+    const nb = mkNoise(c, 0.08, 'white');
+    const ns = createSrc(c, nb);
+    const nf = c.createBiquadFilter();
+    nf.type = 'bandpass';
+    nf.frequency.value = 2500;
+    nf.Q.value = 2;
+    const ng = c.createGain();
+    ng.gain.setValueAtTime(0.3 * vol, n);
+    ng.gain.exponentialRampToValueAtTime(0.001, n + 0.08);
+    ns.connect(nf).connect(ng).connect(masterGain);
+    ns.start(n);
+    ns.stop(n + 0.08);
+    
+    // 沉闷的关门声
+    const thump = c.createOscillator();
+    thump.type = 'sine';
+    thump.frequency.setValueAtTime(180, n);
+    thump.frequency.exponentialRampToValueAtTime(60, n + 0.12);
+    const thumpGain = c.createGain();
+    thumpGain.gain.setValueAtTime(0.4 * vol, n);
+    thumpGain.gain.exponentialRampToValueAtTime(0.001, n + 0.12);
+    thump.connect(thumpGain).connect(masterGain);
+    thump.start(n);
+    thump.stop(n + 0.12);
+}
+
+export function playVehicleImpact(source = 0, intensity = 1) {
+  const c = getCtx(), n = c.currentTime;
+  const strength = Math.max(0.25, Math.min(1, intensity));
+  const vol = getDistanceVolume(source, 1100, 1.3) * strength;
+  if (vol <= 0) return;
+
+  const nb = mkNoise(c, 0.18, 'brown'), ns = createSrc(c, nb);
+  const nf = c.createBiquadFilter(), ng = c.createGain();
+  nf.type = 'lowpass'; nf.frequency.setValueAtTime(650, n);
+  ng.gain.setValueAtTime(0.65 * vol, n);
+  ng.gain.exponentialRampToValueAtTime(0.001, n + 0.18);
+  ns.connect(nf).connect(ng).connect(masterGain);
+  ns.start(n); ns.stop(n + 0.18);
+
+  const thump = c.createOscillator(), thumpGain = c.createGain();
+  thump.type = 'sine';
+  thump.frequency.setValueAtTime(105, n);
+  thump.frequency.exponentialRampToValueAtTime(38, n + 0.16);
+  thumpGain.gain.setValueAtTime(0.7 * vol, n);
+  thumpGain.gain.exponentialRampToValueAtTime(0.001, n + 0.16);
+  thump.connect(thumpGain).connect(masterGain);
+  thump.start(n); thump.stop(n + 0.17);
+
+  playRingRaw(c, n + 0.01, 420, 0.14, 0.22 * vol, 'triangle');
 }
 
 // 播放爆炸音效 (保持原本出色的爆破分层)
