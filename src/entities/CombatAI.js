@@ -629,6 +629,9 @@ export class CombatAI extends Entity {
 
         if (!weapon || !closestTarget) return;
 
+        // 存储瞄准角度供渲染使用（世界坐标系）
+        this._vehicleAimAngle = Math.atan2(closestTarget.y - this.y, closestTarget.x - this.x);
+
         // 武器选择（在载具中只使用主武器槽1）
         if (this.activeWeaponSlot !== 1 && this.weapons[1]) {
             this.activeWeaponSlot = 1;

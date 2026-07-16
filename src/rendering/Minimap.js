@@ -127,6 +127,29 @@ export const Minimap = {
             ctx.fill();
         }
 
+        // 载具（青色三角，指示朝向）
+        for (const v of GameState.vehicles) {
+            if (!v.alive) continue;
+            const vx = v.x * scaleX;
+            const vy = v.y * scaleY;
+            const angle = v.angle || 0;
+            const r = 5;
+            ctx.save();
+            ctx.translate(vx, vy);
+            ctx.rotate(angle);
+            ctx.fillStyle = '#00E5FF';
+            ctx.beginPath();
+            ctx.moveTo(r, 0);
+            ctx.lineTo(-r * 0.7, -r * 0.6);
+            ctx.lineTo(-r * 0.7, r * 0.6);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+            ctx.lineWidth = 0.8;
+            ctx.stroke();
+            ctx.restore();
+        }
+
         // 玩家（绿点 + 方向指示，无shadowBlur）
         if (GameState.player) {
             const p = GameState.player;

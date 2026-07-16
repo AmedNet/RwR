@@ -151,7 +151,10 @@ function drawOccupant(ctx, entity, x, y, vehicleScale, vehicleAngle, seatIndex =
     ctx.scale(1 / vehicleScale, 1 / vehicleScale);
     // 座位跟随车体，但人物只做左右朝向，不随车身旋转。
     ctx.rotate(-(vehicleAngle + Math.PI / 2));
-    const facingAngle = Math.cos(vehicleAngle) < 0 ? Math.PI : 0;
+    // AI 队友使用存储的瞄准角度（如果有），否则使用基于车辆方向的静态角度
+    const facingAngle = entity._vehicleAimAngle !== undefined 
+        ? entity._vehicleAimAngle - vehicleAngle
+        : (Math.cos(vehicleAngle) < 0 ? Math.PI : 0);
 
     if (!isPlayer && typeof entity.drawBody === 'function') {
         // AI 队友：身体 + 武器贴图

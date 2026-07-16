@@ -4,7 +4,7 @@
 export const VehicleRegistry = {
     jeep: {
         id: "jeep",
-        name: "军用吉普",
+        name: "威利斯MB",
         type: "transport",
         health: 350,
         armor: 0.5,
