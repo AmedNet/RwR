@@ -785,12 +785,19 @@ export const Renderer = {
             const progress = 1 - (drop.timer / drop.maxTimer);
             const scale = 0.3 + progress * 0.7;
             const alpha = 0.4 + progress * 0.6;
+            const isBTR = drop.vehicleId === 'btr80';
 
             // 地面阴影
             const shadowScale = 0.3 + progress * 0.7;
             this.ctx.fillStyle = `rgba(0,0,0,${0.15 + progress * 0.2})`;
             this.ctx.beginPath();
-            this.ctx.ellipse(targetPos.x, targetPos.y, 30 * shadowScale, 14 * shadowScale, 0, 0, Math.PI * 2);
+            this.ctx.ellipse(
+                targetPos.x,
+                targetPos.y,
+                (isBTR ? 40 : 30) * shadowScale,
+                (isBTR ? 18 : 14) * shadowScale,
+                0, 0, Math.PI * 2
+            );
             this.ctx.fill();
 
             // 降落伞（橙白条纹）
@@ -832,21 +839,38 @@ export const Renderer = {
                 }
             }
 
-            // 载具本体（简化吉普）
+            // 载具本体（空投阶段使用简化剪影）
             const jeepSize = 48 * scale;
             this.ctx.save();
             this.ctx.globalAlpha = alpha;
-            this.ctx.fillStyle = '#5C4033';
+            this.ctx.fillStyle = isBTR ? '#596443' : '#5C4033';
             this.ctx.beginPath();
-            this.ctx.roundRect(pos.x - jeepSize * 0.35, pos.y - jeepSize * 0.5, jeepSize * 0.7, jeepSize, 4 * scale);
+            this.ctx.roundRect(
+                pos.x - jeepSize * (isBTR ? 0.4 : 0.35),
+                pos.y - jeepSize * (isBTR ? 0.58 : 0.5),
+                jeepSize * (isBTR ? 0.8 : 0.7),
+                jeepSize * (isBTR ? 1.16 : 1),
+                4 * scale
+            );
             this.ctx.fill();
             this.ctx.strokeStyle = `rgba(255,255,255,${alpha * 0.4})`;
             this.ctx.lineWidth = 1.5;
             this.ctx.stroke();
-            this.ctx.fillStyle = `rgba(150,200,255,${alpha * 0.5})`;
-            this.ctx.fillRect(pos.x - jeepSize * 0.25, pos.y - jeepSize * 0.4, jeepSize * 0.5, jeepSize * 0.2);
+            if (isBTR) {
+                this.ctx.fillStyle = '#38412d';
+                this.ctx.beginPath();
+                this.ctx.arc(pos.x, pos.y - jeepSize * 0.1, jeepSize * 0.18, 0, Math.PI * 2);
+                this.ctx.fill();
+                this.ctx.fillRect(pos.x - 2 * scale, pos.y - jeepSize * 0.62, 4 * scale, jeepSize * 0.42);
+            } else {
+                this.ctx.fillStyle = `rgba(150,200,255,${alpha * 0.5})`;
+                this.ctx.fillRect(pos.x - jeepSize * 0.25, pos.y - jeepSize * 0.4, jeepSize * 0.5, jeepSize * 0.2);
+            }
             this.ctx.fillStyle = `rgba(30,30,30,${alpha * 0.8})`;
-            for (const [wx, wy] of [[-0.35,-0.25],[0.35,-0.25],[-0.35,0.3],[0.35,0.3]]) {
+            const wheelPoints = isBTR
+                ? [[-0.42,-0.42],[0.42,-0.42],[-0.42,-0.14],[0.42,-0.14],[-0.42,0.16],[0.42,0.16],[-0.42,0.44],[0.42,0.44]]
+                : [[-0.35,-0.25],[0.35,-0.25],[-0.35,0.3],[0.35,0.3]];
+            for (const [wx, wy] of wheelPoints) {
                 this.ctx.beginPath();
                 this.ctx.arc(pos.x + jeepSize * wx, pos.y + jeepSize * wy, 4 * scale, 0, Math.PI * 2);
                 this.ctx.fill();

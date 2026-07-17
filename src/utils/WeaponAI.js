@@ -15,8 +15,19 @@ export const WEAPON_VALUE = Object.fromEntries(
  * @returns {number} 应该激活的武器槽位
  */
 export function evaluateWeaponChoice(entity, closestDist, closestTarget) {
+  // 敌方目标位于装甲载具内时，优先使用手里的火箭筒。
+  const targetVehicle = closestTarget?.mountedVehicle;
+  if (targetVehicle?.alive && targetVehicle.type === 'armored') {
+    const launcherSlot = entity.findAccessorySlot('launcher');
+    if (launcherSlot >= 0 && entity.weapons[launcherSlot]?.canShoot()) {
+      entity.activeWeaponSlot = launcherSlot;
+      return launcherSlot;
+    }
+  }
+
   // 优先级1：距离 < 80 → 军刀
-  if (closestDist < 80 && entity.weapons[0] && entity.weapons[0].config.type === 'melee') {
+  if (!closestTarget?.mountedVehicle && closestDist < 80 &&
+      entity.weapons[0] && entity.weapons[0].config.type === 'melee') {
     entity.activeWeaponSlot = 0;
     return 0;
   }

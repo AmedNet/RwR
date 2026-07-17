@@ -342,6 +342,15 @@ export const InputManager = {
             // \u6570\u5B57\u952E 1-7\uFF1A\u5207\u6362\u6B66\u5668
             const num = parseInt(e.key);
             if (num >= 1 && num <= 7) {
+                if (GameState.player && GameState.player.mountedVehicle && GameState.player.vehicleSeat === 0) {
+                    const vehicle = GameState.player.mountedVehicle;
+                    if (vehicle.id === 'btr80' && vehicle.weaponConfig) {
+                        if (num === 1) vehicle.switchVehicleWeapon('cannon');
+                        if (num === 2) vehicle.switchVehicleWeapon('coax');
+                        e.preventDefault();
+                        return;
+                    }
+                }
                 if (GameState.player && GameState.inventory[num - 1]) {
                     GameState.player.switchWeapon(num - 1);
                 }
@@ -579,6 +588,10 @@ export const InputManager = {
 
         // \u9F20\u6807\u70B9\u51FB
         canvas.addEventListener('mousedown', (e) => {
+            if (e.button === 2) {
+                GameState.mouse.rightDown = true;
+                e.preventDefault();
+            }
             if (e.button === 0) {
                 GameState.mouse.down = true;
 
@@ -803,7 +816,7 @@ export const InputManager = {
                 }
 
                 // \u6B63\u5E38\u5C04\u51FB
-                if (GameState.player) {
+                if (GameState.player && !GameState.player.mountedVehicle) {
                     const weapon = GameState.getActiveWeapon();
                     if (weapon && weapon.config.type === 'grenade') {
                         GameState.player.throwGrenade();
@@ -822,10 +835,12 @@ export const InputManager = {
                 GameState.ambientSliderDragging = false;
                 GameState.debugSliderDragging = false;
             }
+            if (e.button === 2) GameState.mouse.rightDown = false;
         });
 
         window.addEventListener('blur', () => {
             GameState.mouse.down = false;
+            GameState.mouse.rightDown = false;
             InputManager.seatModifierPressed = false;
         });
 

@@ -1,4 +1,5 @@
 // src/entities/Entity.js
+import { EffectsManager } from '../utils/EffectsManager.js';
 export class Entity {
     constructor(x, y, config) {
         this.x = x;
@@ -18,8 +19,15 @@ export class Entity {
         this.prevY = this.y;
     }
 
-    takeDamage(damage) {
+    takeDamage(damage, hitX, hitY, vx = 0, vy = 0) {
+        const prevHealth = this.health;
         this.health -= damage;
+        // 血液飞溅：绑定到伤害，只要扣血就触发（Vehicle 等无血单位不会在此产生视觉问题，因为 Vehicle 会重写）
+        if (damage > 0 && this.health < prevHealth) {
+            const px = (hitX !== undefined && hitX !== null) ? hitX : this.x;
+            const py = (hitY !== undefined && hitY !== null) ? hitY : this.y;
+            EffectsManager.spawnBloodSplatter(px, py, vx, vy, damage);
+        }
         if (this.health <= 0) {
             this.health = 0;
             this.alive = false;

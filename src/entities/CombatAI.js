@@ -651,6 +651,16 @@ export class CombatAI extends Entity {
         // 更新状态效果（龙卷风伤害等）
         this.updateStatusEffects();
 
+        // AI驾驶员独立搜索敌人并控制炮塔；车内目标改为瞄准其载具中心。
+        const { target: enemyTarget } = this.getClosestTarget();
+        const vehicleCombatTarget = enemyTarget?.mountedVehicle?.alive
+            ? enemyTarget.mountedVehicle
+            : enemyTarget;
+        const visibleVehicleTarget = vehicleCombatTarget && this.hasLineBetween(vehicle, vehicleCombatTarget)
+            ? vehicleCombatTarget
+            : null;
+        vehicle.updateWeapons(this, visibleVehicleTarget);
+
         // 检查发车条件：乘客数（不含驾驶员）
         const passengerCount = vehicle.occupants.filter((o, i) => i > 0 && o).length;
         let throttle = 0;
@@ -659,7 +669,6 @@ export class CombatAI extends Entity {
         if (passengerCount >= CombatAI.MIN_PASSENGERS_TO_DEPART) {
             // 满足发车条件，选择目标
             const { target: captureTarget } = this.getClosestTargetPoint();
-            const { target: enemyTarget } = this.getClosestTarget();
 
             let targetX, targetY;
             if (captureTarget) {
@@ -1297,13 +1306,13 @@ export class CombatAI extends Entity {
         const weaponType = weapon.config.type;
 
         if (weaponType === 'melee') {
-            if (target && dist < (weapon.config.range || 80)) {
-                target.takeDamage(weapon.config.damage, this.x, this.y);
+            // 车外近战不能穿过载具装甲攻击车内成员。
+            if (target && !target.mountedVehicle && dist < (weapon.config.range || 80)) {
                 const angle = Math.atan2(target.y - this.y, target.x - this.x);
+                target.takeDamage(weapon.config.damage, target.x, target.y, Math.cos(angle) * 3, Math.sin(angle) * 3);
                 target.x += Math.cos(angle) * (weapon.config.knockback || 10);
                 target.y += Math.sin(angle) * (weapon.config.knockback || 10);
                 // 近战攻击产生血迹
-                EffectsManager.spawnBloodSplatter(target.x, target.y, Math.cos(angle) * 3, Math.sin(angle) * 3, weapon.config.damage);
                 SoundManager.playMelee(this);
                 this.shootCooldown = weapon.config.shootDelay;
             }
@@ -1590,9 +1599,15 @@ export class CombatAI extends Entity {
         ctx.restore();
     }
 
-    takeDamage(amount) {
+    takeDamage(amount, hitX, hitY, vx = 0, vy = 0) {
         if (this.dying) return this.alive;
         this.health -= amount;
+        // 血液飞溅：绑定到伤害
+        if (amount > 0) {
+            const px = (hitX !== undefined && hitX !== null) ? hitX : this.x;
+            const py = (hitY !== undefined && hitY !== null) ? hitY : this.y;
+            EffectsManager.spawnBloodSplatter(px, py, vx, vy, amount);
+        }
         // 受到伤害时添加缓慢效果（使用配置常量）
         const slowDuration = STATUS_EFFECT_CONFIG.SLOW.DEFAULT_DURATION;
         this.addStatusEffect(new SlowEffect(slowDuration));

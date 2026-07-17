@@ -21,7 +21,7 @@ export const GameState = {
     map: null,
     weather: 'sunny', // 当前天气类型
     keys: { w: false, a: false, s: false, d: false },
-    mouse: { x: 0, y: 0, down: false },
+    mouse: { x: 0, y: 0, down: false, rightDown: false },
     kills: 0,
     score: 0,
     gameOver: false,

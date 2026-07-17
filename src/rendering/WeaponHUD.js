@@ -7,6 +7,13 @@ vehicleHUDImage.src = 'src/pkg/vehicle/jeep/jeep_uhd.png';
 let vehicleHUDImageLoaded = false;
 vehicleHUDImage.onload = () => { vehicleHUDImageLoaded = true; };
 
+const btrWeaponHUDImages = {
+    cannon: new Image(),
+    coax: new Image()
+};
+btrWeaponHUDImages.cannon.src = 'src/pkg/vehicle/btr80/apc_autocannon.png';
+btrWeaponHUDImages.coax.src = 'src/pkg/vehicle/btr80/apc_mg.png';
+
 // 后续调整吉普 HUD 贴图大小时，只需修改 imageSize。
 const VEHICLE_HUD_STYLE = {
     imageSize: 62,
@@ -33,17 +40,26 @@ function drawVehicleHUD(ctx, renderer, vehicle) {
     ctx.lineWidth = 1;
     ctx.stroke();
 
-    if (vehicleHUDImageLoaded) {
+    const isBTR = vehicle.id === 'btr80';
+    const btrWeapon = vehicle.activeVehicleWeapon || 'cannon';
+    const btrImage = btrWeaponHUDImages[btrWeapon];
+    const showImage = isBTR ? btrImage.naturalWidth > 0 : vehicleHUDImageLoaded;
+    if (showImage && isBTR) {
+        ctx.drawImage(btrImage, imageX, imageY + 8, imageSize, imageSize - 16);
+    } else if (showImage) {
         ctx.drawImage(vehicleHUDImage, imageX, imageY, imageSize, imageSize);
     }
 
-    const infoX = imageX + imageSize + 10;
+    const infoX = showImage ? imageX + imageSize + 10 : imageX + 4;
     const barWidth = panelX + panelWidth - infoX - 10;
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 14px sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText(vehicle.name, infoX, panelY + 24);
+    const displayName = isBTR
+        ? (btrWeapon === 'cannon' ? '2A72 30mm' : 'PKT 7.62')
+        : vehicle.name;
+    ctx.fillText(displayName, infoX, panelY + 24);
 
     ctx.fillStyle = 'rgba(255,255,255,0.65)';
     ctx.font = 'bold 12px sans-serif';
@@ -52,6 +68,24 @@ function drawVehicleHUD(ctx, renderer, vehicle) {
     ctx.fillRect(infoX, panelY + 55, barWidth, 9);
     ctx.fillStyle = hpColor;
     ctx.fillRect(infoX, panelY + 55, barWidth * hpRatio, 9);
+
+    if (isBTR) {
+        const ammo = btrWeapon === 'cannon' ? vehicle.cannonAmmo : vehicle.coaxAmmo;
+        const maxAmmo = btrWeapon === 'cannon' ? 120 : 300;
+        const reloadTimer = btrWeapon === 'cannon' ? vehicle.cannonReloadTimer : vehicle.coaxReloadTimer;
+        const totalReload = btrWeapon === 'cannon' ? 1200 : 600;
+        
+        if (ammo <= 0 && reloadTimer > 0) {
+            const reloadPct = Math.floor((1 - reloadTimer / totalReload) * 100);
+            ctx.fillStyle = '#FFC107';
+            ctx.font = 'bold 11px sans-serif';
+            ctx.fillText(`装填中 ${reloadPct}%`, infoX, panelY + 72);
+        } else {
+            ctx.fillStyle = 'rgba(255,255,255,0.65)';
+            ctx.font = 'bold 11px sans-serif';
+            ctx.fillText(`弹药 ${ammo}/${maxAmmo}`, infoX, panelY + 72);
+        }
+    }
 }
 
 export function drawWeaponHUD(ctx, renderer) {
@@ -129,6 +163,12 @@ export function drawWeaponHUD(ctx, renderer) {
                 }
             }
         }
+    }
+
+    // 驾驶BTR时隐藏底部物品栏
+    if (drivenVehicle && drivenVehicle.id === 'btr80') {
+        ctx.restore();
+        return;
     }
 
     // 底部武器槽位（毛玻璃风格）

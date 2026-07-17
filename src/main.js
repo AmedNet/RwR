@@ -605,7 +605,7 @@ function init() {
 
     // ---- 手雷爆炸监听 ----
     window.addEventListener('grenade_explode', (e) => {
-        const { x, y, radius, damage } = e.detail;
+        const { x, y, radius, damage, directHitTarget = null } = e.detail;
 
         // 爆炸效果
         EffectsManager.spawnGrenadeExplosion(x, y, radius);
@@ -621,14 +621,30 @@ function init() {
         }
 
         for (const entity of entities) {
-            const d = Math.hypot(entity.x - x, entity.y - y);
+            if (entity.mountedVehicle) continue;
+            // 火箭弹直接命中的载具按爆心完整伤害结算，不受车体半径导致的距离衰减影响。
+            const d = entity === directHitTarget ? 0 : Math.hypot(entity.x - x, entity.y - y);
             if (d < radius) {
                 // 距离衰减伤害
                 const dmg = Math.floor(damage * (1 - d / radius));
                 if (dmg > 0) {
+                    const isVehicle = GameState.vehicles.includes(entity);
+                    const actualDamage = isVehicle
+                        ? Math.min(entity.health, dmg)
+                        : dmg;
                     const wasAlive = entity.alive;
                     entity.takeDamage(dmg, x, y);
-                    EffectsManager.addDamageNumber(entity.x, entity.y, dmg, entity === GameState.player);
+                    EffectsManager.addDamageNumber(
+                        entity.x,
+                        isVehicle ? entity.y - entity.radius : entity.y,
+                        actualDamage,
+                        entity === GameState.player
+                    );
+                    if (isVehicle) {
+                        EffectsManager.spawnRicochetEffect(x, y, null, true);
+                        EffectsManager.triggerShake(4, 6);
+                        continue;
+                    }
                     // 爆炸伤害产生血迹
                     EffectsManager.spawnBloodSplatter(entity.x, entity.y, 0, 0, dmg);
                     if (wasAlive && !entity.alive && GameState.teammates.includes(entity)) {

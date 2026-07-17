@@ -6,11 +6,11 @@ let masterGain = null;
 let audioUnlocked = false;
 let listenerProvider = null;
 let vehicleHornAudio = null;
-let vehicleEngineBuffer = null;
-let vehicleEngineLoadPromise = null;
+const vehicleEngineBuffers = new Map();
+const vehicleEngineLoadPromises = new Map();
 // 每辆车独立的引擎音效实例，key 为 vehicle 引用
 const vehicleEngineVoices = new Map();
-let vehicleEngineStartToken = 0;
+const vehicleEngineStartTokens = new Map();
 
 // 初始化 AudioContext（立即创建，而不是延迟创建）
 function initAudio() {
@@ -74,23 +74,27 @@ function getVehicleAudio(path, loop = false) {
   return audio;
 }
 
-function loadVehicleEngineBuffer() {
-  if (vehicleEngineBuffer) return Promise.resolve(vehicleEngineBuffer);
-  if (!vehicleEngineLoadPromise) {
-    vehicleEngineLoadPromise = fetch('src/pkg/vehicle/jeep/jeep_loop.wav')
+function loadVehicleEngineBuffer(vehicle) {
+  const path = vehicle?.id === 'btr80'
+    ? 'src/pkg/vehicle/btr80/apc_engine_idle.wav'
+    : 'src/pkg/vehicle/jeep/jeep_loop.wav';
+  if (vehicleEngineBuffers.has(path)) return Promise.resolve(vehicleEngineBuffers.get(path));
+  if (!vehicleEngineLoadPromises.has(path)) {
+    const loadPromise = fetch(path)
       .then(response => response.arrayBuffer())
       .then(data => getCtx().decodeAudioData(data))
       .then(buffer => {
-        vehicleEngineBuffer = buffer;
+        vehicleEngineBuffers.set(path, buffer);
         return buffer;
       })
       .catch(error => {
-        vehicleEngineLoadPromise = null;
+        vehicleEngineLoadPromises.delete(path);
         console.warn('发动机音效加载失败:', error);
         return null;
       });
+    vehicleEngineLoadPromises.set(path, loadPromise);
   }
-  return vehicleEngineLoadPromise;
+  return vehicleEngineLoadPromises.get(path);
 }
 
 export function startVehicleEngine(vehicle = null) {
@@ -107,10 +111,12 @@ export function startVehicleEngine(vehicle = null) {
     return;
   }
   
-  const startToken = ++vehicleEngineStartToken;
-  loadVehicleEngineBuffer().then(buffer => {
-    if (!buffer || startToken !== vehicleEngineStartToken) return;
-    if (vehicleEngineVoices.has(vehicle)) return; // 已被其他调用创建
+  const startToken = Symbol();
+  vehicleEngineStartTokens.set(vehicle, startToken);
+  loadVehicleEngineBuffer(vehicle).then(buffer => {
+    if (vehicleEngineStartTokens.get(vehicle) !== startToken) return;
+    vehicleEngineStartTokens.delete(vehicle);
+    if (!buffer || vehicleEngineVoices.has(vehicle)) return;
     
     const now = c.currentTime;
     const engineSource = c.createBufferSource();
@@ -142,7 +148,7 @@ export function updateVehicleEngine(vehicle = null, speedRatio = 0) {
 }
 
 export function stopVehicleEngine(vehicle = null) {
-  vehicleEngineStartToken++;
+  vehicleEngineStartTokens.delete(vehicle);
   const voice = vehicleEngineVoices.get(vehicle);
   if (!voice) return;
   const c = getCtx();
@@ -154,6 +160,24 @@ export function stopVehicleEngine(vehicle = null) {
 }
 
 export function playVehicleHorn(source = 0) {
+  if (source?.id === 'btr80') {
+    const c = getCtx(), n = c.currentTime;
+    const vol = Math.min(0.75, 0.75 * getDistanceVolume(source, 1400, 1.15));
+    if (vol <= 0) return;
+    for (const [frequency, gainScale] of [[178, 0.52], [236, 0.34]]) {
+      const oscillator = c.createOscillator(), gain = c.createGain();
+      oscillator.type = 'sawtooth';
+      oscillator.frequency.setValueAtTime(frequency, n);
+      oscillator.frequency.linearRampToValueAtTime(frequency * 0.97, n + 0.42);
+      gain.gain.setValueAtTime(0.001, n);
+      gain.gain.linearRampToValueAtTime(gainScale * vol, n + 0.035);
+      gain.gain.setValueAtTime(gainScale * vol, n + 0.31);
+      gain.gain.exponentialRampToValueAtTime(0.001, n + 0.48);
+      oscillator.connect(gain).connect(masterGain);
+      oscillator.start(n); oscillator.stop(n + 0.5);
+    }
+    return;
+  }
   if (!vehicleHornAudio) {
     vehicleHornAudio = getVehicleAudio('src/pkg/vehicle/jeep/jeep_horn.wav');
   }
@@ -246,12 +270,14 @@ export function playShoot(type, source = 0) {
     shotgun:  { nD: 0.22, nF: 1000, nQ: 0.8, tF: 100, tD: 0.08, tV: 0.6, nV: 0.9, lF: 55,  lV: 0.6,  ring: true,  rF: 450,  rD: 0.18 },
     sniper:   { nD: 0.25, nF: 1300, nQ: 1.0, tF: 120, tD: 0.08, tV: 0.7, nV: 0.9, lF: 45,  lV: 0.7,  ring: true,  rF: 900,  rD: 0.25 }, // AWP
     m82:      { nD: 0.35, nF: 900,  nQ: 0.7, tF: 80,  tD: 0.12, tV: 0.8, nV: 1.0, lF: 35,  lV: 0.9,  ring: true,  rF: 520,  rD: 0.40 }, // M82反器材加猛
+    autocannon: { nD: 0.18, nF: 720, nQ: 0.75, tF: 92, tD: 0.055, tV: 0.82, nV: 1.0, lF: 42, lV: 0.88, ring: true, rF: 360, rD: 0.22 },
+    coax:     { nD: 0.075, nF: 2800, nQ: 2.2, tF: 285, tD: 0.018, tV: 0.36, nV: 0.62, lF: 125, lV: 0.28, ring: false },
     launcher: { nD: 0.40, nF: 500,  nQ: 0.5, tF: 60,  tD: 0.15, tV: 0.7, nV: 0.9, lF: 40,  lV: 0.8,  ring: true,  rF: 220,  rD: 0.30 }  // AT4火箭筒破空声
   };
   const x = C[type] || C.rifle;
 
   // 1. 噪声层（粉红/白噪声混合，提供子弹爆燃产生的炸裂感）
-  const noiseType = (type === 'm82' || type === 'launcher') ? 'brown' : 'white';
+  const noiseType = (type === 'm82' || type === 'launcher' || type === 'autocannon') ? 'brown' : 'white';
   const nb = mkNoise(c, x.nD, noiseType), ns = createSrc(c, nb);
   const nf = c.createBiquadFilter();
   nf.type = 'bandpass'; nf.frequency.value = x.nF; nf.Q.value = x.nQ;
@@ -294,6 +320,33 @@ export function playShoot(type, source = 0) {
     playRingRaw(c, n + 0.01, x.rF, x.rD, x.tV * 0.4 * vol, 'triangle');
     playRingRaw(c, n + 0.01, x.rF * 1.45, x.rD * 0.7, x.tV * 0.2 * vol, 'sine');
   }
+  if (type === 'autocannon') {
+    playClickRaw(c, n + 0.045, 430, 0.028, 0.28 * vol);
+  }
+}
+
+export function playAutocannonImpact(source = 0) {
+  const c = getCtx(), n = c.currentTime;
+  const vol = getDistanceVolume(source, 1400, 1.3);
+  if (vol <= 0) return;
+
+  const nb = mkNoise(c, 0.2, 'brown'), ns = createSrc(c, nb);
+  const nf = c.createBiquadFilter(), ng = c.createGain();
+  nf.type = 'bandpass'; nf.frequency.setValueAtTime(520, n); nf.Q.value = 0.7;
+  ng.gain.setValueAtTime(0.72 * vol, n);
+  ng.gain.exponentialRampToValueAtTime(0.001, n + 0.2);
+  ns.connect(nf).connect(ng).connect(masterGain);
+  ns.start(n); ns.stop(n + 0.2);
+
+  const thump = c.createOscillator(), thumpGain = c.createGain();
+  thump.type = 'sine'; thump.frequency.setValueAtTime(72, n);
+  thump.frequency.exponentialRampToValueAtTime(24, n + 0.16);
+  thumpGain.gain.setValueAtTime(0.65 * vol, n);
+  thumpGain.gain.exponentialRampToValueAtTime(0.001, n + 0.16);
+  thump.connect(thumpGain).connect(masterGain);
+  thump.start(n); thump.stop(n + 0.17);
+
+  playRingRaw(c, n + 0.01, 760 + Math.random() * 140, 0.11, 0.18 * vol, 'triangle');
 }
 
 // 播放换弹音效 (重构：抛弃无规律的for循环，改为严格的时间轴机械动作序列编排！)
@@ -391,32 +444,38 @@ export function playVehicleDoor(source = 0) {
     const c = getCtx(), n = c.currentTime;
     const vol = getDistanceVolume(source, 800, 1.2);
     if (vol <= 0) return;
+    const armored = source?.id === 'btr80';
     
     // 金属卡榫声
-    const nb = mkNoise(c, 0.08, 'white');
+    const latchDuration = armored ? 0.12 : 0.08;
+    const nb = mkNoise(c, latchDuration, 'white');
     const ns = createSrc(c, nb);
     const nf = c.createBiquadFilter();
     nf.type = 'bandpass';
-    nf.frequency.value = 2500;
-    nf.Q.value = 2;
+    nf.frequency.value = armored ? 1350 : 2500;
+    nf.Q.value = armored ? 1.3 : 2;
     const ng = c.createGain();
-    ng.gain.setValueAtTime(0.3 * vol, n);
-    ng.gain.exponentialRampToValueAtTime(0.001, n + 0.08);
+    ng.gain.setValueAtTime((armored ? 0.48 : 0.3) * vol, n);
+    ng.gain.exponentialRampToValueAtTime(0.001, n + latchDuration);
     ns.connect(nf).connect(ng).connect(masterGain);
     ns.start(n);
-    ns.stop(n + 0.08);
+    ns.stop(n + latchDuration);
     
     // 沉闷的关门声
     const thump = c.createOscillator();
     thump.type = 'sine';
-    thump.frequency.setValueAtTime(180, n);
-    thump.frequency.exponentialRampToValueAtTime(60, n + 0.12);
+    thump.frequency.setValueAtTime(armored ? 115 : 180, n);
+    thump.frequency.exponentialRampToValueAtTime(armored ? 32 : 60, n + (armored ? 0.2 : 0.12));
     const thumpGain = c.createGain();
-    thumpGain.gain.setValueAtTime(0.4 * vol, n);
-    thumpGain.gain.exponentialRampToValueAtTime(0.001, n + 0.12);
+    thumpGain.gain.setValueAtTime((armored ? 0.72 : 0.4) * vol, n);
+    thumpGain.gain.exponentialRampToValueAtTime(0.001, n + (armored ? 0.2 : 0.12));
     thump.connect(thumpGain).connect(masterGain);
     thump.start(n);
-    thump.stop(n + 0.12);
+    thump.stop(n + (armored ? 0.2 : 0.12));
+    if (armored) {
+        playRingRaw(c, n + 0.018, 310, 0.16, 0.2 * vol, 'triangle');
+        playClickRaw(c, n + 0.09, 780, 0.025, 0.24 * vol);
+    }
 }
 
 export function playVehicleImpact(source = 0, intensity = 1) {
@@ -681,7 +740,7 @@ export function playShellEject(type = 'pistol', source = 0) {
   if (vol <= 0) return;
 
   // 根据武器类型调整基频：大弹壳低频，小弹壳高频
-  const freqMap = { shotgun: 700, sniper: 800, rifle: 1200, launcher: 900, smg: 1600, pistol: 1800 };
+  const freqMap = { autocannon: 520, shotgun: 700, sniper: 800, rifle: 1200, coax: 1350, launcher: 900, smg: 1600, pistol: 1800 };
   const baseFreq = freqMap[type] || 1800;
   const bounces = 4;
   const bounceDelays = [0.0, 0.12, 0.22, 0.30, 0.36];
@@ -818,7 +877,7 @@ export function playShellLand(type = 'pistol', bounceIndex = 0, source = 0) {
   const vol = getDistanceVolume(source, 800, 1.5);
   if (vol <= 0) return;
 
-  const freqMap = { shotgun: 700, sniper: 800, rifle: 1200, launcher: 900, smg: 1600, pistol: 1800 };
+  const freqMap = { autocannon: 520, shotgun: 700, sniper: 800, rifle: 1200, coax: 1350, launcher: 900, smg: 1600, pistol: 1800 };
   const baseFreq = freqMap[type] || 1800;
 
   // 弹跳次数越多音量越小、音调越低

@@ -254,24 +254,48 @@ export const CollisionSystem = {
         for (let i = bullets.length - 1; i >= 0; i--) {
             const bullet = bullets[i];
             if (!bullet.alive) continue;
+            if (bullet.isArcProjectile) continue;
             for (const v of vehicles) {
                 if (!v.alive) continue;
                 // 车内玩家的子弹从车体范围内发射，不应撞回自己的载具。
                 if (bullet.shooter && bullet.shooter.mountedVehicle === v) continue;
-                if (this._bulletHitsCircle(bullet, v)) {
-                    const windshieldHit = v.hitWindshield(bullet);
-                    const damage = windshieldHit ? windshieldHit.damage : bullet.damage;
-                    const hitX = windshieldHit ? windshieldHit.x : bullet.x;
-                    const hitY = windshieldHit ? windshieldHit.y : bullet.y;
-                    v.takeDamage(damage);
-                    if (windshieldHit) {
-                        EffectsManager.spawnGlassShards(hitX, hitY, windshieldHit.shattered ? 24 : 7);
-                        playRicochet(hitX);
+                if (this._bulletHitsVehicle(bullet, v)) {
+                    if (bullet.explosion) {
+                        this._triggerBulletExplosion(bullet, v);
+                    } else if (v.type === "armored") {
+                        EffectsManager.spawnRicochetEffect(
+                            bullet.x,
+                            bullet.y,
+                            Math.atan2(bullet.vy, bullet.vx),
+                            true
+                        );
+                        playRicochet(bullet.x);
+                        v.takeDamage(bullet.damage);
+                        EffectsManager.addDamageNumber(v.x, v.y - v.radius, bullet.damage, false);
                     } else {
-                        EffectsManager.spawnParticles(hitX, hitY, ParticleType.SPARK, COLLISION_FX.SPARK_PARTICLE_COUNT);
-                        playBulletHit(hitX);
+                        const windshieldHit = v.hitWindshield(bullet);
+                        let damageDealt = 0;
+                        if (windshieldHit) {
+                            damageDealt = windshieldHit.damage;
+                            if (windshieldHit.shattered) {
+                                EffectsManager.spawnGlassShards(windshieldHit.x, windshieldHit.y, 8);
+                            }
+                            EffectsManager.spawnParticles(windshieldHit.x, windshieldHit.y, ParticleType.SPARK, 6);
+                            playRicochet(bullet.x);
+                        } else {
+                            damageDealt = bullet.damage;
+                            EffectsManager.spawnParticles(bullet.x, bullet.y, ParticleType.SPARK, 12);
+                            EffectsManager.spawnRicochetEffect(
+                                bullet.x,
+                                bullet.y,
+                                Math.atan2(bullet.vy, bullet.vx),
+                                true
+                            );
+                            playBulletHit(bullet.x);
+                        }
+                        v.takeDamage(damageDealt);
+                        EffectsManager.addDamageNumber(v.x, v.y - v.radius, damageDealt, true);
                     }
-                    EffectsManager.addDamageNumber(hitX, hitY, Math.floor(damage), false);
                     bullet.alive = false;
                     break;
                 }
@@ -349,14 +373,52 @@ export const CollisionSystem = {
         );
     },
 
+    /** 沿子弹运动线段检测载具旋转矩形，覆盖 BTR 的车头和车尾。 */
+    _bulletHitsVehicle(bullet, vehicle) {
+        const cos = Math.cos(vehicle.angle);
+        const sin = Math.sin(vehicle.angle);
+        const toLocal = (x, y) => {
+            const dx = x - vehicle.x;
+            const dy = y - vehicle.y;
+            return {
+                forward: dx * cos + dy * sin,
+                lateral: -dx * sin + dy * cos
+            };
+        };
+
+        const start = toLocal(bullet.prevX ?? bullet.x, bullet.prevY ?? bullet.y);
+        const end = toLocal(bullet.x, bullet.y);
+        const halfForward = vehicle.height / 2 + bullet.radius;
+        const halfLateral = vehicle.width / 2 + bullet.radius;
+        let tMin = 0;
+        let tMax = 1;
+
+        for (const [from, to, halfSize] of [
+            [start.forward, end.forward, halfForward],
+            [start.lateral, end.lateral, halfLateral]
+        ]) {
+            const delta = to - from;
+            if (Math.abs(delta) < 1e-8) {
+                if (from < -halfSize || from > halfSize) return false;
+                continue;
+            }
+            let enter = (-halfSize - from) / delta;
+            let exit = (halfSize - from) / delta;
+            if (enter > exit) [enter, exit] = [exit, enter];
+            tMin = Math.max(tMin, enter);
+            tMax = Math.min(tMax, exit);
+            if (tMin > tMax) return false;
+        }
+        return true;
+    },
+
     // ─── 命中处理回调 ───
 
     _onBulletHitPlayer(bullet, player) {
-        player.takeDamage(bullet.damage, bullet.x, bullet.y);
+        player.takeDamage(bullet.damage, bullet.x, bullet.y, bullet.vx, bullet.vy);
         EffectsManager.spawnParticles(bullet.x, bullet.y, ParticleType.HIT, COLLISION_FX.HIT_PARTICLE_COUNT);
         EffectsManager.addDamageNumber(bullet.x, bullet.y, bullet.damage, true);
         EffectsManager.triggerShake(COLLISION_FX.PLAYER_HIT_SHAKE_INTENSITY, COLLISION_FX.PLAYER_HIT_SHAKE_DURATION);
-        EffectsManager.spawnBloodSplatter(bullet.x, bullet.y, bullet.vx, bullet.vy, bullet.damage);
         playBulletHit(player);
         EventBus.emit('player_hurt', { health: player.health });
         if (!player.alive) {
@@ -380,8 +442,7 @@ export const CollisionSystem = {
             const helmetCfg = getHelmetConfig(teammate.helmet);
             bullet.damage = Math.floor(bullet.damage * (1 - helmetCfg.damageReduction));
         }
-        teammate.takeDamage(bullet.damage, bullet.x, bullet.y);
-        EffectsManager.spawnBloodSplatter(bullet.x, bullet.y, bullet.vx, bullet.vy, bullet.damage);
+        teammate.takeDamage(bullet.damage, bullet.x, bullet.y, bullet.vx, bullet.vy);
         playBulletHit(teammate);
         if (!teammate.alive) {
             console.log('💔 队友阵亡，加入重生队列');
@@ -407,7 +468,7 @@ export const CollisionSystem = {
             bullet.damage = Math.floor(bullet.damage * (1 - helmetCfg.damageReduction));
         }
         const wasDying = enemy.dying;
-        enemy.takeDamage(bullet.damage, bullet.x, bullet.y);
+        enemy.takeDamage(bullet.damage, bullet.x, bullet.y, bullet.vx, bullet.vy);
         if (bullet.knockback > 0) {
             const kbAngle = Math.atan2(bullet.vy, bullet.vx);
             enemy.x += Math.cos(kbAngle) * bullet.knockback;
@@ -415,7 +476,6 @@ export const CollisionSystem = {
         }
         EffectsManager.spawnParticles(bullet.x, bullet.y, ParticleType.SPARK, COLLISION_FX.SPARK_PARTICLE_COUNT);
         EffectsManager.addDamageNumber(enemy.x, enemy.y, bullet.damage, false);
-        EffectsManager.spawnBloodSplatter(bullet.x, bullet.y, bullet.vx, bullet.vy, bullet.damage);
         playBulletHit(enemy);
         // 检测敌人刚进入dying状态的瞬间（takeDamage中设置的）
         if (!wasDying && enemy.dying) {
@@ -433,11 +493,17 @@ export const CollisionSystem = {
     // ─── 辅助工具 ───
 
     /** 触发爆炸弹的爆炸效果（命中墙壁或实体时调用） */
-    _triggerBulletExplosion(bullet) {
+    _triggerBulletExplosion(bullet, directHitTarget = null) {
         if (!bullet.explosion) return;
         playExplosion(bullet);
         window.dispatchEvent(new CustomEvent('grenade_explode', {
-            detail: { x: bullet.x, y: bullet.y, radius: bullet.explosion.radius, damage: bullet.explosion.damage }
+            detail: {
+                x: bullet.x,
+                y: bullet.y,
+                radius: bullet.explosion.radius,
+                damage: bullet.explosion.damage,
+                directHitTarget
+            }
         }));
     }
 };

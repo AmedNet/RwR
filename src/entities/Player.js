@@ -159,7 +159,8 @@ export class Player extends Entity {
     }
 
     throwGrenade() {
-        if (this.mountedVehicle && this.vehicleSeat === 0) return;
+        if (this.mountedVehicle &&
+            (this.vehicleSeat === 0 || !this.mountedVehicle.passengerCanFire)) return;
         // 从任意槽位查找手雷
         let grenadeSlot = -1;
         for (let i = 0; i < GameState.inventory.length; i++) {
@@ -211,7 +212,7 @@ export class Player extends Entity {
         const knifeConfig = WeaponRegistry.knife;
         let nearestEnemy = null, nearestDist = knifeConfig.range;
         for (const enemy of GameState.enemies) {
-            if (!enemy.alive) continue;
+            if (!enemy.alive || enemy.mountedVehicle) continue;
             const d = Math.hypot(enemy.x - this.x, enemy.y - this.y);
             if (d < nearestDist) { nearestDist = d; nearestEnemy = enemy; }
         }
@@ -415,6 +416,17 @@ export class Player extends Entity {
 
     /** 处理射击模式输入（三连射/全自动/半自动） */
     _updateFiring(weapon) {
+        if (this.mountedVehicle) {
+            if (this.vehicleSeat === 0 && this.mountedVehicle.weaponConfig) {
+                this.mountedVehicle.updateWeapons();
+                this.lastMouseDown = GameState.mouse.down;
+                return;
+            }
+            if (!this.mountedVehicle.passengerCanFire) {
+                this.lastMouseDown = GameState.mouse.down;
+                return;
+            }
+        }
         if (this.burstCount > 0) {
             this.burstTimer--;
             if (this.burstTimer <= 0) {
@@ -450,7 +462,8 @@ export class Player extends Entity {
 
     shoot() {
         if (GameState.gameOver || this.shootCooldown > 0 || this.isSwitching) return;
-        if (this.mountedVehicle && this.vehicleSeat === 0) return;
+        if (this.mountedVehicle &&
+            (this.vehicleSeat === 0 || !this.mountedVehicle.passengerCanFire)) return;
         // 记录射击位置（非驾驶座时使用座位世界坐标）
         let shootX = this.x;
         let shootY = this.y;
@@ -682,9 +695,15 @@ export class Player extends Entity {
     }
 
     // 重写父类的 takeDamage 方法以播放音效
-    takeDamage(amount) {
+    takeDamage(amount, hitX, hitY, vx = 0, vy = 0) {
         if (!this.alive) return;
         this.health -= amount;
+        // 血液飞溅：绑定到伤害
+        if (amount > 0) {
+            const px = (hitX !== undefined && hitX !== null) ? hitX : this.x;
+            const py = (hitY !== undefined && hitY !== null) ? hitY : this.y;
+            EffectsManager.spawnBloodSplatter(px, py, vx, vy, amount);
+        }
         // 受到伤害时添加缓慢效果（使用配置常量）
         const slowDuration = STATUS_EFFECT_CONFIG.SLOW.DEFAULT_DURATION;
         this.addStatusEffect(new SlowEffect(slowDuration));

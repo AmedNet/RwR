@@ -8,7 +8,7 @@ import { SpawnSystem } from '../systems/SpawnSystem.js';
 import { EffectsManager, ParticleType } from '../utils/EffectsManager.js';
 import { WeaponPickup } from '../entities/WeaponPickup.js';
 import { getRankStars } from './RankSystem.js';
-import { playExplosion } from '../utils/SoundManager.js';
+import { playExplosion, playVehicleImpact } from '../utils/SoundManager.js';
 import { AIRank } from './RankSystem.js';
 import { UnitClass } from './ClassSystem.js';
 import { Vehicle } from '../entities/Vehicle.js';
@@ -25,7 +25,8 @@ export const SupportType = {
     WEAPON_DROP: 'weapon_drop',
     REAPER_STRIKE: 'reaper_strike',
     A10_STRAFE: 'a10_strafe',
-    VEHICLE_DROP: 'vehicle_drop'
+    VEHICLE_DROP: 'vehicle_drop',
+    BTR80_DROP: 'btr80_drop'
 };
 
 // 支援配置
@@ -149,7 +150,7 @@ export const SupportConfig = {
         audioPath: 'src/pkg/radio/a10/a10.m4a'
     },
     [SupportType.VEHICLE_DROP]: {
-        name: '载具空投',
+        name: 'Jeep空投',
         icon: 'src/pkg/vehicle/jeep/jeep_uhd.png',
         description: '空投一辆威利斯MB吉普车到标记点',
         rpCost: 200,
@@ -157,6 +158,17 @@ export const SupportConfig = {
         minStars: 3,
         dropHeight: 400,
         dropDuration: 90
+    },
+    [SupportType.BTR80_DROP]: {
+        name: 'BTR-80空投',
+        icon: 'src/pkg/vehicle/btr80/btr80_drop.png',
+        description: '空投一辆BTR-80装甲输送车到标记点',
+        rpCost: 1000,
+        cooldown: 1800,
+        minStars: 3,
+        dropHeight: 400,
+        dropDuration: 90,
+        vehicleId: 'btr80'
     }
 };
 
@@ -539,9 +551,12 @@ export const SupportSystem = {
 
             if (drop.timer <= 0) {
                 // 落地：生成载具（支援召唤不受上限限制）
-                const vehicle = new Vehicle(drop.targetX, drop.targetY, VehicleRegistry.jeep);
+                const vehicleConfig = VehicleRegistry[drop.vehicleId] || VehicleRegistry.jeep;
+                const vehicle = new Vehicle(drop.targetX, drop.targetY, vehicleConfig);
                 GameState.vehicles.push(vehicle);
-                EffectsManager.spawnParticles(drop.targetX, drop.targetY, ParticleType.HEAL, 12);
+                const heavy = vehicle.id === 'btr80';
+                EffectsManager.spawnVehicleDropImpact(drop.targetX, drop.targetY, heavy);
+                playVehicleImpact(vehicle, heavy ? 1 : 0.65);
                 console.log(`🚗 载具空投到达: ${vehicle.name}`);
                 this.vehicleDrops.splice(i, 1);
             }
@@ -557,6 +572,7 @@ export const SupportSystem = {
         if (GameState.player && GameState.player.alive) entities.push(GameState.player);
 
         for (const entity of entities) {
+            if (entity.mountedVehicle) continue;
             const isPlayer = entity === GameState.player;
             const d = Math.hypot(entity.x - hitX, entity.y - hitY);
             
@@ -575,6 +591,20 @@ export const SupportSystem = {
                 }
             }
         }
+        this._applyVehicleAreaDamage(hitX, hitY, radius, damage);
+    },
+
+    _applyVehicleAreaDamage(hitX, hitY, radius, damage) {
+        for (const vehicle of GameState.vehicles) {
+            if (!vehicle.alive) continue;
+            const distance = Math.hypot(vehicle.x - hitX, vehicle.y - hitY);
+            if (distance >= radius) continue;
+            const rawDamage = Math.floor(damage * (1 - distance / radius * 0.5));
+            if (rawDamage <= 0) continue;
+            const actualDamage = Math.min(vehicle.health, rawDamage);
+            vehicle.takeDamage(actualDamage);
+            EffectsManager.addDamageNumber(vehicle.x, vehicle.y - vehicle.radius, actualDamage, false);
+        }
     },
 
     // 破片伤害（更远范围，衰减伤害，友伤开启）
@@ -586,6 +616,7 @@ export const SupportSystem = {
         if (GameState.player && GameState.player.alive) entities.push(GameState.player);
 
         for (const entity of entities) {
+            if (entity.mountedVehicle) continue;
             const isPlayer = entity === GameState.player;
             const d = Math.hypot(entity.x - hitX, entity.y - hitY);
             
@@ -621,10 +652,10 @@ export const SupportSystem = {
     callSupport(type, worldX, worldY) {
         if (!this.canPlayerCall(type)) return false;
         const config = SupportConfig[type];
+        if (!this._executeSupport(type, worldX, worldY, 'player')) return false;
         GameState.rp -= config.rpCost;
         this.playerCooldowns[type] = config.cooldown;
         console.log(`📡 呼叫支援: ${config.name} 到 (${Math.round(worldX)}, ${Math.round(worldY)})`);
-        this._executeSupport(type, worldX, worldY, 'player');
         return true;
     },
 
@@ -633,25 +664,27 @@ export const SupportSystem = {
         if (!config) return false;
         if (this.enemyRP < config.rpCost) return false;
         if (this.enemyCooldowns[type] > 0) return false;
+        if (!this._executeSupport(type, worldX, worldY, 'enemy')) return false;
         this.enemyRP -= config.rpCost;
         this.enemyCooldowns[type] = config.cooldown;
         console.log(`🔴 敌方呼叫支援: ${config.name}`);
-        this._executeSupport(type, worldX, worldY, 'enemy');
         return true;
     },
 
     _executeSupport(type, x, y, faction) {
         switch (type) {
-            case SupportType.SUPPLY_DROP: this._executeSupplyDrop(x, y, faction); break;
-            case SupportType.ARTILLERY_SINGLE: this._executeArtillery(x, y, faction, false); break;
-            case SupportType.ARTILLERY_DOUBLE: this._executeArtillery(x, y, faction, true); break;
-            case SupportType.PARATROOPERS: this._executeParatroopers(x, y, faction, false); break;
-            case SupportType.ELITE_SQUAD: this._executeParatroopers(x, y, faction, true); break;
-            case SupportType.SMOKE_SCREEN: this._executeSmokeScreen(x, y); break;
-            case SupportType.WEAPON_DROP: this._executeWeaponDrop(x, y); break;
-            case SupportType.REAPER_STRIKE: this._executeReaperStrike(x, y); break;
-            case SupportType.A10_STRAFE: this._executeA10Strafe(x, y); break;
-            case SupportType.VEHICLE_DROP: this._executeVehicleDrop(x, y); break;
+            case SupportType.SUPPLY_DROP: this._executeSupplyDrop(x, y, faction); return true;
+            case SupportType.ARTILLERY_SINGLE: this._executeArtillery(x, y, faction, false); return true;
+            case SupportType.ARTILLERY_DOUBLE: this._executeArtillery(x, y, faction, true); return true;
+            case SupportType.PARATROOPERS: this._executeParatroopers(x, y, faction, false); return true;
+            case SupportType.ELITE_SQUAD: this._executeParatroopers(x, y, faction, true); return true;
+            case SupportType.SMOKE_SCREEN: this._executeSmokeScreen(x, y); return true;
+            case SupportType.WEAPON_DROP: this._executeWeaponDrop(x, y); return true;
+            case SupportType.REAPER_STRIKE: this._executeReaperStrike(x, y); return true;
+            case SupportType.A10_STRAFE: this._executeA10Strafe(x, y); return true;
+            case SupportType.VEHICLE_DROP: return this._executeVehicleDrop(x, y, SupportType.VEHICLE_DROP);
+            case SupportType.BTR80_DROP: return this._executeVehicleDrop(x, y, SupportType.BTR80_DROP);
+            default: return false;
         }
     },
 
@@ -844,22 +877,46 @@ export const SupportSystem = {
         });
     },
 
-    _executeVehicleDrop(x, y) {
-        const config = SupportConfig[SupportType.VEHICLE_DROP];
-        const startX = x + (Math.random() - 0.5) * 60;
-        const startY = y - config.dropHeight;
+    _executeVehicleDrop(x, y, supportType) {
+        const config = SupportConfig[supportType];
+        const vehicleId = config.vehicleId || 'jeep';
+        const vehicleConfig = VehicleRegistry[vehicleId];
+        const target = this._findVehicleDropPosition(x, y, vehicleConfig.radius);
+        if (!target) return false;
+
+        const startX = target.x + (Math.random() - 0.5) * 60;
+        const startY = target.y - config.dropHeight;
 
         this.vehicleDrops.push({
             startX, startY,
-            targetX: x,
-            targetY: y,
+            targetX: target.x,
+            targetY: target.y,
             currentX: startX,
             currentY: startY,
             timer: config.dropDuration,
-            maxTimer: config.dropDuration
+            maxTimer: config.dropDuration,
+            vehicleId
         });
 
-        console.log(`🚗 载具空投: 吉普车正在降落到 (${Math.round(x)}, ${Math.round(y)})`);
+        console.log(`🚗 载具空投: ${vehicleConfig.name}正在降落到 (${Math.round(target.x)}, ${Math.round(target.y)})`);
+        return true;
+    },
+
+    _findVehicleDropPosition(x, y, radius) {
+        const map = GameState.map;
+        if (!map) return { x, y };
+        if (map.isWalkable(x, y, radius)) return { x, y };
+
+        for (let attempts = 0; attempts < 120; attempts++) {
+            const angle = Math.random() * Math.PI * 2;
+            const distance = 40 + Math.random() * 260;
+            const candidateX = x + Math.cos(angle) * distance;
+            const candidateY = y + Math.sin(angle) * distance;
+            if (map.isWalkable(candidateX, candidateY, radius)) {
+                return { x: candidateX, y: candidateY };
+            }
+        }
+        return null;
     },
 
     // 死神支援执行
@@ -942,6 +999,7 @@ export const SupportSystem = {
         if (GameState.player && GameState.player.alive) entities.push(GameState.player);
         
         for (const entity of entities) {
+            if (entity.mountedVehicle) continue;
             const isPlayer = entity === GameState.player;
             const d = Math.hypot(entity.x - hitX, entity.y - hitY);
             if (d < radius) {
@@ -959,6 +1017,8 @@ export const SupportSystem = {
                 }
             }
         }
+        // 对载具造成伤害
+        this._applyVehicleAreaDamage(hitX, hitY, radius, damage);
     },
 
 

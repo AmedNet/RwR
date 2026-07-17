@@ -27,10 +27,12 @@ const BLOOD_TEX_COUNT = 6;
 
 // 弹壳形态配置（按武器类型）
 const ShellConfig = {
-    pistol:  { w: 3, h: 5,  color: '#D4A017' },
-    rifle:   { w: 3, h: 7,  color: '#C5960C' },
-    shotgun: { w: 5, h: 8,  color: '#B22222' },
-    sniper:  { w: 3, h: 10, color: '#B8860B' }
+    pistol:    { w: 3, h: 5,  color: '#D4A017', glow: '#FFA500', mass: 0.6, spin: 0.3 },
+    rifle:     { w: 3, h: 7,  color: '#C5960C', glow: '#FFB300', mass: 0.8, spin: 0.4 },
+    shotgun:   { w: 5, h: 8,  color: '#B22222', glow: '#FF5252', mass: 1.0, spin: 0.2 },
+    sniper:    { w: 3, h: 10, color: '#B8860B', glow: '#FFC107', mass: 0.7, spin: 0.25 },
+    autocannon:{ w: 3, h: 7,  color: '#B08A32', glow: '#FF6D00', mass: 0.8, spin: 0.3 },
+    coax:      { w: 3, h: 7,  color: '#C5960C', glow: '#FFB300', mass: 0.8, spin: 0.4 }
 };
 
 /** 特效系统物理与视觉配置常量 */
@@ -134,6 +136,7 @@ export const EffectsManager = {
     damageNumbers: [],
     explosions: [], // 爆炸效果数组
     shellCasings: [], // 弹壳数组
+    vehicleTracks: [], // 轮胎留下的短车辙段
     bloodStains: [],  // 血迹数据: { x, y, texIndex, scale, rotation, alpha }
     bloodTextures: [], // 预渲染的血迹纹理 Canvas 数组
     bloodTexturesReady: false,
@@ -185,19 +188,54 @@ export const EffectsManager = {
     },
 
     spawnVehicleExhaust(x, y, driftX = 0, driftY = 0, intensity = 0) {
-        const life = 24 + Math.random() * 18;
+        const count = intensity > 0.7 ? 3 : intensity > 0.35 ? 2 : 1;
+        const baseSize = 2.5 + intensity * 3.5;
+        for (let i = 0; i < count; i++) {
+            const life = 24 + Math.random() * 18;
+            this.particles.push({
+                x: x + (Math.random() - 0.5) * 3,
+                y: y + (Math.random() - 0.5) * 3,
+                vx: driftX + (Math.random() - 0.5) * 0.35,
+                vy: driftY - 0.25 - Math.random() * 0.3,
+                life,
+                maxLife: 42,
+                color: intensity > 0.65 ? '#4b4d48' : '#6d706b',
+                size: baseSize + Math.random() * 1.5,
+                type: ParticleType.SMOKE
+            });
+        }
+    },
+
+    spawnBarrelSmoke(x, y, angle, heat = 0.5) {
+        const life = 24 + Math.random() * 20;
         this.particles.push({
-            x: x + (Math.random() - 0.5) * 3,
-            y: y + (Math.random() - 0.5) * 3,
-            vx: driftX + (Math.random() - 0.5) * 0.35,
-            vy: driftY - 0.25 - Math.random() * 0.3,
+            x: x + (Math.random() - 0.5) * 2,
+            y: y + (Math.random() - 0.5) * 2,
+            vx: Math.cos(angle) * (0.15 + heat * 0.35) + (Math.random() - 0.5) * 0.18,
+            vy: Math.sin(angle) * (0.15 + heat * 0.35) - 0.3 - Math.random() * 0.25,
             life,
-            maxLife: 42,
-            color: intensity > 0.65 ? '#4b4d48' : '#6d706b',
-            size: 2.5 + intensity * 2 + Math.random() * 1.5,
+            maxLife: life,
+            color: heat > 0.7 ? '#555957' : '#777b78',
+            size: 2 + heat * 3 + Math.random() * 1.5,
             type: ParticleType.SMOKE
         });
     },
+
+    spawnVehicleDamageSmoke(x, y, driftX = 0, driftY = 0) {
+        const life = 38 + Math.random() * 24;
+        this.particles.push({
+            x: x + (Math.random() - 0.5) * 8,
+            y: y + (Math.random() - 0.5) * 8,
+            vx: driftX + (Math.random() - 0.5) * 0.3,
+            vy: driftY - 0.45 - Math.random() * 0.4,
+            life,
+            maxLife: life,
+            color: '#303330',
+            size: 4 + Math.random() * 4,
+            type: ParticleType.SMOKE
+        });
+    },
+
     // 生成车辆行驶时的尘土效果（从车轮位置扬起）
     spawnVehicleDust(x, y, driftX = 0, driftY = 0, intensity = 0) {
         const count = Math.floor(2 + intensity * 2);
@@ -224,9 +262,58 @@ export const EffectsManager = {
         }
     },
 
+    spawnVehicleTrack(x, y, angle, heavy = false, length = null) {
+        const life = heavy ? 720 : 480;
+        this.vehicleTracks.push({
+            x, y, angle,
+            length: length ?? (heavy ? 15 : 11),
+            width: heavy ? 14 : 9,
+            life,
+            maxLife: life,
+            opacity: 0.85 + Math.random() * 0.15
+        });
+        if (this.vehicleTracks.length > 700) this.vehicleTracks.shift();
+    },
+
+    spawnVehicleDropImpact(x, y, heavy = false) {
+        const radius = heavy ? 70 : 48;
+        const count = heavy ? 26 : 16;
+        const dustColors = ['#9f9278', '#b5a88c', '#c8b99a', '#817762'];
+        for (let i = 0; i < count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 1.2 + Math.random() * (heavy ? 4.2 : 3);
+            const life = 32 + Math.random() * 28;
+            const baseSize = 3 + Math.random() * (heavy ? 6 : 4);
+            this.particles.push({
+                x: x + Math.cos(angle) * Math.random() * radius * 0.35,
+                y: y + Math.sin(angle) * Math.random() * radius * 0.2,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                life,
+                maxLife: life,
+                color: dustColors[Math.floor(Math.random() * dustColors.length)],
+                size: baseSize,
+                baseSize,
+                type: ParticleType.SPARK,
+                isDust: true
+            });
+        }
+        this.explosions.push({
+            x, y,
+            radius,
+            currentRadius: 0,
+            maxRadius: radius,
+            life: 14,
+            maxLife: 14,
+            type: 'shockwave'
+        });
+        this.triggerShake(heavy ? 9 : 5, heavy ? 12 : 8);
+    },
+
 
     // 生成手雷爆炸效果
-    spawnGrenadeExplosion(x, y, radius) {
+    spawnGrenadeExplosion(x, y, radius, options = {}) {
+        const effectScale = options.scale ?? 1;
         // 冲击波环
         this.explosions.push({
             x, y, radius,
@@ -247,10 +334,11 @@ export const EffectsManager = {
         });
 
         // 动态光源：爆炸照亮周围
-        DayNightSystem.addLight(x, y, 300, '255,180,60', 20);
+        DayNightSystem.addLight(x, y, 300 * effectScale, '255,180,60', Math.max(6, 20 * effectScale));
 
         // 外层烟雾
-        for (let i = 0; i < FX.GRENADE_SMOKE_COUNT; i++) {
+        const smokeCount = Math.max(4, Math.round(FX.GRENADE_SMOKE_COUNT * effectScale));
+        for (let i = 0; i < smokeCount; i++) {
             const angle = Math.random() * Math.PI * 2;
             this.particles.push({
                 x, y,
@@ -265,7 +353,8 @@ export const EffectsManager = {
         }
 
         // 碎片粒子
-        for (let i = 0; i < FX.GRENADE_FRAGMENT_COUNT; i++) {
+        const fragmentCount = Math.max(8, Math.round(FX.GRENADE_FRAGMENT_COUNT * effectScale));
+        for (let i = 0; i < fragmentCount; i++) {
             const angle = Math.random() * Math.PI * 2;
             const speed = FX.GRENADE_FRAGMENT_SPEED_BASE + Math.random() * FX.GRENADE_FRAGMENT_SPEED_RANGE;
             this.particles.push({
@@ -281,7 +370,10 @@ export const EffectsManager = {
         }
 
         // 屏幕震动
-        this.triggerShake(FX.GRENADE_SHAKE_INTENSITY, FX.GRENADE_SHAKE_DURATION);
+        this.triggerShake(
+            options.shakeIntensity ?? FX.GRENADE_SHAKE_INTENSITY,
+            options.shakeDuration ?? FX.GRENADE_SHAKE_DURATION
+        );
     },
 
     // 添加伤害数字
@@ -360,17 +452,31 @@ export const EffectsManager = {
     // shooterX, shooterY: 射击者位置
     // angle: 射击方向（弧度）
     // weaponType: 武器类型字符串
-    spawnMuzzleFlash(shooterX, shooterY, angle, weaponType) {
-        const offset = FX.MUZZLE_OFFSET;
+    spawnMuzzleFlash(shooterX, shooterY, angle, weaponType, muzzleOffset = FX.MUZZLE_OFFSET) {
+        const offset = muzzleOffset;
         const mx = shooterX + Math.cos(angle) * offset;
         const my = shooterY + Math.sin(angle) * offset;
 
         // 动态光源：枪口火焰照亮周围
-        DayNightSystem.addLight(mx, my, 120, '255,200,80', 6);
+        const lightRadius = weaponType === 'autocannon' ? 210 : 120;
+        const lightLife = weaponType === 'autocannon' ? 8 : 6;
+        DayNightSystem.addLight(mx, my, lightRadius, '255,200,80', lightLife);
 
         // 按武器类型配置火焰大小和颜色
         let flashSize, flashColors, particleCount, smokeCount;
         switch (weaponType) {
+            case 'autocannon':
+                flashSize = 19;
+                flashColors = ['#FFFFFF', '#FFF59D', '#FFB300', '#FF6D00'];
+                particleCount = 14;
+                smokeCount = 5;
+                break;
+            case 'coax':
+                flashSize = 7;
+                flashColors = ['#FFFDE7', '#FFD740', '#FFAB00', '#FF6D00'];
+                particleCount = 5;
+                smokeCount = 1;
+                break;
             case 'shotgun':
                 flashSize = 12;
                 flashColors = ['#FF6D00', '#FF9100', '#FFAB00', '#FFF176'];
@@ -518,39 +624,62 @@ export const EffectsManager = {
     },
 
     // 生成抛壳效果
-    spawnShellCasing(x, y, weaponType) {
+    spawnShellCasing(x, y, weaponType, ejectionAngle = null, force = 1) {
         const cfg = ShellConfig[weaponType] || ShellConfig.rifle;
-        // 随机抛出方向（偏上方±60°范围）
-        const angle = -Math.PI / 2 + (Math.random() - 0.5) * (Math.PI * 2 / 3);
-        const speed = 2 + Math.random() * 2;
+        const isCannon = weaponType === 'autocannon';
+        
+        let angle, speed, vyExtra, rotSpeed;
+        if (ejectionAngle !== null) {
+            angle = ejectionAngle + (Math.random() - 0.5) * (isCannon ? 0.5 : 0.8);
+            const baseSpeed = isCannon ? 5.5 : 3.5;
+            speed = (baseSpeed + Math.random() * 1.5) * force;
+            vyExtra = isCannon ? 0.3 : 2;
+            rotSpeed = (Math.random() - 0.5) * cfg.spin * (isCannon ? 1.2 : 1.5);
+        } else {
+            angle = -Math.PI / 2 + (Math.random() - 0.5) * (Math.PI * 2 / 3);
+            speed = (2 + Math.random() * 2) * force;
+            vyExtra = 1.5;
+            rotSpeed = (Math.random() - 0.5) * cfg.spin;
+        }
+        
+        const drag = isCannon ? 0.985 : 0.975;
         this.shellCasings.push({
             x, y,
             vx: Math.cos(angle) * speed,
-            vy: Math.sin(angle) * speed - 1.5,
+            vy: Math.sin(angle) * speed - vyExtra,
             rotation: Math.random() * Math.PI * 2,
-            rotationSpeed: (Math.random() - 0.5) * 0.4,
+            rotationSpeed: rotSpeed,
             w: cfg.w,
             h: cfg.h,
             color: cfg.color,
-            weaponType: weaponType, // 存储武器类型用于音效
+            glow: cfg.glow,
+            weaponType: weaponType,
             bounceCount: 0,
-            maxBounces: FX.SHELL_BOUNCE_MIN + Math.floor(Math.random() * FX.SHELL_BOUNCE_RANDOM),
+            maxBounces: isCannon ? 1 : FX.SHELL_BOUNCE_MIN + Math.floor(Math.random() * FX.SHELL_BOUNCE_RANDOM),
             groundY: y + FX.SHELL_GROUND_OFFSET + Math.random() * FX.SHELL_GROUND_RANDOM,
-            state: 'flying', // flying | stopped
+            state: 'flying',
             stopTimer: 0,
             maxStopTime: FX.SHELL_MAX_STOP_TIME,
             fadeAlpha: 1,
-            trailTimer: 0
+            trailTimer: 0,
+            hotTimer: isCannon ? 18 : 10,
+            drag: drag,
+            mass: cfg.mass,
+            skidding: false,
+            skidTimer: 0
         });
     },
 
-    // 生成跳弹特效（金属火花 + 灰色"resist!"文字）
-    spawnRicochetEffect(x, y) {
+    // 生成跳弹特效；车体命中时火花沿来弹反方向散开。
+    spawnRicochetEffect(x, y, impactAngle = null, vehicleImpact = false) {
         // 银白色金属火花（增强版）
         const sparkColors = ['#FFFFFF', '#E0E0E0', '#BDBDBD', '#CFD8DC', '#FFD700', '#FFA500'];
-        for (let i = 0; i < 15; i++) {  // 增加粒子数量：8 -> 15
-            const angle = Math.random() * Math.PI * 2;
-            const speed = 3 + Math.random() * 4;  // 增加速度：2-5 -> 3-7
+        const sparkCount = vehicleImpact ? 22 : 15;
+        for (let i = 0; i < sparkCount; i++) {
+            const angle = impactAngle === null
+                ? Math.random() * Math.PI * 2
+                : impactAngle + Math.PI + (Math.random() - 0.5) * 1.35;
+            const speed = 3 + Math.random() * (vehicleImpact ? 5.5 : 4);
             this.particles.push({
                 x, y,
                 vx: Math.cos(angle) * speed,
@@ -563,10 +692,25 @@ export const EffectsManager = {
                 isRicochetSpark: true  // 标记为跳弹火花，用于特殊渲染
             });
         }
+        if (vehicleImpact) {
+            for (let i = 0; i < 2; i++) {
+                const life = 16 + Math.random() * 10;
+                this.particles.push({
+                    x, y,
+                    vx: (Math.random() - 0.5) * 0.3,
+                    vy: -0.35 - Math.random() * 0.25,
+                    life,
+                    maxLife: life,
+                    color: '#70736f',
+                    size: 2.5 + Math.random() * 2,
+                    type: ParticleType.SMOKE
+                });
+            }
+        }
         // 灰色 "resist!" 伤害数字
         this.damageNumbers.push({
             x, y: y - 10,
-            text: 'resist!',
+            text: vehicleImpact ? 'ricochet' : 'resist!',
             isRicochet: true,
             life: 40,
             maxLife: 40,
@@ -701,6 +845,12 @@ export const EffectsManager = {
 
     // 更新所有特效
     update() {
+        for (let i = this.vehicleTracks.length - 1; i >= 0; i--) {
+            const track = this.vehicleTracks[i];
+            track.life--;
+            if (track.life <= 0) this.vehicleTracks.splice(i, 1);
+        }
+
         // 更新粒子
         for (let i = this.particles.length - 1; i >= 0; i--) {
             const p = this.particles[i];
@@ -753,40 +903,67 @@ export const EffectsManager = {
             if (s.state === 'flying') {
                 s.x += s.vx;
                 s.y += s.vy;
-                s.vy += FX.SHELL_GRAVITY;
-                s.vx *= FX.SHELL_DRAG;
+                s.vy += FX.SHELL_GRAVITY / (s.mass || 1);
+                s.vx *= s.drag || FX.SHELL_DRAG;
                 s.rotation += s.rotationSpeed;
-                // 飞行中拖尾火花
-                s.trailTimer++;
-                if (s.trailTimer % FX.SHELL_TRAIL_INTERVAL === 0) {
+                s.rotationSpeed *= 0.995;
+                
+                // 高温发光拖尾
+                if (s.hotTimer > 0) {
+                    s.hotTimer--;
+                    if (s.trailTimer % 2 === 0) {
+                        this.particles.push({
+                            x: s.x, y: s.y,
+                            vx: (Math.random() - 0.5) * 0.8,
+                            vy: -Math.random() * 0.8 - 0.2,
+                            life: 6 + Math.random() * 8,
+                            maxLife: 14,
+                            color: s.glow || '#FFD740',
+                            size: 1.5 + Math.random() * 2,
+                            type: ParticleType.SPARK
+                        });
+                    }
+                } else if (s.trailTimer % FX.SHELL_TRAIL_INTERVAL === 0) {
                     this.particles.push({
                         x: s.x, y: s.y,
-                        vx: (Math.random() - 0.5) * 0.5,
-                        vy: (Math.random() - 0.5) * 0.5,
-                        life: 8 + Math.random() * 6,
-                        maxLife: 14,
+                        vx: (Math.random() - 0.5) * 0.4,
+                        vy: (Math.random() - 0.5) * 0.4,
+                        life: 6 + Math.random() * 4,
+                        maxLife: 10,
                         color: '#FFD740',
-                        size: 1 + Math.random(),
+                        size: 0.8 + Math.random() * 0.8,
                         type: ParticleType.SPARK
                     });
                 }
+                s.trailTimer++;
+                
                 // 落地检测
                 if (s.y >= s.groundY) {
                     s.y = s.groundY;
-                    // 触发弹壳落地音效
                     playShellLand(s.weaponType, s.bounceCount, s);
                     s.bounceCount++;
                     if (s.bounceCount >= s.maxBounces) {
                         s.state = 'stopped';
-                        s.vx = 0;
-                        s.vy = 0;
-                        s.rotationSpeed *= FX.SHELL_ROT_DAMPING;
+                        s.vx *= 0.3;
+                        s.rotationSpeed *= 0.15;
+                        s.skidding = true;
+                        s.skidTimer = 20 + Math.random() * 30;
                     } else {
-                        // 弹跳衰减
-                        s.vy = -Math.abs(s.vy) * FX.SHELL_BOUNCE_DAMPING;
-                        s.vx *= FX.SHELL_HORIZ_DAMPING;
-                        s.rotationSpeed *= 0.5;
+                        const bounceForce = (s.mass || 1) * 0.35;
+                        s.vy = -Math.abs(s.vy) * FX.SHELL_BOUNCE_DAMPING * bounceForce;
+                        s.vx *= FX.SHELL_HORIZ_DAMPING * (0.7 + Math.random() * 0.3);
+                        s.rotationSpeed *= 0.6 + Math.random() * 0.3;
                     }
+                }
+            } else if (s.skidding) {
+                s.skidTimer--;
+                s.x += s.vx;
+                s.vx *= 0.92;
+                s.rotation += s.vx * 0.15;
+                if (s.skidTimer <= 0) {
+                    s.vx = 0;
+                    s.skidding = false;
+                    s.rotationSpeed *= 0.1;
                 }
             } else {
                 // stopped状态：淡出
@@ -818,7 +995,7 @@ export const EffectsManager = {
 
     // 专门绘制尘土粒子（在车辆之前调用，让车辆覆盖尘土）
     drawDustOnly(ctx, camera) {
-        if (this.particles.length === 0) return;
+        if (this.particles.length === 0 && this.vehicleTracks.length === 0) return;
         const zoom = camera.zoom || 1;
         const offsetX = camera.offsetX || 0;
         const offsetY = camera.offsetY || 0;
@@ -830,6 +1007,57 @@ export const EffectsManager = {
             x: (wx - camera.x) * zoom + cx * (1 - zoom) - offsetX,
             y: (wy - camera.y) * zoom + cy * (1 - zoom) - offsetY
         });
+
+        for (const track of this.vehicleTracks) {
+            const pos = toScreen(track.x, track.y);
+            const halfLength = track.length * 0.5 * zoom;
+            const directionX = Math.cos(track.angle);
+            const directionY = Math.sin(track.angle);
+            const normalX = -directionY;
+            const normalY = directionX;
+            const fade = Math.min(1, track.life / (track.maxLife * 0.35));
+            const alpha = 0.24 * fade * (track.opacity ?? 1);
+            const startX = pos.x - directionX * halfLength;
+            const startY = pos.y - directionY * halfLength;
+            const endX = pos.x + directionX * halfLength;
+            const endY = pos.y + directionY * halfLength;
+            ctx.save();
+            ctx.strokeStyle = `rgba(43, 39, 30, ${alpha * 0.42})`;
+            ctx.lineWidth = track.width * zoom;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(startX, startY);
+            ctx.lineTo(endX, endY);
+            ctx.stroke();
+
+            const grooveOffset = track.width * 0.3 * zoom;
+            ctx.strokeStyle = `rgba(31, 29, 24, ${alpha * 0.72})`;
+            ctx.lineWidth = Math.max(0.8, 1.15 * zoom);
+            for (const side of [-1, 1]) {
+                const offsetX = normalX * grooveOffset * side;
+                const offsetY = normalY * grooveOffset * side;
+                ctx.beginPath();
+                ctx.moveTo(startX + offsetX, startY + offsetY);
+                ctx.lineTo(endX + offsetX, endY + offsetY);
+                ctx.stroke();
+            }
+
+            const treadHalfWidth = track.width * 0.42 * zoom;
+            const treadSkew = Math.min(2.2, track.length * 0.18) * zoom;
+            ctx.strokeStyle = `rgba(35, 32, 25, ${alpha * 0.58})`;
+            ctx.lineWidth = Math.max(0.65, 0.9 * zoom);
+            ctx.beginPath();
+            ctx.moveTo(
+                pos.x - normalX * treadHalfWidth - directionX * treadSkew,
+                pos.y - normalY * treadHalfWidth - directionY * treadSkew
+            );
+            ctx.lineTo(
+                pos.x + normalX * treadHalfWidth + directionX * treadSkew,
+                pos.y + normalY * treadHalfWidth + directionY * treadSkew
+            );
+            ctx.stroke();
+            ctx.restore();
+        }
 
         for (const p of this.particles) {
             if (!p.isDust) continue;
@@ -976,6 +1204,17 @@ export const EffectsManager = {
             ctx.translate(sx, sy);
             ctx.rotate(s.rotation);
             ctx.scale(zoom, zoom);
+            
+            // 高温发光
+            if (s.hotTimer > 0) {
+                const glowAlpha = s.hotTimer / 18;
+                ctx.shadowColor = s.glow || '#FFD740';
+                ctx.shadowBlur = 6 * glowAlpha;
+                ctx.fillStyle = s.glow || '#FFD740';
+                ctx.fillRect(-s.w / 2 - 1, -s.h / 2 - 1, s.w + 2, s.h + 2);
+                ctx.shadowBlur = 0;
+            }
+            
             ctx.fillStyle = s.color;
             ctx.fillRect(-s.w / 2, -s.h / 2, s.w, s.h);
             // 弹壳高光边
@@ -1068,6 +1307,7 @@ export const EffectsManager = {
         this.particles.length = 0;
         this.damageNumbers.length = 0;
         this.shellCasings.length = 0;
+        this.vehicleTracks.length = 0;
         this.bloodStains.length = 0;
         this.screenShake.timer = 0;
         this.screenShake.x = 0;
