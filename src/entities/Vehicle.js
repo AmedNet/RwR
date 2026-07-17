@@ -5,6 +5,7 @@ import { drawJeep } from "../rendering/JeepRenderer.js";
 import { EffectsManager, ParticleType } from "../utils/EffectsManager.js";
 import * as SoundManager from "../utils/SoundManager.js";
 import { DayNightSystem } from "../core/DayNightSystem.js";
+import { VehicleChatSystem } from "../utils/VehicleChatSystem.js";
 
 export class Vehicle extends Entity {
     // 座位局部坐标（与 JeepRenderer.js 中的座位位置一致）
@@ -166,6 +167,7 @@ export class Vehicle extends Entity {
         this.velocityX = 0;
         this.velocityY = 0;
         this.currentSpeed = 0;
+        VehicleChatSystem.clear(this);
     }
 
     isFull() {
@@ -415,6 +417,8 @@ export class Vehicle extends Entity {
             EffectsManager.spawnVehicleDust(rearRight.x, rearRight.y, dustDriftX, dustDriftY, speedRatio);
         }
         SoundManager.updateVehicleEngine(this, Math.abs(this.currentSpeed) / Math.max(maxForwardSpeed, 0.01));
+        // 更新 AI 闲聊系统
+        VehicleChatSystem.update(this);
         return throttle !== 0 || steering !== 0 || Math.abs(this.currentSpeed) > 0.05;
     }
 

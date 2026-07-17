@@ -17,6 +17,7 @@ import { WeatherSystem } from '../core/WeatherSystem.js';
 import { rollLoot } from '../core/LootRegistry.js';
 import { LootPickup } from './LootPickup.js';
 import { rollHelmet, rollHelmetVariant, getHelmetConfig, getHelmetVariantImagePath, HelmetTier } from '../core/HelmetSystem.js';
+import { AIMonologueSystem } from '../utils/AIMonologueSystem.js';
 
 export class CombatAI extends Entity {
     // AI 角色常量
@@ -912,6 +913,10 @@ export class CombatAI extends Entity {
             return;
         }
         if (!this.alive) return;
+        // AI 自言自语系统（不在载具内时才触发）
+        if (!this.mountedVehicle) {
+            AIMonologueSystem.update(this);
+        }
         if (this.mountedVehicle) {
             if (this.vehicleSeat === 0) {
                 // AI驾驶员：执行驾驶逻辑
