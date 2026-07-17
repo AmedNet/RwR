@@ -75,6 +75,11 @@ export class CombatAI extends Entity {
     };
     // 载具射击范围
     static VEHICLE_ENGAGE_RANGE = 500;
+    // AI驾驶系统常量
+    static DRIVER_MIN_RANK = AIRank.SERGEANT;       // 2🌟门槛
+    static VEHICLE_SEARCH_RANGE = 300;              // 寻车范围
+    static VEHICLE_BOARD_CHECK_INTERVAL = 120;      // 2秒检查一次
+    static MIN_PASSENGERS_TO_DEPART = 2;            // 发车最低乘客数
 
     constructor(x, y, entityConfig, aiConfig) {
         super(x, y, entityConfig);
@@ -131,6 +136,15 @@ export class CombatAI extends Entity {
         // 载具射击冷却
         this._vehicleAimTimer = 0;
         this._vehicleTarget = null;
+        // AI驾驶系统
+        this.vehicleBoardTimer = 0;
+        // AI驾驶卡住检测
+        this._driveStuckTimer = 0;
+        this._driveLastX = 0;
+        this._driveLastY = 0;
+        this._driveStuckRecoverTimer = 0;
+        this._driveStuckDir = 1;
+        this._driveStuckCount = 0; // 连续卡住次数
     }
 
     // ─── 军衔系统方法 ───
@@ -582,6 +596,182 @@ export class CombatAI extends Entity {
         evaluateWeaponChoice(this, closestDist, closestTarget);
     }
 
+    // ─── AI驾驶系统方法 ───
+    /**
+     * 尝试寻找并登上附近空闲载具
+     */
+    tryBoardVehicle() {
+        // 军衔不够不能驾驶
+        if (this.rank < CombatAI.DRIVER_MIN_RANK) return;
+        // 已经在车上
+        if (this.mountedVehicle) return;
+        // 定时器检查
+        this.vehicleBoardTimer++;
+        if (this.vehicleBoardTimer < CombatAI.VEHICLE_BOARD_CHECK_INTERVAL) return;
+        this.vehicleBoardTimer = 0;
+
+        const vehicles = GameState.vehicles;
+        if (!vehicles || vehicles.length === 0) return;
+
+        let nearestVehicle = null;
+        let nearestDist = Infinity;
+
+        for (const v of vehicles) {
+            if (!v.alive || v.isFull()) continue;
+            // 驾驶座必须空着
+            if (v.occupants[0]) continue;
+            const dist = Math.hypot(v.x - this.x, v.y - this.y);
+            if (dist > CombatAI.VEHICLE_SEARCH_RANGE) continue;
+            if (dist < nearestDist) {
+                nearestDist = dist;
+                nearestVehicle = v;
+            }
+        }
+
+        if (nearestVehicle) {
+            if (nearestVehicle.mount(this, 0)) {
+                console.log(`🚗 ${this.faction} AI驾驶员(★${this.rank + 1})上车`);
+            }
+        }
+    }
+
+    /**
+     * AI驾驶逻辑：控制载具朝目标移动
+     * @param {import('./Vehicle.js').Vehicle} vehicle
+     */
+    updateAIDriving(vehicle) {
+        if (!vehicle || !vehicle.alive) return;
+
+        // 更新座位位置（驾驶员也要同步）
+        const seatPos = vehicle.getSeatWorldPosition(0);
+        this.x = seatPos.x;
+        this.y = seatPos.y;
+
+        // 更新状态效果（龙卷风伤害等）
+        this.updateStatusEffects();
+
+        // 检查发车条件：乘客数（不含驾驶员）
+        const passengerCount = vehicle.occupants.filter((o, i) => i > 0 && o).length;
+        let throttle = 0;
+        let steering = 0;
+
+        if (passengerCount >= CombatAI.MIN_PASSENGERS_TO_DEPART) {
+            // 满足发车条件，选择目标
+            const { target: captureTarget } = this.getClosestTargetPoint();
+            const { target: enemyTarget } = this.getClosestTarget();
+
+            let targetX, targetY;
+            if (captureTarget) {
+                targetX = captureTarget.x;
+                targetY = captureTarget.y;
+            } else if (enemyTarget) {
+                targetX = enemyTarget.x;
+                targetY = enemyTarget.y;
+            } else {
+                // 无目标，原地怠速
+                vehicle.updatePhysics(0, 0, 1);
+                return;
+            }
+
+            // 计算目标角度
+            const dx = targetX - vehicle.x;
+            const dy = targetY - vehicle.y;
+            const targetAngle = Math.atan2(dy, dx);
+
+            // ─── 卡住检测与脱困 ───
+            const moved = Math.hypot(vehicle.x - this._driveLastX, vehicle.y - this._driveLastY);
+            this._driveLastX = vehicle.x;
+            this._driveLastY = vehicle.y;
+
+            if (this._driveStuckRecoverTimer > 0) {
+                // 脱困模式：全速倒车 + 大角度转向
+                this._driveStuckRecoverTimer--;
+                throttle = -0.8;
+                steering = this._driveStuckDir;
+                if (this._driveStuckRecoverTimer === 0) {
+                    // 脱困结束：强制旋转车身角度，避免立刻朝墙开
+                    const randomAngleOffset = (Math.PI / 3) + Math.random() * (Math.PI / 3); // 60°~120°
+                    vehicle.angle += this._driveStuckDir > 0 ? randomAngleOffset : -randomAngleOffset;
+                    this._driveStuckTimer = 0;
+                }
+            } else if (Math.abs(vehicle.currentSpeed) > 2 && moved < 2) {
+                // 速度很低且几乎没移动 → 可能卡住了
+                this._driveStuckTimer++;
+                if (this._driveStuckTimer > 30) {
+                    // 进入脱困模式：全速倒车 + 随机方向转向，持续 60 帧
+                    this._driveStuckRecoverTimer = 60;
+                    this._driveStuckDir = Math.random() < 0.5 ? -1 : 1;
+                    this._driveStuckTimer = 0;
+                    this._driveStuckCount++;
+                    throttle = -0.8;
+                    steering = this._driveStuckDir;
+                    
+                    // 连续卡住15次以上，传送到己方据点
+                    if (this._driveStuckCount >= 15) {
+                        const friendlyPoints = GameState.capturePoints.filter(point => point.owner === this.faction);
+                        if (friendlyPoints.length > 0) {
+                            const targetPoint = friendlyPoints[Math.floor(Math.random() * friendlyPoints.length)];
+                            vehicle.x = targetPoint.x;
+                            vehicle.y = targetPoint.y;
+                            vehicle.currentSpeed = 0;
+                            vehicle.velocityX = 0;
+                            vehicle.velocityY = 0;
+                            // 同步所有乘客位置
+                            for (let i = 0; i < vehicle.occupants.length; i++) {
+                                const occupant = vehicle.occupants[i];
+                                if (occupant) {
+                                    const seatPos = vehicle.getSeatWorldPosition(i);
+                                    occupant.x = seatPos.x;
+                                    occupant.y = seatPos.y;
+                                }
+                            }
+                            console.log(`🚗 AI驾驶员连续卡住${this._driveStuckCount}次，传送到己方据点`);
+                            this._driveStuckCount = 0;
+                            this._driveStuckRecoverTimer = 0;
+                        }
+                    }
+                }
+            } else {
+                // 正常行驶中，重置卡住计时
+                this._driveStuckTimer = 0;
+                this._driveStuckCount = 0; // 正常移动时重置连续卡住计数
+            }
+
+            // 正常驾驶逻辑（非脱困模式时）
+            if (this._driveStuckRecoverTimer === 0) {
+                // 计算角度差，归一化到 [-PI, PI]
+                let angleDiff = targetAngle - vehicle.angle;
+                while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+                while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+
+                // 计算转向和油门
+                steering = Math.max(-1, Math.min(1, angleDiff * 2));
+                const absAngleDiff = Math.abs(angleDiff);
+                if (absAngleDiff < Math.PI * 2 / 3) {
+                    throttle = 1;
+                } else {
+                    throttle = 0.3;
+                }
+            }
+        }
+
+        // 计算地形/天气速度因子
+        const speedFactor = GameState.map ? GameState.map.getSpeedFactor(vehicle.x, vehicle.y) : 1;
+        const weatherSpeed = WeatherSystem.getSpeedMultiplier();
+        const terrainSpeed = speedFactor * weatherSpeed;
+
+        // 更新载具物理
+        vehicle.updatePhysics(throttle, steering, terrainSpeed);
+
+        // 处理碰撞位移（同Player逻辑）
+        const newX = vehicle.x + vehicle.velocityX;
+        const newY = vehicle.y + vehicle.velocityY;
+        if (GameState.map && GameState.map.isWalkable(newX, newY, vehicle.radius)) {
+            vehicle.x = newX;
+            vehicle.y = newY;
+        }
+    }
+
     // ─── 载具战斗方法 ───
 
     /**
@@ -629,53 +819,82 @@ export class CombatAI extends Entity {
 
         if (!weapon || !closestTarget) return;
 
-        // 存储瞄准角度供渲染使用（世界坐标系）
-        this._vehicleAimAngle = Math.atan2(closestTarget.y - this.y, closestTarget.x - this.x);
-
-        // 武器选择（在载具中只使用主武器槽1）
+        // 武器选择（在载具中只使用主武器槽1）——必须在类型检查之前
         if (this.activeWeaponSlot !== 1 && this.weapons[1]) {
             this.activeWeaponSlot = 1;
         }
+        // 重新获取切换后的武器
+        const activeWeapon = this.getActiveWeapon();
+        if (!activeWeapon) return;
+
+        // 载具乘客不能用医疗包/近战/手雷射击
+        const weaponType = activeWeapon.config.type;
+        if (weaponType === 'medical' || weaponType === 'melee' || weaponType === 'grenade') return;
+
+        // 存储瞄准角度供渲染使用（世界坐标系）
+        this._vehicleAimAngle = Math.atan2(closestTarget.y - this.y, closestTarget.x - this.x);
 
         // 射击冷却和瞄准
         if (this.shootCooldown > 0) {
             this.shootCooldown--;
-        } else if (this.updateVehicleAim(closestTarget)) {
+        } else if (activeWeapon.canShoot() && this.updateVehicleAim(closestTarget)) {
             // 载具中的射击方向——从座位指向目标
             const angle = Math.atan2(closestTarget.y - this.y, closestTarget.x - this.x);
-            const speed = weapon.config.bulletSpeed || this.bulletSpeed;
+            const speed = activeWeapon.config.bulletSpeed || this.bulletSpeed;
+            
+            // 防御性检查：确保速度有效
+            if (!isFinite(speed) || speed <= 0) {
+                this.shootCooldown = 30; // 无效武器，给个长冷却
+                return;
+            }
+            
             const predicted = this.predictTargetPosition(closestTarget, speed);
             const fireAngle = Math.atan2(predicted.y - this.y, predicted.x - this.x);
-            const angleOffset = weapon.getShotAngleOffset();
+            
+            // 防御性检查：确保角度有效
+            if (!isFinite(fireAngle)) {
+                this.shootCooldown = 30;
+                return;
+            }
+            
+            const angleOffset = activeWeapon.getShotAngleOffset() || 0;
 
-            if (weapon.config.type === 'shotgun') {
-                const pellets = weapon.config.pellets || 8;
-                const spreadAngle = weapon.config.spreadAngle || 0.35;
+            if (activeWeapon.config.type === 'shotgun') {
+                const pellets = activeWeapon.config.pellets || 8;
+                const spreadAngle = activeWeapon.config.spreadAngle || 0.35;
                 for (let i = 0; i < pellets; i++) {
                     const pelletAngle = fireAngle + (Math.random() - 0.5) * spreadAngle + angleOffset;
-                    this.spawnBullet(pelletAngle, speed, weapon, weapon.config.range || 250);
+                    this.spawnBullet(pelletAngle, speed, activeWeapon, activeWeapon.config.range || 250);
                 }
-            } else if (weapon.config.arcRange) {
+            } else if (activeWeapon.config.arcRange) {
                 GameState.bullets.push(new GrenadeBullet(
                     this.x, this.y,
                     predicted.x, predicted.y,
-                    weapon.config,
+                    activeWeapon.config,
                     this
                 ));
             } else {
-                this.spawnBullet(fireAngle + angleOffset, speed, weapon, null);
+                this.spawnBullet(fireAngle + angleOffset, speed, activeWeapon, null);
             }
 
             // 播放枪声和枪口火焰
-            const weaponType = weapon.config.type;
             if (['pistol', 'rifle', 'smg', 'shotgun', 'sniper', 'launcher'].includes(weaponType)) {
                 SoundManager.playShoot(weaponType, this);
                 EffectsManager.spawnMuzzleFlash(this.x, this.y, fireAngle, weaponType);
             }
 
-            weapon.consumeAmmo();
-            weapon.applyRecoilAndSpread();
-            this.shootCooldown = weapon.config.shootDelay;
+            activeWeapon.consumeAmmo();
+            activeWeapon.applyRecoilAndSpread();
+            
+            // 确保冷却时间有效（至少1帧，默认10帧）
+            const delay = activeWeapon.config.shootDelay;
+            this.shootCooldown = (isFinite(delay) && delay > 0) ? delay : 10;
+
+            // 火箭筒堆叠消耗
+            if (weaponType === 'launcher' && activeWeapon.config.maxStack) {
+                activeWeapon.consumeStack();
+                if (activeWeapon.stackCount <= 0) this.weapons[this.activeWeaponSlot] = null;
+            }
 
             // 抛壳
             const noShellTypes = ['melee', 'grenade', 'medical', 'launcher'];
@@ -694,8 +913,15 @@ export class CombatAI extends Entity {
         }
         if (!this.alive) return;
         if (this.mountedVehicle) {
-            this.x = this.mountedVehicle.x;
-            this.y = this.mountedVehicle.y;
+            if (this.vehicleSeat === 0) {
+                // AI驾驶员：执行驾驶逻辑
+                this.updateAIDriving(this.mountedVehicle);
+                return;
+            }
+            // 乘客：同步到座位的世界坐标（而不是载具中心）
+            const seatPos = this.mountedVehicle.getSeatWorldPosition(this.vehicleSeat);
+            this.x = seatPos.x;
+            this.y = seatPos.y;
             return;
         }
         this.updateStatusEffects();
@@ -787,6 +1013,8 @@ export class CombatAI extends Entity {
 
         this.cycleTimer++;
         this.tryPickupWeapon();
+        // AI尝试登上载具
+        this.tryBoardVehicle();
     }
 
     stabilizeMoveTarget(target) {

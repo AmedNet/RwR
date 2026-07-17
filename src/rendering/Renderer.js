@@ -467,6 +467,111 @@ export const Renderer = {
             this.ctx.setLineDash([]);
         }
 
+        // 渲染载具空投
+        for (const drop of SupportSystem.vehicleDrops) {
+            const pos = this.toScreen(drop.currentX, drop.currentY);
+            const targetPos = this.toScreen(drop.targetX, drop.targetY);
+            const progress = 1 - (drop.timer / drop.maxTimer);
+            const scale = 0.3 + progress * 0.7;
+            const alpha = 0.4 + progress * 0.6;
+
+            // 地面阴影
+            const shadowScale = 0.3 + progress * 0.7;
+            this.ctx.fillStyle = `rgba(0,0,0,${0.15 + progress * 0.2})`;
+            this.ctx.beginPath();
+            this.ctx.ellipse(targetPos.x, targetPos.y, 30 * shadowScale, 14 * shadowScale, 0, 0, Math.PI * 2);
+            this.ctx.fill();
+
+            // 降落伞（橙白条纹）
+            if (progress < 0.88) {
+                const parachuteY = pos.y - 50 * (1 - progress);
+                const parachuteSize = 36 * scale;
+                const sway = Math.sin(time * 0.005 + drop.targetX * 0.01) * 4;
+
+                this.ctx.save();
+                this.ctx.beginPath();
+                this.ctx.arc(pos.x + sway, parachuteY, parachuteSize, Math.PI, 0);
+                this.ctx.closePath();
+                this.ctx.clip();
+
+                this.ctx.fillStyle = `rgba(255,140,0,${alpha * 0.85})`;
+                this.ctx.fillRect(pos.x + sway - parachuteSize, parachuteY - parachuteSize, parachuteSize * 2, parachuteSize);
+
+                const stripeW = (parachuteSize * 2) / 5;
+                for (let s = 0; s < 5; s += 2) {
+                    this.ctx.fillStyle = `rgba(255,255,255,${alpha * 0.7})`;
+                    this.ctx.fillRect(pos.x + sway - parachuteSize + s * stripeW, parachuteY - parachuteSize, stripeW, parachuteSize);
+                }
+                this.ctx.restore();
+
+                this.ctx.strokeStyle = `rgba(200,120,0,${alpha * 0.6})`;
+                this.ctx.lineWidth = 1.5;
+                this.ctx.beginPath();
+                this.ctx.arc(pos.x + sway, parachuteY, parachuteSize, Math.PI, 0);
+                this.ctx.stroke();
+
+                this.ctx.strokeStyle = `rgba(180,180,180,${alpha * 0.5})`;
+                this.ctx.lineWidth = 1;
+                for (let r = 0; r < 4; r++) {
+                    const attachX = pos.x + sway - parachuteSize + (r + 0.5) * (parachuteSize * 2 / 4);
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(attachX, parachuteY);
+                    this.ctx.lineTo(pos.x, pos.y - 8 * scale);
+                    this.ctx.stroke();
+                }
+            }
+
+            // 载具本体（简化吉普）
+            const jeepSize = 48 * scale;
+            this.ctx.save();
+            this.ctx.globalAlpha = alpha;
+            this.ctx.fillStyle = '#5C4033';
+            this.ctx.beginPath();
+            this.ctx.roundRect(pos.x - jeepSize * 0.35, pos.y - jeepSize * 0.5, jeepSize * 0.7, jeepSize, 4 * scale);
+            this.ctx.fill();
+            this.ctx.strokeStyle = `rgba(255,255,255,${alpha * 0.4})`;
+            this.ctx.lineWidth = 1.5;
+            this.ctx.stroke();
+            this.ctx.fillStyle = `rgba(150,200,255,${alpha * 0.5})`;
+            this.ctx.fillRect(pos.x - jeepSize * 0.25, pos.y - jeepSize * 0.4, jeepSize * 0.5, jeepSize * 0.2);
+            this.ctx.fillStyle = `rgba(30,30,30,${alpha * 0.8})`;
+            for (const [wx, wy] of [[-0.35,-0.25],[0.35,-0.25],[-0.35,0.3],[0.35,0.3]]) {
+                this.ctx.beginPath();
+                this.ctx.arc(pos.x + jeepSize * wx, pos.y + jeepSize * wy, 4 * scale, 0, Math.PI * 2);
+                this.ctx.fill();
+            }
+            this.ctx.restore();
+
+            // 落点标记
+            const markerPulse = Math.sin(time * 0.006) * 3 + 8;
+            this.ctx.strokeStyle = `rgba(100,181,246,${0.5 * (1 - progress * 0.5)})`;
+            this.ctx.lineWidth = 1.5;
+            this.ctx.setLineDash([4, 3]);
+            this.ctx.beginPath();
+            this.ctx.arc(targetPos.x, targetPos.y, markerPulse, 0, Math.PI * 2);
+            this.ctx.stroke();
+            this.ctx.setLineDash([]);
+
+            const crossSize = markerPulse * 0.6;
+            this.ctx.strokeStyle = `rgba(100,181,246,${0.4 * (1 - progress * 0.5)})`;
+            this.ctx.lineWidth = 1;
+            this.ctx.beginPath();
+            this.ctx.moveTo(targetPos.x - crossSize, targetPos.y);
+            this.ctx.lineTo(targetPos.x + crossSize, targetPos.y);
+            this.ctx.moveTo(targetPos.x, targetPos.y - crossSize);
+            this.ctx.lineTo(targetPos.x, targetPos.y + crossSize);
+            this.ctx.stroke();
+
+            if (progress < 0.7) {
+                const heightM = Math.round((1 - progress) * 200);
+                this.ctx.fillStyle = `rgba(100,181,246,${0.5 * (1 - progress)})`;
+                this.ctx.font = '9px "Courier New", monospace';
+                this.ctx.textAlign = 'center';
+                this.ctx.textBaseline = 'middle';
+                this.ctx.fillText(heightM + 'm', pos.x, pos.y + jeepSize * 0.6 + 10);
+            }
+        }
+
         // 渲染死神支援（MQ-9无人机投弹）- 三阶段电影级特效
         for (const strike of SupportSystem.reaperStrikes) {
             const pos = this.toScreen(strike.x, strike.y);

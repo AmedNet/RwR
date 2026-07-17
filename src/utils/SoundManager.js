@@ -131,7 +131,14 @@ export function updateVehicleEngine(vehicle = null, speedRatio = 0) {
   if (!voice) return;
   const ratio = Math.max(0, Math.min(1, speedRatio));
   const targetRate = 0.82 + ratio * 0.48;
-  voice.source.playbackRate.setTargetAtTime(targetRate, getCtx().currentTime, 0.08);
+  const c = getCtx();
+  voice.source.playbackRate.setTargetAtTime(targetRate, c.currentTime, 0.08);
+  
+  // 根据距离动态调整音量
+  const distanceVolume = getDistanceVolume(vehicle, 1000, 1.2);
+  const speedVolume = ratio > 0.05 ? 1.0 : 0.3; // 怠速时音量降低
+  const targetVolume = Math.min(0.45, 0.45 * distanceVolume * speedVolume);
+  voice.gain.gain.setTargetAtTime(targetVolume, c.currentTime, 0.15);
 }
 
 export function stopVehicleEngine(vehicle = null) {

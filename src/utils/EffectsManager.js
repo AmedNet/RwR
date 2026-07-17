@@ -871,6 +871,9 @@ export const EffectsManager = {
             const sy = pos.y + this.screenShake.y;
             const alpha = e.life / e.maxLife;
             
+            // 防护：跳过坐标或透明度为 NaN/Infinity 的特效
+            if (!isFinite(sx) || !isFinite(sy) || !isFinite(alpha)) continue;
+            
             ctx.save();
             if (e.type === 'shockwave') {
                 // 冲击波圆环
@@ -888,6 +891,7 @@ export const EffectsManager = {
             } else if (e.type === 'muzzle_flash') {
                 // 枪口火焰 - 明亮的径向渐变闪光
                 const flashRadius = e.radius * (1 + (1 - alpha) * 0.5);
+                if (!isFinite(flashRadius) || flashRadius <= 0) { ctx.restore(); continue; }
                 const gradient = ctx.createRadialGradient(sx, sy, 0, sx, sy, flashRadius);
                 gradient.addColorStop(0, `rgba(255, 255, 200, ${alpha})`);
                 gradient.addColorStop(0.3, `rgba(255, 180, 0, ${alpha * 0.8})`);
@@ -899,6 +903,7 @@ export const EffectsManager = {
             } else if (e.type === 'blood_mist') {
                 // 血雾扩散效果 - 红色渐变圆
                 const mistRadius = e.radius * (1 + (1 - alpha) * FX.BLOOD_MIST_EXPANSION);
+                if (!isFinite(mistRadius) || mistRadius <= 0) { ctx.restore(); continue; }
                 const gradient = ctx.createRadialGradient(sx, sy, 0, sx, sy, mistRadius);
                 gradient.addColorStop(0, `rgba(180, 0, 0, ${alpha * 0.7})`);
                 gradient.addColorStop(0.5, `rgba(139, 0, 0, ${alpha * 0.4})`);

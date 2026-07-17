@@ -173,20 +173,66 @@ export class Vehicle extends Entity {
     }
 
     boardNearbyTeammates() {
-        if (this.occupants[0] !== GameState.player || this.isFull()) return 0;
-        const nearbyTeammates = GameState.teammates
-            .filter(teammate => teammate.alive && !teammate.mountedVehicle)
+        // 只要驾驶座有人（玩家或AI）就尝试搭载附近同阵营单位
+        if (!this.occupants[0] || this.isFull()) return 0;
+
+        const driver = this.occupants[0];
+        const driverFaction = driver.faction || 'player';
+
+        // 按驾驶员阵营选择搭载候选列表
+        const candidates = driverFaction === 'enemy'
+            ? GameState.enemies
+            : GameState.teammates;
+
+        const nearbyAllies = candidates
+            .filter(u => u.alive && !u.mountedVehicle && u !== driver)
             .sort((a, b) =>
                 Math.hypot(a.x - this.x, a.y - this.y) -
                 Math.hypot(b.x - this.x, b.y - this.y)
             );
         let boarded = 0;
-        for (const teammate of nearbyTeammates) {
-            if (Math.hypot(teammate.x - this.x, teammate.y - this.y) > this.passengerRange) break;
+        for (const ally of nearbyAllies) {
+            if (Math.hypot(ally.x - this.x, ally.y - this.y) > this.passengerRange) break;
             if (this.isFull()) break;
-            if (this.mount(teammate)) boarded++;
+            if (this.mount(ally)) boarded++;
         }
         return boarded;
+    }
+
+    /**
+     * AI驾驶员让出驾驶座给玩家
+     * @param {Entity} player - 玩家实体
+     * @returns {boolean} 是否成功让座
+     */
+    yieldDriverSeat(player) {
+        if (!player || !this.alive) return false;
+        const currentDriver = this.occupants[0];
+        if (!currentDriver || currentDriver === player) return false;
+
+        // 找到第一个空闲乘客座
+        let targetSeat = -1;
+        for (let i = 1; i < this.passengerCapacity; i++) {
+            if (!this.occupants[i]) {
+                targetSeat = i;
+                break;
+            }
+        }
+        if (targetSeat < 0) return false; // 无空位
+
+        // 将AI驾驶员移到乘客座
+        this.occupants[targetSeat] = currentDriver;
+        currentDriver.vehicleSeat = targetSeat;
+
+        // 玩家坐上驾驶座
+        this.occupants[0] = player;
+        player.mountedVehicle = this;
+        player.vehicleSeat = 0;
+        player.x = this.x;
+        player.y = this.y;
+
+        this.occupied = this.isFull();
+        SoundManager.playVehicleDoor(this);
+        return true;
     }
 
     mount(entity, seatIndex = -1) {
@@ -194,6 +240,10 @@ export class Vehicle extends Entity {
         if (seatIndex < 0 || seatIndex >= this.passengerCapacity || this.occupants[seatIndex]) {
             seatIndex = this.occupants.findIndex(occupant => !occupant);
             if (seatIndex < 0) seatIndex = this.occupants.length;
+        }
+        // 保存挂载前的半径，供卸载时恢复
+        if (entity._preMountRadius === undefined) {
+            entity._preMountRadius = entity.radius;
         }
         this.occupants[seatIndex] = entity;
         entity.mountedVehicle = this;
@@ -264,7 +314,11 @@ export class Vehicle extends Entity {
         const offset = offsets[seatIndex] || offsets[0];
         entity.mountedVehicle = null;
         entity.vehicleSeat = -1;
-        entity.radius = entity.config.radius;
+        // 恢复挂载前的半径（如果有保存的话）
+        if (entity._preMountRadius !== undefined) {
+            entity.radius = entity._preMountRadius;
+            delete entity._preMountRadius;
+        }
         entity.x = this.x + offset.x;
         entity.y = this.y + offset.y;
     }
@@ -284,7 +338,12 @@ export class Vehicle extends Entity {
 
     updatePhysics(throttle, steering, terrainSpeed = 1) {
         this.savePrevPosition();
-        this.boardNearbyTeammates();
+        // 节流：每 30 帧检查一次搭载队友
+        if (!this._boardTimer) this._boardTimer = 0;
+        if (++this._boardTimer >= 30) {
+            this._boardTimer = 0;
+            this.boardNearbyTeammates();
+        }
         // 更新乘客AI射击
         this.updatePassengers();
         for (const [entity, cooldown] of this.impactCooldowns) {

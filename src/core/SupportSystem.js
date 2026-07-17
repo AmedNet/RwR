@@ -11,6 +11,8 @@ import { getRankStars } from './RankSystem.js';
 import { playExplosion } from '../utils/SoundManager.js';
 import { AIRank } from './RankSystem.js';
 import { UnitClass } from './ClassSystem.js';
+import { Vehicle } from '../entities/Vehicle.js';
+import { VehicleRegistry } from './VehicleRegistry.js';
 
 // 支援类型定义
 export const SupportType = {
@@ -22,7 +24,8 @@ export const SupportType = {
     SMOKE_SCREEN: 'smoke_screen',
     WEAPON_DROP: 'weapon_drop',
     REAPER_STRIKE: 'reaper_strike',
-    A10_STRAFE: 'a10_strafe'
+    A10_STRAFE: 'a10_strafe',
+    VEHICLE_DROP: 'vehicle_drop'
 };
 
 // 支援配置
@@ -144,6 +147,16 @@ export const SupportConfig = {
         flyInDuration: 300,      // 前摇5秒
         strafeDuration: 180,
         audioPath: 'src/pkg/radio/a10/a10.m4a'
+    },
+    [SupportType.VEHICLE_DROP]: {
+        name: '载具空投',
+        icon: 'src/pkg/vehicle/jeep/jeep_uhd.png',
+        description: '空投一辆威利斯MB吉普车到标记点',
+        rpCost: 200,
+        cooldown: 1800,
+        minStars: 3,
+        dropHeight: 400,
+        dropDuration: 90
     }
 };
 
@@ -189,6 +202,7 @@ export const SupportSystem = {
     paratroopers: [],
     reaperStrikes: [],
     a10Strafes: [],
+    vehicleDrops: [],
 
     init() {
         this.playerCooldowns = {};
@@ -201,6 +215,7 @@ export const SupportSystem = {
         this.paratroopers = [];
         this.reaperStrikes = [];
         this.a10Strafes = [];
+        this.vehicleDrops = [];
         this.aiGlobalTimer = 0;
         console.log('📡 支援系统初始化完成');
     },
@@ -512,6 +527,25 @@ export const SupportSystem = {
                 }
             }
         }
+
+        // 更新载具空投
+        for (let i = this.vehicleDrops.length - 1; i >= 0; i--) {
+            const drop = this.vehicleDrops[i];
+            drop.timer--;
+            const progress = 1 - (drop.timer / drop.maxTimer);
+            // 从上方降落到目标点
+            drop.currentX = drop.startX + (drop.targetX - drop.startX) * progress;
+            drop.currentY = drop.startY + (drop.targetY - drop.startY) * progress;
+
+            if (drop.timer <= 0) {
+                // 落地：生成载具（支援召唤不受上限限制）
+                const vehicle = new Vehicle(drop.targetX, drop.targetY, VehicleRegistry.jeep);
+                GameState.vehicles.push(vehicle);
+                EffectsManager.spawnParticles(drop.targetX, drop.targetY, ParticleType.HEAL, 12);
+                console.log(`🚗 载具空投到达: ${vehicle.name}`);
+                this.vehicleDrops.splice(i, 1);
+            }
+        }
     },
 
     // 爆炸主伤害（友伤开启）
@@ -617,6 +651,7 @@ export const SupportSystem = {
             case SupportType.WEAPON_DROP: this._executeWeaponDrop(x, y); break;
             case SupportType.REAPER_STRIKE: this._executeReaperStrike(x, y); break;
             case SupportType.A10_STRAFE: this._executeA10Strafe(x, y); break;
+            case SupportType.VEHICLE_DROP: this._executeVehicleDrop(x, y); break;
         }
     },
 
@@ -807,6 +842,24 @@ export const SupportSystem = {
             weapons: [weaponId],
             radius: 40
         });
+    },
+
+    _executeVehicleDrop(x, y) {
+        const config = SupportConfig[SupportType.VEHICLE_DROP];
+        const startX = x + (Math.random() - 0.5) * 60;
+        const startY = y - config.dropHeight;
+
+        this.vehicleDrops.push({
+            startX, startY,
+            targetX: x,
+            targetY: y,
+            currentX: startX,
+            currentY: startY,
+            timer: config.dropDuration,
+            maxTimer: config.dropDuration
+        });
+
+        console.log(`🚗 载具空投: 吉普车正在降落到 (${Math.round(x)}, ${Math.round(y)})`);
     },
 
     // 死神支援执行

@@ -390,7 +390,11 @@ export const InputManager = {
                     let nearestVehicle = null;
                     let nearestVehDist = Infinity;
                     for (const v of GameState.vehicles) {
-                        if (!v.alive || v.occupied) continue;
+                        if (!v.alive) continue;
+                        // 跳过已满的车
+                        if (v.isFull()) continue;
+                        // 跳过没有驾驶员且驾驶座被占的车（异常情况）
+                        if (v.occupied && !v.occupants[0]) continue;
                         const dist = Math.hypot(v.x - player.x, v.y - player.y);
                         if (dist < v.mountRange && dist < nearestVehDist) {
                             nearestVehDist = dist;
@@ -398,9 +402,18 @@ export const InputManager = {
                         }
                     }
                     if (nearestVehicle) {
-                        nearestVehicle.mount(player, 0);
-                        nearestVehicle.boardNearbyTeammates();
-                        console.log('🚙 上车！驾驶 ' + nearestVehicle.name + '，乘客 ' + nearestVehicle.occupants.filter(Boolean).length + '/' + nearestVehicle.passengerCapacity);
+                        // 情况1：车完全空 → 直接上驾驶座
+                        if (!nearestVehicle.occupants[0]) {
+                            nearestVehicle.mount(player, 0);
+                            nearestVehicle.boardNearbyTeammates();
+                            console.log('🚙 上车！驾驶 ' + nearestVehicle.name + '，乘客 ' + nearestVehicle.occupants.filter(Boolean).length + '/' + nearestVehicle.passengerCapacity);
+                        }
+                        // 情况2：车有AI驾驶员 → AI让座，玩家上驾驶座
+                        else if (nearestVehicle.occupants[0] !== player) {
+                            if (nearestVehicle.yieldDriverSeat(player)) {
+                                console.log('🚙 AI让座！玩家接管驾驶 ' + nearestVehicle.name);
+                            }
+                        }
                         e.preventDefault();
                         return;
                     }
