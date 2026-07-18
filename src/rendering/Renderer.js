@@ -1778,24 +1778,36 @@ export const Renderer = {
 
         // Game Over 优先级最高
         if (GameState.gameOver) {
-            if (!GameState.permanentDefeat) {
-                // 非永久战败：渲染世界 + 天气 + 较轻遮罩，让玩家看到战场
-                this._renderWorld();
-                this._renderEntities();
-                // 保留天气视觉效果
-                WeatherSystem.drawCloudShadows(this.ctx, GameState.camera);
-                WeatherSystem.drawParticles(this.ctx);
-                WeatherSystem.drawOverlay(this.ctx, this);
-                WeatherSystem.drawWeatherEdgeEffects(this.ctx, this);
-                // 昼夜渲染层
-                this.ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
-                this.ctx.fillRect(0, 0, this.width, this.height);
-                this._updateShaderLighting();
-            } else {
-                this._drawOverlay();
+            // 渲染世界 + 天气，捕获后做全屏毛玻璃模糊背板（与背包/军械库/电台同管线）
+            this._renderWorld();
+            this._renderEntities();
+            WeatherSystem.drawCloudShadows(this.ctx, GameState.camera);
+            WeatherSystem.drawParticles(this.ctx);
+            WeatherSystem.drawOverlay(this.ctx, this);
+            WeatherSystem.drawWeatherEdgeEffects(this.ctx, this);
+
+            // === 死亡界面延迟+弹出动画推进（自驱 deltaTime） ===
+            // 死亡瞬间先延迟 1s（此期间只渲染战场、遮罩渐黑），1s 后 easeOutCubic 弹出毛玻璃背板+卡片
+            const tNow = performance.now();
+            if (GameState._gameOverAppearLastTime == null) GameState._gameOverAppearLastTime = tNow;
+            const dt = Math.min((tNow - GameState._gameOverAppearLastTime) / 1000, 0.05);
+            GameState._gameOverAppearLastTime = tNow;
+            if (GameState.gameOverDelay < 1) {
+                GameState.gameOverDelay = Math.min(1, GameState.gameOverDelay + dt);
+            } else if (GameState.gameOverAppearAnim < 1) {
+                GameState.gameOverAppearAnim = Math.min(1, GameState.gameOverAppearAnim + dt / 0.28); // ~280ms 弹出
             }
+            const eased = easeOutCubic(GameState.gameOverAppearAnim);
+
+            this._captureFrameForBlur();
+            // 模糊背板随弹出动画渐入（弹出期才显形，延迟期为 0）
+            this._drawBlurBackgroundAlpha(0.85 * eased);
+            // 延迟期战场渐黑（0→0.55 随延迟 0→1 加深），弹出期保持 0.55
+            this.ctx.fillStyle = `rgba(0,0,0,${0.55 * GameState.gameOverDelay})`;
+            this.ctx.fillRect(0, 0, this.width, this.height);
+
             this._updateShaderLighting();
-            drawGameOver(this.ctx, this);
+            drawGameOver(this.ctx, this);   // 内部读 gameOverDelay/gameOverAppearAnim 做早退与 scale/alpha
             this._renderDayNightOverlay();
             PostProcess.apply(this._offscreenCanvas, this);
             return;
@@ -1810,14 +1822,24 @@ export const Renderer = {
             return;
         }
 
-        // 电台：渲染世界 + UI叠加（透明背景）
-        if (GameState.radioOpen) {
+        // 电台：渲染世界 + 毛玻璃模糊背景 + UI叠加（与背包/军械库同管线）
+        if (GameState.radioOpen || GameState.radioAnimDirection === 'closing') {
             this._renderWorld();
             this._renderEntities();
             WeatherSystem.drawCloudShadows(this.ctx, GameState.camera);
             WeatherSystem.drawParticles(this.ctx);
             WeatherSystem.drawOverlay(this.ctx, this);
             WeatherSystem.drawWeatherEdgeEffects(this.ctx, this);
+
+            // 捕获当前画面用于模糊效果
+            this._captureFrameForBlur();
+
+            // 全屏毛玻璃背板：与电台动画进度同步（easeOutCubic，倒带式：关闭时 progress 1→0 模糊随之恢复清晰）
+            // 电台模糊调淡（0.5 < 背包/军械库的 0.85），便于看清战场选投放点
+            const _radioRaw = GameState.radioAnimProgress;
+            const blurP = easeOutCubic(_radioRaw);
+            this._drawBlurBackgroundAlpha(0.5 * blurP);
+
             drawRadioUI(this.ctx, this);
             this._updateShaderLighting();
             this._renderDayNightOverlay();
@@ -1869,12 +1891,36 @@ export const Renderer = {
             return;
         }
 
+        // 军械库界面：渲染世界 + 毛玻璃模糊背景 + UI 叠加（与背包同管线、同语言）
+        if (GameState.arsenalOpen || GameState.arsenalAnimDirection === 'closing') {
+            this._renderWorld();
+            this._renderEntities();
+            WeatherSystem.drawCloudShadows(this.ctx, GameState.camera);
+            WeatherSystem.drawParticles(this.ctx);
+            WeatherSystem.drawOverlay(this.ctx, this);
+            WeatherSystem.drawWeatherEdgeEffects(this.ctx, this);
+
+            // 捕获当前画面用于模糊效果
+            this._captureFrameForBlur();
+
+            // 全屏毛玻璃背板：与军械库动画进度同步（easeOutCubic，平滑无回弹；
+            // arsen 无回弹，与 ArsenalUI 面板的 easeOutBack 回弹刻意解耦）
+            const _arRaw = GameState.arsenalAnimProgress;
+            const blurP = easeOutCubic(_arRaw);
+            this._drawBlurBackgroundAlpha(0.85 * blurP);
+
+            // 军械库商店 UI 内部自行推进动画进度并应用 scale/fade/offset 变换
+            drawArsenalShop(this.ctx, this);
+
+            this._updateShaderLighting();
+            this._renderDayNightOverlay();
+            PostProcess.apply(this._offscreenCanvas, this);
+            return;
+        }
+
         // 其他菜单打开时跳过世界渲染
         if (menuOpen) {
             this._drawOverlay();
-            if (GameState.arsenalOpen) {
-                drawArsenalShop(this.ctx, this);
-            }
             this._updateShaderLighting();
             this._renderDayNightOverlay();
             PostProcess.apply(this._offscreenCanvas, this);

@@ -1,9 +1,13 @@
 // src/rendering/RadioUI.js
-// 电台界面 - 紧凑侧边栏设计
+// 电台界面 - 紧凑侧边栏设计（毛玻璃风格，对齐背包/军械库）
 import { GameState } from '../core/GameState.js';
 import { SupportSystem, SupportConfig } from '../core/SupportSystem.js';
 import { getRankStars } from '../core/RankSystem.js';
+import { GLASS, easeOutCubic, drawGlassPanel } from './GlassUI.js';
 
+// 毛玻璃统一字体（数字/终端信息保留等宽作军事终端味锚点）
+const FONT = '-apple-system, "SF Pro Display", sans-serif';
+const MONO = '"Courier New", monospace';
 
 // 预加载图片图标缓存
 const iconImageCache = {};
@@ -18,23 +22,33 @@ for (const [type, config] of Object.entries(SupportConfig)) {
     }
 }
 
-const easeOutCubic = t => 1 - Math.pow(1 - t, 3);
 const easeOutQuint = t => 1 - Math.pow(1 - t, 5);
+// 末端轻过冲再回弹，呼吸感（焦点滑动用，与背包/军械库本地复制体字面相同）
+const easeOutBack = t => {
+    const c1 = 1.70158, c3 = c1 + 1;
+    return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+};
 
 export function drawRadioUI(ctx, renderer) {
     const W = renderer.width;
     const H = renderer.height;
-    const time = Date.now();
+    const time = performance.now();
 
     const animProgress = GameState.radioAnimProgress || 0;
     const eased = easeOutCubic(animProgress);
 
     if (eased <= 0) return;
 
+    // === 焦点滑动自驱 deltaTime（与背包/军械库同取法） ===
+    if (GameState._radioFocusLastTime == null) GameState._radioFocusLastTime = time;
+    const deltaTime = (time - GameState._radioFocusLastTime) / 1000;
+    GameState._radioFocusLastTime = time;
+    const dt = Math.min(deltaTime, 0.05);
+
     ctx.save();
 
     const available = SupportSystem.getPlayerAvailableSupport();
-    const selectedIndex = Math.min(GameState.radioSelectedIndex || 0, 
+    const selectedIndex = Math.min(GameState.radioSelectedIndex || 0,
                                   Math.max(0, SupportSystem.getPlayerAvailableSupport().length - 1));
 
     const panelW = 260;
@@ -48,28 +62,19 @@ export function drawRadioUI(ctx, renderer) {
     const visibleListH = maxVisibleItems * (itemH + itemGap) - itemGap;
     const panelH = headerH + visibleListH + 16 + footerH;
 
+    // 左滑入语义保留（位置/大小不变）
     const slideX = -panelW * (1 - easeOutQuint(animProgress));
 
     ctx.globalAlpha = eased;
 
-    ctx.fillStyle = 'rgba(8, 12, 18, 0.75)';
-    ctx.beginPath();
-    ctx.roundRect(panelX + slideX, panelTop, panelW, panelH, 6);
-    ctx.fill();
-
-    ctx.strokeStyle = 'rgba(100,181,246,0.15)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.roundRect(panelX + slideX, panelTop, panelW, panelH, 6);
-    ctx.stroke();
-
     const px = panelX + slideX;
 
-    ctx.fillStyle = 'rgba(100,181,246,0.06)';
-    ctx.fillRect(px, panelTop, panelW, headerH);
+    // === 主面板：毛玻璃（染色+边框；全屏模糊背板由 Renderer 电台分支在无变换层提供） ===
+    drawGlassPanel(ctx, px, panelTop, panelW, panelH, GLASS.radius);
 
-    ctx.fillStyle = '#78909c';
-    ctx.font = 'bold 11px "Courier New", monospace';
+    // === Header：SUPPORT 标签 + 军衔星 + RP + 时间 ===
+    ctx.fillStyle = GLASS.textDim;
+    ctx.font = `bold 11px ${MONO}`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillText('SUPPORT', px + 14, panelTop + 18);
@@ -77,36 +82,44 @@ export function drawRadioUI(ctx, renderer) {
     const player = GameState.player;
     const stars = player ? getRankStars(player.rank) : 0;
     ctx.fillStyle = '#FFD740';
-    ctx.font = '12px sans-serif';
+    ctx.font = `12px ${FONT}`;
     ctx.textAlign = 'left';
-    ctx.fillText('\u2605'.repeat(stars), px + 14, panelTop + 36);
+    ctx.fillText('★'.repeat(stars), px + 14, panelTop + 36);
 
     ctx.fillStyle = '#FFD700';
-    ctx.font = 'bold 12px "Courier New", monospace';
+    ctx.font = `bold 12px ${MONO}`;
     ctx.textAlign = 'right';
     ctx.fillText(`$${GameState.rp}`, px + panelW - 14, panelTop + 18);
 
-    ctx.fillStyle = 'rgba(255,255,255,0.3)';
-    ctx.font = '10px "Courier New", monospace';
+    ctx.fillStyle = GLASS.textDim;
+    ctx.font = `10px ${MONO}`;
     const timeStr = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
     ctx.fillText(timeStr, px + panelW - 14, panelTop + 36);
 
+    // 顶栏与列表分隔线（仿军械库顶栏分隔线，替代原 header 填色带）
+    ctx.strokeStyle = GLASS.border;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(px + 14, panelTop + headerH);
+    ctx.lineTo(px + panelW - 14, panelTop + headerH);
+    ctx.stroke();
+
     const listTop = panelTop + headerH + 8;
-    
+
     // 自动滚动：确保选中项可见
     const scrollOffset = GameState.radioScrollOffset || 0;
     const selectedItemTop = selectedIndex * (itemH + itemGap);
     const selectedItemBottom = selectedItemTop + itemH;
-    
+
     if (selectedItemTop < scrollOffset) {
         GameState.radioScrollOffset = selectedItemTop;
     } else if (selectedItemBottom > scrollOffset + visibleListH) {
         GameState.radioScrollOffset = selectedItemBottom - visibleListH;
     }
-    
+
     const currentScrollOffset = GameState.radioScrollOffset;
 
-    // 保存上下文并设置裁剪区域
+    // 设置裁剪区域
     ctx.save();
     ctx.beginPath();
     ctx.rect(px, listTop, panelW, visibleListH);
@@ -120,24 +133,31 @@ export function drawRadioUI(ctx, renderer) {
         if (cardProgress <= 0) return;
 
         const iy = listTop + index * (itemH + itemGap) + cardSlide - currentScrollOffset;
-        
+
         // 只渲染可见区域内的项目
         if (iy + itemH < listTop || iy > listTop + visibleListH) return;
-        
+
         const isSelected = index === selectedIndex;
-        const { config, canCall, cooldownRemaining } = item;
+        const { config, cooldownRemaining } = item;
 
         ctx.globalAlpha = cardProgress * eased;
 
+        // 选中高亮画在焦点滑动后的 y（见循环后焦点推进），这里只画非选中项的内容
         if (isSelected) {
             const pulse = Math.sin(time * 0.004) * 0.05 + 0.95;
+            const fy = GameState.radioItemFocusY;
+            // 淡蓝选中底（电台专属蓝，脉动呼吸)
             ctx.fillStyle = `rgba(100,181,246,${0.12 * pulse})`;
             ctx.beginPath();
-            ctx.roundRect(px + 6, iy, panelW - 12, itemH, 4);
+            ctx.roundRect(px + 6, fy, panelW - 12, itemH, 4);
             ctx.fill();
-
+            // 左侧 3px 电台蓝指示条 + 发光
+            ctx.save();
+            ctx.shadowColor = '#64B5F6';
+            ctx.shadowBlur = 8 + pulse * 3;
             ctx.fillStyle = '#64B5F6';
-            ctx.fillRect(px + 6, iy, 3, itemH);
+            ctx.fillRect(px + 6, fy, 3, itemH);
+            ctx.restore();
         }
 
         // 渲染图标（支持 emoji 和图片）
@@ -146,21 +166,21 @@ export function drawRadioUI(ctx, renderer) {
             const iconSize = 28;
             ctx.drawImage(img, px + 30 - iconSize / 2, iy + itemH / 2 - iconSize / 2, iconSize, iconSize);
         } else {
-            ctx.font = '22px sans-serif';
+            ctx.font = `22px ${FONT}`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(config.icon, px + 30, iy + itemH / 2);
         }
 
         const textX = px + 52;
-        ctx.fillStyle = isSelected ? '#fff' : 'rgba(255,255,255,0.7)';
-        ctx.font = `${isSelected ? 'bold ' : ''}13px sans-serif`;
+        ctx.fillStyle = isSelected ? GLASS.textPrimary : GLASS.textSecondary;
+        ctx.font = `${isSelected ? 'bold ' : ''}13px ${FONT}`;
         ctx.textAlign = 'left';
         ctx.textBaseline = 'top';
         ctx.fillText(config.name, textX, iy + 10);
 
-        ctx.fillStyle = 'rgba(255,255,255,0.35)';
-        ctx.font = '10px sans-serif';
+        ctx.fillStyle = GLASS.textDim;
+        ctx.font = `10px ${FONT}`;
         ctx.fillText(config.description, textX, iy + 28);
 
         const rightX = px + panelW - 14;
@@ -168,26 +188,50 @@ export function drawRadioUI(ctx, renderer) {
         ctx.textBaseline = 'middle';
 
         const canAfford = GameState.rp >= config.rpCost;
-        ctx.fillStyle = canAfford ? 'rgba(255,215,0,0.8)' : 'rgba(255,82,82,0.7)';
-        ctx.font = 'bold 12px "Courier New", monospace';
+        ctx.fillStyle = canAfford ? '#FFD700' : '#ff5252';
+        ctx.font = `bold 12px ${MONO}`;
         ctx.fillText(`$${config.rpCost}`, rightX, iy + 16);
 
         if (cooldownRemaining > 0) {
             const secs = Math.ceil(cooldownRemaining / 60);
             ctx.fillStyle = 'rgba(255,152,0,0.7)';
-            ctx.font = '10px "Courier New", monospace';
+            ctx.font = `10px ${MONO}`;
             ctx.fillText(`${secs}s`, rightX, iy + 36);
         } else if (!canAfford) {
             ctx.fillStyle = 'rgba(255,82,82,0.5)';
-            ctx.font = '9px sans-serif';
-            ctx.fillText('RP\u4E0D\u8DB3', rightX, iy + 36);
+            ctx.font = `9px ${FONT}`;
+            ctx.fillText('RP不足', rightX, iy + 36);
         } else {
             const readyPulse = Math.sin(time * 0.005) * 0.3 + 0.7;
             ctx.fillStyle = `rgba(102,187,106,${readyPulse})`;
-            ctx.font = 'bold 9px sans-serif';
+            ctx.font = `bold 9px ${FONT}`;
             ctx.fillText('READY', rightX, iy + 36);
         }
     });
+
+    // === 选中项焦点滑动：↑/↓ 切选时蓝高亮从旧项滑到新项（easeOutBack 末端轻过冲 + 随滚动实时跟随）===
+    if (available.length > 0) {
+        // 选中项当前 iy（含 cardSlide 与 scrollOffset，焦点随入场+滚动实时跟随选中项可见位置）
+        const selCardDelay = 0.08 + selectedIndex * 0.06;
+        const selCardProgress = easeOutCubic(Math.max(0, Math.min(1, (animProgress - selCardDelay) * 4)));
+        const selCardSlide = (1 - selCardProgress) * 20;
+        const itemTargetY = listTop + selectedIndex * (itemH + itemGap) + selCardSlide - currentScrollOffset;
+        if (GameState.radioItemFocusIndex !== selectedIndex) {
+            if (GameState.radioItemFocusY != null) {
+                // 从半路位置出发滑过去（天然支持打断：旧动画没播完就从当前显示位置接续）
+                GameState.radioItemFocusFromY = GameState.radioItemFocusY;
+            } else {
+                // 首次出现：直接定身，不滑动
+                GameState.radioItemFocusFromY = itemTargetY;
+                GameState.radioItemFocusY = itemTargetY;
+            }
+            GameState.radioItemFocusAnim = 0;
+            GameState.radioItemFocusIndex = selectedIndex;
+        }
+        GameState.radioItemFocusAnim = Math.min(1, GameState.radioItemFocusAnim + dt / 0.22);
+        const t = easeOutBack(GameState.radioItemFocusAnim);
+        GameState.radioItemFocusY = GameState.radioItemFocusFromY + (itemTargetY - GameState.radioItemFocusFromY) * t;
+    }
 
     // 恢复上下文（取消裁剪）
     ctx.restore();
@@ -200,22 +244,22 @@ export function drawRadioUI(ctx, renderer) {
         const scrollbarH = visibleListH;
         const thumbH = (maxVisibleItems / available.length) * scrollbarH;
         const thumbY = listTop + (currentScrollOffset / (listH - visibleListH)) * (scrollbarH - thumbH);
-        
+
         // 滚动条背景
-        ctx.fillStyle = 'rgba(255,255,255,0.05)';
+        ctx.fillStyle = 'rgba(255,255,255,0.1)';
         ctx.fillRect(scrollbarX, listTop, 2, scrollbarH);
-        
+
         // 滚动条滑块
         ctx.fillStyle = 'rgba(100,181,246,0.4)';
         ctx.fillRect(scrollbarX, thumbY, 2, thumbH);
     }
 
     const footerY = listTop + visibleListH + 12;
-    ctx.fillStyle = 'rgba(255,255,255,0.25)';
-    ctx.font = '10px "Courier New", monospace';
+    ctx.fillStyle = GLASS.textDim;
+    ctx.font = `10px ${MONO}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('\u2191/\u2193 \u9009\u62E9  \u56DE\u8F66\u786E\u8BA4  \u957F\u6309G\u5173\u95ED', px + panelW / 2, footerY);
+    ctx.fillText('↑/↓ 选择  回车确认  长按G关闭', px + panelW / 2, footerY);
 
     if (GameState.radioTargetWorld) {
         const pos = renderer.toScreen(GameState.radioTargetWorld.x, GameState.radioTargetWorld.y);
@@ -248,7 +292,7 @@ export function drawRadioUI(ctx, renderer) {
         ctx.stroke();
 
         const coordText = `(${Math.round(GameState.radioTargetWorld.x)}, ${Math.round(GameState.radioTargetWorld.y)})`;
-        ctx.font = '10px "Courier New", monospace';
+        ctx.font = `10px ${MONO}`;
         const textW = ctx.measureText(coordText).width;
         ctx.fillStyle = 'rgba(0,0,0,0.5)';
         ctx.fillRect(pos.x + pulse + 10, pos.y - 12, textW + 8, 16);
@@ -262,10 +306,10 @@ export function drawRadioUI(ctx, renderer) {
         const sel = available[selectedIndex];
         const selY = footerY + 20;
         ctx.fillStyle = 'rgba(100,181,246,0.6)';
-        ctx.font = '11px sans-serif';
+        ctx.font = `11px ${FONT}`;
         ctx.textAlign = 'center';
         ctx.fillText(
-            `${sel.config.icon.endsWith('.png') ? '' : sel.config.icon} ${sel.config.name} \u2014 \u70B9\u51FB\u786E\u8BA4\u547C\u53EB`,
+            `${sel.config.icon.endsWith('.png') ? '' : sel.config.icon} ${sel.config.name} — 点击确认呼叫`,
             px + panelW / 2, selY
         );
     }
@@ -274,23 +318,30 @@ export function drawRadioUI(ctx, renderer) {
 }
 
 export function updateRadioAnimation() {
-    const animSpeed = 0.06;
+    const now = performance.now();
+    if (GameState._radioAnimLastTime == null) GameState._radioAnimLastTime = now;
+    const deltaTime = (now - GameState._radioAnimLastTime) / 1000;
+    GameState._radioAnimLastTime = now;
+    const dt = Math.min(deltaTime, 0.05); // 防停顿后跳变
 
-    if (GameState.radioAnimating) {
-        if (GameState.radioClosing) {
-            GameState.radioAnimProgress -= animSpeed;
-            if (GameState.radioAnimProgress <= 0) {
-                GameState.radioAnimProgress = 0;
-                GameState.radioAnimating = false;
-                GameState.radioClosing = false;
-                GameState.radioOpen = false;
-            }
-        } else {
-            GameState.radioAnimProgress += animSpeed;
-            if (GameState.radioAnimProgress >= 1) {
-                GameState.radioAnimProgress = 1;
-                GameState.radioAnimating = false;
-            }
+    const isClosingDir = GameState.radioAnimDirection === 'closing';
+    const ANIM_SPEED_PER_SEC = isClosingDir ? 4.4 : 3.6; // 关 ~0.23s / 开 ~0.28s
+
+    if (GameState.radioAnimDirection === 'opening') {
+        GameState.radioAnimProgress = Math.min(1, GameState.radioAnimProgress + ANIM_SPEED_PER_SEC * dt);
+        if (GameState.radioAnimProgress >= 1) GameState.radioAnimDirection = null;
+    } else if (GameState.radioAnimDirection === 'closing') {
+        GameState.radioAnimProgress = Math.max(0, GameState.radioAnimProgress - ANIM_SPEED_PER_SEC * dt);
+        if (GameState.radioAnimProgress <= 0) {
+            GameState.radioOpen = false;
+            GameState.radioAnimDirection = null;
+            GameState._radioAnimLastTime = null;
+            // 重置焦点滑动状态，避免下次开启从旧会话位置残留滑入（照背包 closing 收场）
+            GameState.radioItemFocusY = null;
+            GameState.radioItemFocusFromY = null;
+            GameState.radioItemFocusIndex = -1;
+            GameState.radioItemFocusAnim = 0;
+            GameState._radioFocusLastTime = null;
         }
     }
 }

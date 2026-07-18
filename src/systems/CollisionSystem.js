@@ -421,8 +421,8 @@ export const CollisionSystem = {
         EffectsManager.triggerShake(COLLISION_FX.PLAYER_HIT_SHAKE_INTENSITY, COLLISION_FX.PLAYER_HIT_SHAKE_DURATION);
         playBulletHit(player);
         EventBus.emit('player_hurt', { health: player.health });
-        if (!player.alive) {
-            GameState.gameOver = true;
+        if (!player.alive && !GameState.gameOver) {
+            GameState.triggerDeath();
             EventBus.emit('game_over');
             // 敌方击杀玩家获得RP
             SupportSystem.onEnemyKill(true);

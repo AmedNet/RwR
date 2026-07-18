@@ -15,6 +15,9 @@ export const GameState = {
     vehicleSpawnTimer: 0, // 吉普据点刷新计时器（帧）
     arsenal: null, // 军械库实例
     arsenalOpen: false, // 军械库界面是否打开
+    arsenalAnimProgress: 0, // 军械库动画进度 0-1（打开/关闭共用）
+    arsenalAnimDirection: null, // 'opening' | 'closing' | null
+    _arsenalAnimLastTime: null, // 动画计时基准（performance.now）
     inventory: [null, null, null, null, null, null, null], // 背包，7个位置，存储 Weapon 实例或 null
     inventoryOpen: false, // 背包是否打开
     inventoryAnimProgress: 0, // 背包动画进度 0-1
@@ -41,7 +44,6 @@ export const GameState = {
     isEditing: false,
     respawnSelection: false, // 是否在选择复活据点
     selectedSpawnPoint: null, // 数字选择时临时存储
-    permanentDefeat: false, // 是否永久战败（无据点可复活）
     teammateRespawnQueue: [], // 等待重生的队友 { x, y, timer }
     // 武器系统
     activeWeaponSlot: 0, // 当前装备的背包位置 (0-6)
@@ -60,6 +62,25 @@ export const GameState = {
 
     // 军械库滚动
     arsenalScrollOffset: 0, // 军械库列表滚动偏移量
+
+    // 军械库商品列表选中项焦点滑动（W/S 切选商品时高亮从旧项滑到新项）
+    arsenalItemFocusY: null,       // 当前选中高亮显示 y（含滚动偏移后的列表内 y）
+    arsenalItemFocusFromY: null,  // 本次滑动起点 y
+    arsenalItemFocusIndex: -1,    // 焦点当前归属的商品索引（检测变化用）
+    arsenalItemFocusAnim: 0,      // 滑动进度 0→1
+
+    // 军械库分类高亮条焦点滑动（侧边栏分类项之间竖向滑动，镜像背包焦点）
+    arsenalCatFocusY: null,      // 当前高亮条显示 y
+    arsenalCatFocusFromY: null,  // 本次滑动起点 y
+    arsenalCatFocusIndex: -1,    // 焦点当前归属的分类索引（检测变化用）
+    arsenalCatFocusAnim: 0,      // 滑动进度 0→1
+    // 军械库背包槽焦点滑动框（1-7 选中槽之间横向滑动）
+    arsenalSlotFocusX: null,
+    arsenalSlotFocusY: null,
+    arsenalSlotFocusFromX: null,
+    arsenalSlotFocusFromY: null,
+    arsenalSlotFocusIndex: -1,
+    arsenalSlotFocusAnim: 0,
 
     // 死亡标记
     suicideDeath: false, // 标记本次死亡是否为自杀（自杀保留物品）
@@ -81,11 +102,30 @@ export const GameState = {
     radioGKeyTimer: 0, // G键按下计时器（用于长按检测）
     radioGKeyPressed: false, // G键是否按下
     radioGKeyConsumed: false, // 本次物理按住是否已触发过（防autorepeat闪烁）
-    radioAnimProgress: 0, // 电台动画进度 0~1
-    radioAnimating: false, // 是否正在播放动画
-    radioClosing: false, // 是否正在关闭动画
+    radioAnimProgress: 0, // 电台动画进度 0~1（开/关共用，倒带式）
+    radioAnimDirection: null, // 'opening' | 'closing' | null（支持中途反向打断）
+    _radioAnimLastTime: null, // 动画计时基准（performance.now）
+
+    // 电台选中项焦点滑动（↑/↓ 切选时蓝高亮从旧项滑到新项，easeOutBack 末端轻过冲）
+    radioItemFocusY: null,       // 当前选中高亮显示 y
+    radioItemFocusFromY: null,   // 本次滑动起点 y
+    radioItemFocusIndex: -1,     // 焦点当前归属的支援项索引（检测变化用）
+    radioItemFocusAnim: 0,       // 滑动进度 0→1
+    _radioFocusLastTime: null,   // 焦点滑动 deltaTime 计时基准（performance.now）
     gameOverSelectedPoint: -1, // 死亡界面当前悬浮的据点索引
     respawnHitAreas: [], // 死亡界面据点点击热区 [{x, y, r, index}]
+    // 死亡界面据点焦点滑动（鼠标悬浮/数字键切选时高亮从旧据点滑到新据点，easeOutBack 末端轻过冲）
+    gameOverFocusX: null,
+    gameOverFocusY: null,
+    gameOverFocusFromX: null,
+    gameOverFocusFromY: null,
+    gameOverFocusIndex: -1,
+    gameOverFocusAnim: 0,
+    _gameOverFocusLastTime: null, // 焦点滑动 deltaTime 计时基准（performance.now）
+    // 死亡界面弹出动画（死亡后延迟 1s 只渲染战场，再 easeOutCubic 弹出毛玻璃背板+卡片）
+    gameOverDelay: 0,                 // 死亡后已延迟秒数（0→1 期间只渲染战场、渐黑）
+    gameOverAppearAnim: 0,            // 弹出动画进度 0→1
+    _gameOverAppearLastTime: null,    // 弹出动画 deltaTime 计时基准（performance.now）
 
     // 获取当前装备的武器
     getActiveWeapon() {
@@ -98,6 +138,71 @@ export const GameState = {
         if (this.activeWeaponSlot === slot) return false;
         this.activeWeaponSlot = slot;
         return true;
+    },
+
+    // 切换背包开/关（支持中途可反向打断：progress 不归零，从半路反向继续播）
+    toggleInventory() {
+        const dir = this.inventoryAnimDirection;
+        if (dir === 'closing') {
+            this.inventoryAnimDirection = 'opening';
+        } else if (dir === 'opening') {
+            this.inventoryAnimDirection = 'closing';
+        } else if (this.inventoryOpen) {
+            this.inventoryAnimDirection = 'closing';
+        } else {
+            this.inventoryOpen = true;
+            this.inventoryAnimProgress = 0;
+            this.inventoryAnimDirection = 'opening';
+        }
+        this._inventoryAnimLastTime = null;
+    },
+
+    // 切换军械库开/关（支持中途可反向打断：progress 不归零）
+    toggleArsenal() {
+        const dir = this.arsenalAnimDirection;
+        if (dir === 'closing') {
+            this.arsenalAnimDirection = 'opening';
+        } else if (dir === 'opening') {
+            this.arsenalAnimDirection = 'closing';
+        } else if (this.arsenalOpen) {
+            this.arsenalAnimDirection = 'closing';
+        } else {
+            this.arsenalOpen = true;
+            this.arsenalAnimProgress = 0;
+            this.arsenalAnimDirection = 'opening';
+        }
+        this._arsenalAnimLastTime = null;
+    },
+
+    // 切换电台开/关（支持中途可反向打断：progress 不归零从半路反向）
+    toggleRadio() {
+        const dir = this.radioAnimDirection;
+        if (dir === 'closing') {
+            this.radioAnimDirection = 'opening';
+        } else if (dir === 'opening') {
+            this.radioAnimDirection = 'closing';
+        } else if (this.radioOpen) {
+            this.radioAnimDirection = 'closing';
+        } else {
+            this.radioOpen = true;
+            this.radioAnimProgress = 0;
+            this.radioAnimDirection = 'opening';
+        }
+        this._radioAnimLastTime = null;
+    },
+
+    // 触发死亡：统一清零弹出动画与焦点滑动状态，防止跨死亡周期残留
+    triggerDeath() {
+        this.gameOver = true;
+        this.gameOverDelay = 0;
+        this.gameOverAppearAnim = 0;
+        this._gameOverAppearLastTime = null;
+        this.gameOverSelectedPoint = -1;
+        this.respawnHitAreas = [];
+        this.gameOverFocusX = null; this.gameOverFocusY = null;
+        this.gameOverFocusFromX = null; this.gameOverFocusFromY = null;
+        this.gameOverFocusIndex = -1; this.gameOverFocusAnim = 0;
+        this._gameOverFocusLastTime = null;
     },
 
     reset() {
@@ -131,9 +236,36 @@ this.inventoryHitAreas = [];
         this.inventoryAnimDirection = null;
         this._inventoryAnimLastTime = null;
         this.arsenalOpen = false;
+        this.arsenalAnimProgress = 0;
+        this.arsenalAnimDirection = null;
+        this._arsenalAnimLastTime = null;
+        this.arsenalItemFocusY = null;
+        this.arsenalItemFocusFromY = null;
+        this.arsenalItemFocusIndex = -1;
+        this.arsenalItemFocusAnim = 0;
+        this.arsenalCatFocusY = null;
+        this.arsenalCatFocusFromY = null;
+        this.arsenalCatFocusIndex = -1;
+        this.arsenalCatFocusAnim = 0;
+        this.arsenalSlotFocusX = null;
+        this.arsenalSlotFocusY = null;
+        this.arsenalSlotFocusFromX = null;
+        this.arsenalSlotFocusFromY = null;
+        this.arsenalSlotFocusIndex = -1;
+        this.arsenalSlotFocusAnim = 0;
         this.rp = 0;
         this.gameOverSelectedPoint = -1;
         this.respawnHitAreas = [];
+        this.gameOverFocusX = null;
+        this.gameOverFocusY = null;
+        this.gameOverFocusFromX = null;
+        this.gameOverFocusFromY = null;
+        this.gameOverFocusIndex = -1;
+        this.gameOverFocusAnim = 0;
+        this._gameOverFocusLastTime = null;
+        this.gameOverDelay = 0;
+        this.gameOverAppearAnim = 0;
+        this._gameOverAppearLastTime = null;
         this.radioOpen = false;
         this.radioSelectedIndex = 0;
         this.radioScrollOffset = 0;
@@ -142,8 +274,13 @@ this.inventoryHitAreas = [];
         this.radioGKeyPressed = false;
         this.radioGKeyConsumed = false;
         this.radioAnimProgress = 0;
-        this.radioAnimating = false;
-        this.radioClosing = false;
+        this.radioAnimDirection = null;
+        this._radioAnimLastTime = null;
+        this.radioItemFocusY = null;
+        this.radioItemFocusFromY = null;
+        this.radioItemFocusIndex = -1;
+        this.radioItemFocusAnim = 0;
+        this._radioFocusLastTime = null;
         this.debugTab = 0;
     }
 };

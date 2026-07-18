@@ -740,9 +740,11 @@ export class Player extends Entity {
                 }
             }
 
-            GameState.gameOver = true;
-            EventBus.emit('game_over', { reason: 'player_died' });
-            SoundManager.playDie();
+            if (!GameState.gameOver) {
+                GameState.triggerDeath();
+                EventBus.emit('game_over', { reason: 'player_died' });
+                SoundManager.playDie();
+            }
         } else {
             SoundManager.playHurt();
         }

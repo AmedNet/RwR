@@ -402,6 +402,10 @@ function resetGame() {
         GameState.enemies.push(SpawnSystem.spawnEnemy());
     }
     GameState.gameOver = false;
+    // 清死亡弹出动画状态（与 respawnPlayer 同步，防止重置后死亡跳过动画）
+    GameState.gameOverDelay = 0;
+    GameState.gameOverAppearAnim = 0;
+    GameState._gameOverAppearLastTime = null;
     UIManager.updateAll(GameState);
     console.log('🔄 游戏重置完成，重生在据点');
 }
@@ -434,16 +438,12 @@ function gameLoop() {
         GameState.radioGKeyTimer++;
         if (GameState.radioGKeyTimer >= 18) {
             if (GameState.radioOpen) {
-                GameState.radioClosing = true;
-                GameState.radioAnimating = true;
+                GameState.toggleRadio();
                 playRadioClose();
             } else {
                 const player = GameState.player;
                 if (player && (player.rank + 1) >= 2) {
-                    GameState.radioOpen = true;
-                    GameState.radioAnimating = true;
-                    GameState.radioClosing = false;
-                    GameState.radioAnimProgress = 0;
+                    GameState.toggleRadio();
                     playRadioOpen();
                     GameState.radioSelectedIndex = 0;
                     GameState.radioScrollOffset = 0;
@@ -522,16 +522,6 @@ function gameLoop() {
 
     // ---- 队友重生逻辑 ----
     updateTeammateRespawns();
-
-    // 死亡状态下检查战败条件
-    if (GameState.gameOver) {
-        const playerDead = !GameState.player || !GameState.player.alive;
-        const noTeammates = GameState.teammates.filter(t => t.alive).length === 0;
-        if (playerDead && noTeammates && !GameState.permanentDefeat) {
-            GameState.permanentDefeat = true;
-            console.log('战败！所有友方单位已阵亡，游戏结束');
-        }
-    }
 
     Renderer.render();
     Minimap.render();
@@ -671,8 +661,8 @@ function init() {
         GameState.enemies = GameState.enemies.filter(e => e.alive);
 
         // 如果玩家被炸死
-        if (GameState.player && !GameState.player.alive) {
-            GameState.gameOver = true;
+        if (GameState.player && !GameState.player.alive && !GameState.gameOver) {
+            GameState.triggerDeath();
             EventBus.emit('game_over');
         }
     });
@@ -787,5 +777,16 @@ function respawnPlayer(pointIndex) {
     GameState.player.rank = savedRank;
     GameState.gameOver = false;
     GameState.respawnSelection = false;
+    // 清死亡弹出动画状态（否则下次死亡瞬间跳过动画直接弹出）
+    GameState.gameOverDelay = 0;
+    GameState.gameOverAppearAnim = 0;
+    GameState._gameOverAppearLastTime = null;
+    // 清据点焦点滑动（否则下次死亡焦点从上一次落点起跳，第一帧跳变）
+    GameState.gameOverSelectedPoint = -1;
+    GameState.respawnHitAreas = [];
+    GameState.gameOverFocusX = null; GameState.gameOverFocusY = null;
+    GameState.gameOverFocusFromX = null; GameState.gameOverFocusFromY = null;
+    GameState.gameOverFocusIndex = -1; GameState.gameOverFocusAnim = 0;
+    GameState._gameOverFocusLastTime = null;
     UIManager.updateAll(GameState);
 }

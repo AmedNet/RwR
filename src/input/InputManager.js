@@ -27,14 +27,17 @@ export const InputManager = {
             if (GameState.gameOver) {
                 if (GameState.arsenalOpen) {
                     GameState.arsenalOpen = false;
+                    GameState.arsenalAnimDirection = null;
+                    GameState.arsenalAnimProgress = 0;
                 }
                 if (GameState.radioOpen) {
                     GameState.radioOpen = false;
-                    GameState.radioAnimating = false;
-                    GameState.radioClosing = false;
+                    GameState.radioAnimDirection = null;
+                    GameState.radioAnimProgress = 0;
                     GameState.radioTargetWorld = null;
                 }
-                if (GameState.permanentDefeat) {
+                // 延迟期 + 弹出期不响应复活选择（等动画放完）
+                if (GameState.gameOverDelay < 1 || GameState.gameOverAppearAnim < 1) {
                     e.preventDefault();
                     return;
                 }
@@ -57,19 +60,20 @@ export const InputManager = {
 
             // ====== 菜单打开时的处理 ======
             if (GameState.inventoryOpen || GameState.arsenalOpen) {
-                // 关闭菜单
+                // 关闭菜单（支持中途可反向打断）
                 if (key === 'e') {
-                    GameState.arsenalOpen = false;
-                    playUISound('click');
+                    if (GameState.arsenalOpen) {
+                        GameState.toggleArsenal();
+                        playUISound('click');
+                    }
                     e.preventDefault();
                     return;
                 }
                 if (key === 'q') {
-                    if (GameState.inventoryAnimDirection === null) {
-                        GameState.inventoryAnimDirection = 'closing';
-                        GameState._inventoryAnimLastTime = null;
+                    if (GameState.inventoryOpen) {
+                        GameState.toggleInventory();
+                        playUISound('click');
                     }
-                    playUISound('click');
                     e.preventDefault();
                     return;
                 }
@@ -113,7 +117,8 @@ export const InputManager = {
                 }
 
                 // === 军械库专属按键 ===
-                if (GameState.arsenalOpen) {
+                // 动画展开/折叠期间不响应，避免快速误触
+                if (GameState.arsenalOpen && GameState.arsenalAnimDirection === null) {
                     // \u2191 \u952E\u5207\u6362\u5206\u7C7B
                     if (key === 'arrowup') {
                         GameState.arsenalCategory = (GameState.arsenalCategory + 6) % 7;
@@ -226,6 +231,8 @@ export const InputManager = {
                     // 关闭菜单后拾取
                     GameState.inventoryOpen = false;
                     GameState.arsenalOpen = false;
+                    GameState.arsenalAnimDirection = null;
+                    GameState.arsenalAnimProgress = 0;
                     // 不 return，让 F 键继续向下执行到拾取逻辑
                 } else {
                     return;
@@ -235,8 +242,7 @@ export const InputManager = {
             // ====== \u7535\u53F0\u754C\u9762 ======
             if (GameState.radioOpen) {
                 if (key === 'escape') {
-                    GameState.radioClosing = true;
-                    GameState.radioAnimating = true;
+                    GameState.toggleRadio();
                     playRadioClose();
                     e.preventDefault();
                     return;
@@ -262,8 +268,7 @@ export const InputManager = {
                     const sel = available[GameState.radioSelectedIndex];
                     if (sel && sel.canCall && GameState.radioTargetWorld) {
                         SupportSystem.callSupport(sel.type, GameState.radioTargetWorld.x, GameState.radioTargetWorld.y);
-                        GameState.radioClosing = true;
-                        GameState.radioAnimating = true;
+                        GameState.toggleRadio();
                         playRadioClose();
                     }
                     e.preventDefault();
@@ -334,7 +339,7 @@ export const InputManager = {
                     }
                     GameState.player.alive = false;
                     GameState.player.health = 0;
-                    GameState.gameOver = true;
+                    GameState.triggerDeath();
                     console.log('\u{1F480} \u73A9\u5BB6\u81EA\u6740');
                 }
                 e.preventDefault();
@@ -516,30 +521,21 @@ export const InputManager = {
             }
 
 
-            // E \u952E\uFF1A\u6253\u5F00/\u5173\u95ED\u519B\u69B0\u5E93
+            // E \u952E\uFF1A\u6253\u5F00/\u5173\u95ED\u519B\u69B0\u5E93\uFF08\u652F\u6301\u4E2D\u9014\u53EF\u53CD\u5411\u6253\u65AD\uFF09
             if (key === 'e') {
                 const arsenal = GameState.arsenal;
                 const player = GameState.player;
                 if (arsenal && player && arsenal.contains(player)) {
-                    GameState.arsenalOpen = !GameState.arsenalOpen;
+                    GameState.toggleArsenal();
                     playUISound('click');
-                    console.log(GameState.arsenalOpen ? '\u{1F52B} \u6253\u5F00\u519B\u69B0\u5E93' : '\u{1F52B} \u5173\u95ED\u519B\u69B0\u5E93');
                 }
                 e.preventDefault();
                 return;
             }
 
-            // Q \u952E\uFF1A\u6253\u5F00/\u5173\u95ED\u80CC\u5305
+            // Q \u952E\uFF1A\u6253\u5F00/\u5173\u95ED\u80CC\u5305\uFF08\u652F\u6301\u4E2D\u9014\u53EF\u53CD\u5411\u6253\u65AD\uFF09
             if (key === 'q') {
-                if (!GameState.inventoryOpen && GameState.inventoryAnimDirection !== 'closing') {
-                    GameState.inventoryOpen = true;
-                    GameState.inventoryAnimDirection = 'opening';
-                    GameState.inventoryAnimProgress = 0;
-                    GameState._inventoryAnimLastTime = null;
-                } else if (GameState.inventoryOpen && GameState.inventoryAnimDirection === null) {
-                    GameState.inventoryAnimDirection = 'closing';
-                    GameState._inventoryAnimLastTime = null;
-                }
+                GameState.toggleInventory();
                 playUISound('click');
                 console.log(GameState.inventoryOpen ? '\u{1F392} \u6253\u5F00\u80CC\u5305' : '\u{1F392} \u5173\u95ED\u80CC\u5305');
                 e.preventDefault();
@@ -655,8 +651,7 @@ export const InputManager = {
                             GameState.radioSelectedIndex = i;
                             if (available[i].canCall && GameState.radioTargetWorld) {
                                 SupportSystem.callSupport(available[i].type, GameState.radioTargetWorld.x, GameState.radioTargetWorld.y);
-                                GameState.radioClosing = true;
-                                GameState.radioAnimating = true;
+                                GameState.toggleRadio();
                                 playRadioClose();
                             }
                             break;
@@ -669,8 +664,8 @@ export const InputManager = {
                     return;
                 }
 
-                // \u6B7B\u4EA1\u754C\u9762\u70B9\u51FB\u636E\u70B9
-                if (GameState.gameOver && !GameState.permanentDefeat && GameState.respawnHitAreas) {
+                // \u6B7B\u4EA1\u754C\u9762\u70B9\u51FB\u636E\u70B9\uFF08\u5EF6\u8FDF\u671F+\u5F39\u51FA\u671F\u4E0D\u54CD\u5E94\uFF0C\u7B49\u52A8\u753B\u653E\u5B8C\uFF09
+                if (GameState.gameOver && GameState.respawnHitAreas && GameState.gameOverAppearAnim >= 1) {
                     const rect = canvas.getBoundingClientRect();
                     const scaleX2 = canvas.clientWidth / rect.width;
                     const scaleY2 = canvas.clientHeight / rect.height;
@@ -859,8 +854,7 @@ export const InputManager = {
         canvas.addEventListener('contextmenu', (e) => {
             e.preventDefault();
             if (GameState.radioOpen) {
-                GameState.radioClosing = true;
-                GameState.radioAnimating = true;
+                GameState.toggleRadio();
                 playRadioClose();
                 return;
             }

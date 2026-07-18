@@ -1,55 +1,127 @@
 // src/rendering/GameOverUI.js
 import { GameState } from '../core/GameState.js';
+import { GLASS, easeOutCubic, drawGlassPanel } from './GlassUI.js';
 
+// 毛玻璃统一字体（标题/数字保留等宽作军事终端味锚点）
+const FONT = '-apple-system, "SF Pro Display", sans-serif';
+const MONO = '"Courier New", monospace';
+
+// 末端轻过冲再回弹，呼吸感（焦点滑动用，与背包/军械库/电台本地复制体字面相同）
+const easeOutBack = t => {
+    const c1 = 1.70158, c3 = c1 + 1;
+    return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+};
+
+// 战术地图尺寸
 const MAP_W = 360;
 const MAP_H = 260;
 const MAP_PAD = 12;
 
+// 据点圆点半径（模块常量，供循环内外共用，避免作用域逃逸）
+const BASE_R = 8;
+
 export function drawGameOver(ctx, renderer) {
     const W = renderer.width;
     const H = renderer.height;
+    const cx = W / 2;
+    const cy = H / 2;
+
     const playerPoints = GameState.capturePoints.filter(p => p.owner === 'player');
     const allPoints = GameState.capturePoints;
     const worldW = GameState.config.world.width;
     const worldH = GameState.config.world.height;
 
-    // ---- 永久战败 ----
-    if (GameState.permanentDefeat) {
-        ctx.save();
+    // === 死亡界面延迟+弹出动画：延迟期（gameOverDelay < 1）不画卡片也不 push 热区 ===
+    if (GameState.gameOverDelay < 1) return;
+    const appearRaw = GameState.gameOverAppearAnim;
+    const appear = easeOutCubic(appearRaw);
+
+    // === 焦点滑动自驱 deltaTime（与背包/军械库/电台同取法） ===
+    const now = performance.now();
+    if (GameState._gameOverFocusLastTime == null) GameState._gameOverFocusLastTime = now;
+    const deltaTime = (now - GameState._gameOverFocusLastTime) / 1000;
+    GameState._gameOverFocusLastTime = now;
+    const dt = Math.min(deltaTime, 0.05);
+
+    const isDefeat = playerPoints.length === 0;
+
+    // === 卡片布局：固定尺寸绕屏幕几何中心居中 ===
+    const innerPad = 20;
+    const headerH = 86;             // 标题"阵亡" + 统计
+    const mapTitleH = 24;           // 地图标题
+    const mapGap = 8;               // 地图标题与地图之间
+    const listGap = 16;             // 地图与底部列表之间
+    const listH = 44;               // 底部据点列表行高
+    const footerGap = 14;
+
+    const cardW = MAP_W + innerPad * 2;
+    let cardH;
+    if (isDefeat) {
+        // 战败变体：标题 + 副文 + 统计，紧凑居中
+        cardH = 200 + innerPad * 2;
+    } else {
+        cardH = innerPad + headerH + mapTitleH + mapGap + MAP_H + listGap + listH + footerGap + innerPad;
+    }
+    const cardX = cx - cardW / 2;
+    const cardY = cy - cardH / 2;
+
+    // === 主面板毛玻璃（随弹出动画淡入 + 从下 20px 滑入落位）===
+    ctx.save();
+    ctx.globalAlpha *= appear;
+    ctx.translate(0, -20 * (1 - appear));
+    drawGlassPanel(ctx, cardX, cardY, cardW, cardH, GLASS.radius);
+
+    if (isDefeat) {
+        // ---- 战败变体：无己方据点 ----
+        const defeatTitleY = cardY + innerPad + 30;
         ctx.fillStyle = '#ff1744';
-        ctx.font = 'bold 56px sans-serif';
+        ctx.font = `bold 42px ${MONO}`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('\u{1F480} \u6218\u8D25', W / 2, H / 2 - 40);
-        ctx.fillStyle = '#ccc';
-        ctx.font = '22px sans-serif';
-        ctx.fillText('\u6240\u6709\u53CB\u65B9\u5355\u4F4D\u5DF2\u9635\u4EA1\uFF0C\u6E38\u620F\u7ED3\u675F', W / 2, H / 2 + 10);
-        const rank = GameState.player ? GameState.player.getRankName() : '\u5217\u5175';
+        ctx.fillText('💀 战败', cx, defeatTitleY);
+
+        ctx.fillStyle = GLASS.textSecondary;
+        ctx.font = `18px ${FONT}`;
+        ctx.fillText('所有据点已失守，游戏结束', cx, defeatTitleY + 48);
+
+        const rank = GameState.player ? GameState.player.getRankName() : '列兵';
         ctx.fillStyle = '#ff9800';
-        ctx.font = '18px sans-serif';
-        ctx.fillText(`\u6700\u7EC8\u519B\u8854: ${rank}  |  \u51FB\u6740: ${GameState.kills}  |  \u5F97\u5206: ${GameState.score}`, W / 2, H / 2 + 55);
+        ctx.font = `16px ${MONO}`;
+        ctx.fillText(`最终军衔: ${rank}  |  击杀: ${GameState.kills}  |  得分: ${GameState.score}`, cx, defeatTitleY + 82);
         ctx.restore();
         return;
     }
 
-    // ---- 普通阵亡：带战术地图的复活选择 ----
-    ctx.save();
-
-    // 顶部标题 + 统计
+    // ---- 普通阵亡：战术地图复活选择 ----
+    // 标题 "阵亡" + 统计
     ctx.fillStyle = '#ff1744';
-    ctx.font = 'bold 42px sans-serif';
+    ctx.font = `bold 34px ${MONO}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('\u9635\u4EA1', W / 2, 48);
+    ctx.fillText('阵亡', cx, cardY + innerPad + 24);
 
-    const rank = GameState.player ? GameState.player.getRankName() : '\u5217\u5175';
-    ctx.fillStyle = '#ddd';
-    ctx.font = '18px sans-serif';
-    ctx.fillText(`\u519B\u8854: ${rank}   |   \u51FB\u6740: ${GameState.kills}   |   \u5F97\u5206: ${GameState.score}`, W / 2, 85);
+    const rank = GameState.player ? GameState.player.getRankName() : '列兵';
+    ctx.fillStyle = GLASS.textSecondary;
+    ctx.font = `15px ${FONT}`;
+    ctx.fillText(`军衔: ${rank}   |   击杀: ${GameState.kills}   |   得分: ${GameState.score}`, cx, cardY + innerPad + 58);
 
-    // ---- 战术地图 ----
-    const mapX = (W - MAP_W) / 2;
-    const mapY = 110;
+    // 顶部分隔线
+    ctx.strokeStyle = GLASS.border;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cardX + innerPad, cardY + innerPad + headerH);
+    ctx.lineTo(cardX + cardW - innerPad, cardY + innerPad + headerH);
+    ctx.stroke();
+
+    // 地图标题
+    const mapTitleY = cardY + innerPad + headerH;
+    ctx.fillStyle = GLASS.textDim;
+    ctx.font = `12px ${MONO}`;
+    ctx.fillText('选择复活据点 — 点击或按数字键', cx, mapTitleY + mapTitleH / 2);
+
+    // === 战术地图（卡片内居中）===
+    const mapX = cx - MAP_W / 2;
+    const mapY = mapTitleY + mapTitleH + mapGap;
     const scaleX = (MAP_W - MAP_PAD * 2) / worldW;
     const scaleY = (MAP_H - MAP_PAD * 2) / worldH;
     const scale = Math.min(scaleX, scaleY);
@@ -58,23 +130,43 @@ export function drawGameOver(ctx, renderer) {
     const ox = mapX + (MAP_W - drawW) / 2;
     const oy = mapY + (MAP_H - drawH) / 2;
 
-    // 地图背景
-    ctx.fillStyle = 'rgba(20, 30, 20, 0.85)';
-    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-    ctx.lineWidth = 1;
-    ctx.fillRect(mapX, mapY, MAP_W, MAP_H);
-    ctx.strokeRect(mapX, mapY, MAP_W, MAP_H);
-
-    // 地图标题
-    ctx.fillStyle = '#aaa';
-    ctx.font = '13px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('\u9009\u62E9\u590D\u6D3B\u636E\u70B9 \u2014 \u70B9\u51FB\u6216\u6309\u6570\u5B57\u952E', W / 2, mapY + MAP_H + 18);
+    // 地图毛玻璃小卡片
+    drawGlassPanel(ctx, mapX, mapY, MAP_W, MAP_H, GLASS.radiusSmall);
 
     // 绘制所有据点
     GameState.respawnHitAreas = [];
     const hoverIdx = GameState.gameOverSelectedPoint;
     let playerIdx = 0;
+
+    // 先算选中据点目标坐标（供焦点滑动用）
+    let selectedTargetX = null, selectedTargetY = null;
+    if (hoverIdx >= 0 && hoverIdx < playerPoints.length) {
+        const sp = playerPoints[hoverIdx];
+        selectedTargetX = ox + sp.x * scale;
+        selectedTargetY = oy + sp.y * scale;
+    }
+
+    // 据点焦点滑动推进（鼠标悬浮/数字键切选时据点高亮从旧据点滑到新据点）
+    if (selectedTargetX != null) {
+        if (GameState.gameOverFocusIndex !== hoverIdx) {
+            const hasFocus = (GameState.gameOverFocusX != null && GameState.gameOverFocusY != null);
+            if (hasFocus) {
+                GameState.gameOverFocusFromX = GameState.gameOverFocusX;
+                GameState.gameOverFocusFromY = GameState.gameOverFocusY;
+            } else {
+                GameState.gameOverFocusFromX = selectedTargetX;
+                GameState.gameOverFocusFromY = selectedTargetY;
+                GameState.gameOverFocusX = selectedTargetX;
+                GameState.gameOverFocusY = selectedTargetY;
+            }
+            GameState.gameOverFocusAnim = 0;
+            GameState.gameOverFocusIndex = hoverIdx;
+        }
+        GameState.gameOverFocusAnim = Math.min(1, GameState.gameOverFocusAnim + dt / 0.22);
+        const t = easeOutBack(GameState.gameOverFocusAnim);
+        GameState.gameOverFocusX = GameState.gameOverFocusFromX + (selectedTargetX - GameState.gameOverFocusFromX) * t;
+        GameState.gameOverFocusY = GameState.gameOverFocusFromY + (selectedTargetY - GameState.gameOverFocusFromY) * t;
+    }
 
     for (const pt of allPoints) {
         const px = ox + pt.x * scale;
@@ -82,7 +174,6 @@ export function drawGameOver(ctx, renderer) {
         const isPlayer = pt.owner === 'player';
         const isEnemy = pt.owner === 'enemy';
 
-        const baseR = 8;
         let color = '#666';
         if (isPlayer) color = '#4CAF50';
         else if (isEnemy) color = '#f44336';
@@ -91,36 +182,61 @@ export function drawGameOver(ctx, renderer) {
         const mx = GameState.mouse.x;
         const my = GameState.mouse.y;
         const dist = Math.hypot(mx - px, my - py);
-        const isHover = dist < baseR + 6;
+        const isHover = dist < BASE_R + 6;
 
         if (isPlayer) {
-            // 悬浮/选中高亮
-            if (isHover || hoverIdx === playerIdx) {
+            // 悬浮检测：仅当鼠标在该据点上时写入 gameOverSelectedPoint
+            // （之前 hoverIdx===playerIdx 会导致鼠标移开后旧值被锁死，无法切换到新据点）
+            if (isHover) {
                 GameState.gameOverSelectedPoint = playerIdx;
-                // 脉冲光圈
-                ctx.beginPath();
-                ctx.arc(px, py, baseR + 6, 0, Math.PI * 2);
-                ctx.fillStyle = 'rgba(76, 175, 80, 0.25)';
-                ctx.fill();
             }
 
-            ctx.beginPath();
-            ctx.arc(px, py, baseR, 0, Math.PI * 2);
-            ctx.fillStyle = (isHover || hoverIdx === playerIdx) ? '#66BB6A' : color;
-            ctx.fill();
-            ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 1.5;
-            ctx.stroke();
+            // 选中据点高亮画在焦点滑动后的 (fx,fy)（脉动呼吸 + 发光描边）
+            if (isHover) {
+                const fx = GameState.gameOverFocusX;
+                const fy = GameState.gameOverFocusY;
+                const pulse = Math.sin(now * 0.004) * 0.05 + 0.95;
+                ctx.save();
+                // 脉冲光圈
+                ctx.fillStyle = `rgba(76, 175, 80, ${0.25 * pulse})`;
+                ctx.beginPath();
+                ctx.arc(fx, fy, BASE_R + 6, 0, Math.PI * 2);
+                ctx.fill();
+                // 选中亮色圆点 + 发光
+                ctx.shadowColor = '#66BB6A';
+                ctx.shadowBlur = 10 + pulse * 4;
+                ctx.beginPath();
+                ctx.arc(fx, fy, BASE_R, 0, Math.PI * 2);
+                ctx.fillStyle = '#66BB6A';
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                // 白描边
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.arc(fx, fy, BASE_R, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+            } else {
+                // 非选中己方据点：普通圆点
+                ctx.beginPath();
+                ctx.arc(px, py, BASE_R, 0, Math.PI * 2);
+                ctx.fillStyle = color;
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
 
             // 编号
             ctx.fillStyle = '#fff';
-            ctx.font = 'bold 11px sans-serif';
+            ctx.font = `bold 11px ${MONO}`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(`${playerIdx + 1}`, px, py);
 
             // 存储热区
-            GameState.respawnHitAreas.push({ x: px, y: py, r: baseR + 6, index: playerIdx });
+            GameState.respawnHitAreas.push({ x: px, y: py, r: BASE_R + 6, index: playerIdx });
             playerIdx++;
         } else {
             // 敌方/中立据点
@@ -136,41 +252,40 @@ export function drawGameOver(ctx, renderer) {
     // 悬浮据点下方显示名称
     if (hoverIdx >= 0 && hoverIdx < playerPoints.length) {
         const hp = playerPoints[hoverIdx];
-        const hpx = ox + hp.x * scale;
-        const hpy = oy + hp.y * scale;
-        ctx.fillStyle = '#fff';
-        ctx.font = '13px sans-serif';
+        const fx = GameState.gameOverFocusX;
+        const fy = GameState.gameOverFocusY;
+        ctx.fillStyle = GLASS.textPrimary;
+        ctx.font = `12px ${FONT}`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
-        ctx.fillText(`\u636E\u70B9 #${hoverIdx + 1}`, hpx, hpy + 14);
+        ctx.fillText(`据点 #${hoverIdx + 1}`, fx, fy + BASE_R + 8);
     }
 
-    // ---- 底部据点列表（紧凑横排）----
-    const listY = mapY + MAP_H + 40;
-    if (playerPoints.length > 0) {
-        ctx.font = '15px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        for (let i = 0; i < playerPoints.length; i++) {
-            const bx = W / 2 + (i - (playerPoints.length - 1) / 2) * 90;
-            const by = listY;
-            const isHov = hoverIdx === i;
+    // ---- 底部据点列表（紧凑横排，毛玻璃小卡）----
+    const listY = mapY + MAP_H + listGap + listH / 2;
+    ctx.font = `14px ${FONT}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (let i = 0; i < playerPoints.length; i++) {
+        const bx = cx + (i - (playerPoints.length - 1) / 2) * 90;
+        const by = listY;
+        const isHov = hoverIdx === i;
 
-            ctx.fillStyle = isHov ? 'rgba(76,175,80,0.3)' : 'rgba(255,255,255,0.08)';
-            ctx.fillRect(bx - 36, by - 14, 72, 28);
-            ctx.strokeStyle = isHov ? '#4CAF50' : 'rgba(255,255,255,0.15)';
-            ctx.lineWidth = 1;
-            ctx.strokeRect(bx - 36, by - 14, 72, 28);
-
-            ctx.fillStyle = isHov ? '#fff' : '#aaa';
-            ctx.fillText(`[${i + 1}] \u636E\u70B9`, bx, by);
+        // 卡片毛玻璃底板
+        drawGlassPanel(ctx, bx - 36, by - 16, 72, 32, GLASS.radiusSmall);
+        if (isHov) {
+            // 选中描边（绿）
+            ctx.save();
+            ctx.strokeStyle = '#4CAF50';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.roundRect(bx - 36, by - 16, 72, 32, GLASS.radiusSmall);
+            ctx.stroke();
+            ctx.restore();
         }
-    } else {
-        ctx.fillStyle = '#ff9800';
-        ctx.font = '18px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('\u26A0\uFE0F \u65E0\u5DF1\u65B9\u636E\u70B9\uFF01\u6218\u53CB\u5168\u706D\u5373\u8D25\uFF01', W / 2, listY);
-    }
 
+        ctx.fillStyle = isHov ? GLASS.textPrimary : GLASS.textDim;
+        ctx.fillText(`[${i + 1}] 据点`, bx, by);
+    }
     ctx.restore();
 }
