@@ -17,6 +17,8 @@ export const GameState = {
     arsenalOpen: false, // 军械库界面是否打开
     inventory: [null, null, null, null, null, null, null], // 背包，7个位置，存储 Weapon 实例或 null
     inventoryOpen: false, // 背包是否打开
+    inventoryAnimProgress: 0, // 背包动画进度 0-1
+    inventoryAnimDirection: null, // 'opening' | 'closing' | null
     rp: 0, // RP值（金钱）
     map: null,
     weather: 'sunny', // 当前天气类型
@@ -45,6 +47,13 @@ export const GameState = {
     activeWeaponSlot: 0, // 当前装备的背包位置 (0-6)
     inventorySelectedSlot: -1, // 背包界面中选中的格子索引（-1=未选中）
     inventoryHitAreas: [], // 背包格子点击热区 [{x,y,w,h,index}]
+    // 选中槽位焦点滑动动画（渲染端自治：检测 inventorySelectedSlot 变化驱动）
+    inventoryFocusX: null, // 焦点框当前显示位置（格子中心 x），null=未初始化
+    inventoryFocusY: null,
+    inventoryFocusSlot: -1, // 焦点当前归属的选中索引（用于检测变化）
+    inventoryFocusFromX: null, // 本次滑动起点 x（切换瞬间记录）
+    inventoryFocusFromY: null,
+    inventoryFocusAnim: 0, // 本次滑动进度 0→1（easeOutCubic 前）
     arsenalSelectedSlot: 0, // 军械库中选中的背包位置
     arsenalSelectedIndex: 0, // 军械库中选中的商品索引
     arsenalCategory: 0,      // 军械库当前分类索引 (0=重武器, 1=轻武器, 2=其他, 3=副武器)
@@ -109,9 +118,18 @@ export const GameState = {
         this.activeWeaponSlot = 0;
 this.inventorySelectedSlot = -1;
 this.inventoryHitAreas = [];
+        this.inventoryFocusX = null;
+        this.inventoryFocusY = null;
+        this.inventoryFocusSlot = -1;
+        this.inventoryFocusFromX = null;
+        this.inventoryFocusFromY = null;
+        this.inventoryFocusAnim = 0;
         this.arsenalSelectedSlot = 0;
         this.arsenalSelectedIndex = 0;
         this.inventoryOpen = false;
+        this.inventoryAnimProgress = 0;
+        this.inventoryAnimDirection = null;
+        this._inventoryAnimLastTime = null;
         this.arsenalOpen = false;
         this.rp = 0;
         this.gameOverSelectedPoint = -1;

@@ -65,15 +65,17 @@ export const InputManager = {
                     return;
                 }
                 if (key === 'q') {
-                    GameState.inventoryOpen = false;
-                    GameState.inventorySelectedSlot = -1;
+                    if (GameState.inventoryAnimDirection === null) {
+                        GameState.inventoryAnimDirection = 'closing';
+                        GameState._inventoryAnimLastTime = null;
+                    }
                     playUISound('click');
                     e.preventDefault();
                     return;
                 }
-
                 // === 背包界面专属按键 ===
-                if (GameState.inventoryOpen) {
+                // 关闭折叠期间不响应背包专属按键（与点击/右键守卫一致）
+                if (GameState.inventoryOpen && GameState.inventoryAnimDirection === null) {
                     // D 键：丢弃选中物品到脚下
                     if (key === 'd') {
                         const selSlot = GameState.inventorySelectedSlot;
@@ -529,7 +531,15 @@ export const InputManager = {
 
             // Q \u952E\uFF1A\u6253\u5F00/\u5173\u95ED\u80CC\u5305
             if (key === 'q') {
-                GameState.inventoryOpen = !GameState.inventoryOpen;
+                if (!GameState.inventoryOpen && GameState.inventoryAnimDirection !== 'closing') {
+                    GameState.inventoryOpen = true;
+                    GameState.inventoryAnimDirection = 'opening';
+                    GameState.inventoryAnimProgress = 0;
+                    GameState._inventoryAnimLastTime = null;
+                } else if (GameState.inventoryOpen && GameState.inventoryAnimDirection === null) {
+                    GameState.inventoryAnimDirection = 'closing';
+                    GameState._inventoryAnimLastTime = null;
+                }
                 playUISound('click');
                 console.log(GameState.inventoryOpen ? '\u{1F392} \u6253\u5F00\u80CC\u5305' : '\u{1F392} \u5173\u95ED\u80CC\u5305');
                 e.preventDefault();
@@ -797,7 +807,8 @@ export const InputManager = {
                 }
 
                 // === \u80CC\u5305\u754C\u9762\u70B9\u51FB\u9009\u4E2D\u683C\u5B50 ===
-                if (GameState.inventoryOpen && GameState.inventoryHitAreas) {
+                // \u4EC5\u5728\u52A8\u753B\u843D\u5B9A\u540E\u5141\u8BB8\u9009\u4E2D\uFF0C\u5173\u95ED\u6298\u53E0\u671F\u95F4\u70B9\u51FB\u65E0\u6548\uFF08\u907F\u514D\u672B\u5E27\u53C8\u88AB\u91CD\u7F6E\u4E3A -1\uFF09
+                if (GameState.inventoryOpen && GameState.inventoryAnimDirection === null && GameState.inventoryHitAreas) {
                     const rect = canvas.getBoundingClientRect();
                     const scaleX = canvas.clientWidth / rect.width;
                     const scaleY = canvas.clientHeight / rect.height;
@@ -853,8 +864,9 @@ export const InputManager = {
                 playRadioClose();
                 return;
             }
-            // \u80CC\u5305\u754C\u9762\uFF1A\u53F3\u952E\u4E22\u5F03\u9009\u4E2D\u7269\u54C1\u5230\u811A\u4E0B
-            if (GameState.inventoryOpen) {
+            // 背包界面：右键丢弃选中物品到脚下
+            // 关闭折叠期间不允许操作（与点击选中守卫一致）
+            if (GameState.inventoryOpen && GameState.inventoryAnimDirection === null) {
                 const selSlot = GameState.inventorySelectedSlot;
                 if (selSlot >= 0 && selSlot < 7 && GameState.inventory[selSlot]) {
                     const item = GameState.inventory[selSlot];

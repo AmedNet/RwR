@@ -4,6 +4,7 @@ import { EffectsManager } from '../utils/EffectsManager.js';
 import { WeaponRegistry } from '../core/WeaponRegistry.js';
 import { drawWeaponHUD } from './WeaponHUD.js';
 import { drawInventory } from './InventoryUI.js';
+import { GLASS, drawGlassPanel, easeOutCubic, easeInOutCubic } from './GlassUI.js';
 import { drawArsenalShop } from './ArsenalUI.js';
 import { drawDebug } from './DebugUI.js';
 import { drawGameOver } from './GameOverUI.js';
@@ -24,6 +25,10 @@ export const Renderer = {
     _offscreenCtx: null,
     _dayNightCanvas: null,
     _dayNightCtx: null,
+    _blurCanvas: null,  // 用于毛玻璃模糊效果
+    _blurCtx: null,
+    _blurNeededNextFrame: false, // 上一帧用过模糊面板则本帧预先捕获，避免每帧无条件全屏拷贝
+    _blurredThisFrame: false,   // 本帧是否已捕获过模糊画面（懒捕获兜底用）
     logicalWidth: 0,
     logicalHeight: 0,
     weaponImages: {}, // 武器贴图缓存 { weaponId: HTMLImageElement }
@@ -61,6 +66,10 @@ export const Renderer = {
 
         // 先用临时 canvas 避免 null ctx（resize() 会替换）
         this.ctx = document.createElement('canvas').getContext('2d');
+
+        // 初始化模糊 canvas 用于毛玻璃效果
+        this._blurCanvas = document.createElement('canvas');
+        this._blurCtx = this._blurCanvas.getContext('2d');
 
         // 初始化后处理管线
         PostProcess.init();
@@ -117,6 +126,12 @@ export const Renderer = {
             this._dayNightCanvas.height = Math.ceil(height);
         }
 
+        // 同步模糊 canvas 尺寸（使用逻辑尺寸，非 DPR 缩放）
+        if (this._blurCanvas) {
+            this._blurCanvas.width = Math.ceil(width);
+            this._blurCanvas.height = Math.ceil(height);
+        }
+
         console.log(`📐 画布尺寸: ${width}x${height}`);
     },
 
@@ -151,6 +166,81 @@ export const Renderer = {
     _drawOverlay() {
         this.ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
         this.ctx.fillRect(0, 0, this.width, this.height);
+    },
+    
+    // 捕获当前 offscreen 画面到模糊 canvas（在绘制 UI 前调用）
+    _captureFrameForBlur() {
+        if (!this._blurCanvas || !this._offscreenCanvas) return;
+        const w = this.width;
+        const h = this.height;
+        if (this._blurCanvas.width !== w || this._blurCanvas.height !== h) {
+            this._blurCanvas.width = w;
+            this._blurCanvas.height = h;
+        }
+        this._blurCtx.clearRect(0, 0, w, h);
+        // 从 offscreenCanvas（物理像素）绘制到 blurCanvas（逻辑像素）
+        // offscreenCanvas 尺寸是 width*dpr x height*dpr，需要正确缩放
+        this._blurCtx.drawImage(
+            this._offscreenCanvas,
+            0, 0, this._offscreenCanvas.width, this._offscreenCanvas.height,  // source (physical pixels)
+            0, 0, w, h  // destination (logical pixels)
+        );
+        this._blurredThisFrame = true;
+    },
+    
+    // 全屏模糊（覆盖整个画面）
+    _drawBlurBackground() {
+        if (!this._blurCanvas || !this.ctx) return;
+        const w = this.width;
+        const h = this.height;
+        this.ctx.save();
+        // 先清空画布，移除锐利内容
+        this.ctx.clearRect(0, 0, w, h);
+        // 绘制模糊版本
+        this.ctx.filter = 'blur(18px)';
+        this.ctx.drawImage(this._blurCanvas, 0, 0, w, h);
+        this.ctx.filter = 'none';
+        this.ctx.restore();
+    },
+    
+    // 全屏模糊（带 alpha，用于背包打开/关闭动画过渡）
+    _drawBlurBackgroundAlpha(alpha) {
+        if (!this._blurCanvas || !this.ctx) return;
+        if (alpha <= 0) return;
+        if (!this._blurredThisFrame) this._captureFrameForBlur();
+        this._blurNeededNextFrame = true; // 本帧使用模糊画面，下一帧预先捕获
+        const w = this.width;
+        const h = this.height;
+        this.ctx.save();
+        this.ctx.globalAlpha = alpha;
+        this.ctx.filter = 'blur(18px)';
+        this.ctx.drawImage(this._blurCanvas, 0, 0, w, h);
+        this.ctx.filter = 'none';
+        this.ctx.restore();
+    },
+
+    // 区域模糊（用于 HUD 面板，裁剪到指定区域）
+    _drawBlurRegion(x, y, w, h, radius = 0) {
+        if (!this._blurCanvas || !this.ctx) return;
+        if (!this._blurredThisFrame) this._captureFrameForBlur();
+        this._blurNeededNextFrame = true; // 本帧使用模糊画面，下一帧预先捕获
+        this.ctx.save();
+        if (radius > 0) {
+            this.ctx.beginPath();
+            this.ctx.roundRect(x, y, w, h, radius);
+            this.ctx.clip();
+        } else {
+            this.ctx.beginPath();
+            this.ctx.rect(x, y, w, h);
+            this.ctx.clip();
+        }
+        // 先清空裁剪区域，移除锐利内容
+        this.ctx.clearRect(x - 1, y - 1, w + 2, h + 2);
+        // 绘制模糊版本
+        this.ctx.filter = 'blur(14px)';
+        this.ctx.drawImage(this._blurCanvas, 0, 0, this.width, this.height);
+        this.ctx.filter = 'none';
+        this.ctx.restore();
     },
 
     /** 在世界坐标位置绘制实体（save/translate/draw/restore） */
@@ -1735,13 +1825,55 @@ export const Renderer = {
             return;
         }
 
-        // 菜单打开时跳过世界渲染
+        // 背包界面：渲染世界 + 模糊背景 + UI叠加
+        if (GameState.inventoryOpen || GameState.inventoryAnimDirection === 'closing') {
+            // 先渲染世界到 offscreen canvas
+            this._renderWorld();
+            this._renderEntities();
+            WeatherSystem.drawCloudShadows(this.ctx, GameState.camera);
+            WeatherSystem.drawParticles(this.ctx);
+            WeatherSystem.drawOverlay(this.ctx, this);
+            WeatherSystem.drawWeatherEdgeEffects(this.ctx, this);
+            
+            // 捕获当前画面用于模糊效果
+            this._captureFrameForBlur();
+            
+            // 应用高斯模糊背景：与 InventoryUI 动画同步（倒带式）
+            // 打开/关闭共用 easeOutCubic(rawP)：rawP 关闭时 1→0，模糊随之从 0.85→0 恢复清晰
+            const _invRaw = GameState.inventoryAnimProgress;
+            const blurP = easeOutCubic(_invRaw);
+            this._drawBlurBackgroundAlpha(0.85 * blurP);
+
+            // 过渡态 WeaponHUD：开/关包时 HUD 与背包同步滑入/滑出 + 淡入/淡出。
+            // - 位移 slide = rawP（线性，与背包同步铺开，距离够大足以看清）。
+            // - 透明度 hudAlpha = easeInOutCubic(1 - rawP)：首尾缓、中段缓，呼吸感。
+            //   背包自身关包仅 ~230ms，纯线性 0→1 给人"瞬间消失/出现"的错觉；
+            //   easeInOutCubic 让 alpha 在两端驻留较久（开/关包初末段几乎不动），
+            //   中段平滑过渡，肉眼能清晰感知渐变而非硬切。
+            //   关包末帧 rawP≈0 → hudAlpha=easeInOutCubic(1)=1（满显） == 下一帧主分支满显 ✓ 零跳变。
+            const slide = _invRaw;                 // = rawP：关包 1→0 落定 / 开包 0→1 滑出
+            const hudAlpha = easeInOutCubic(1 - _invRaw);
+            if (hudAlpha > 0.05) {
+                drawWeaponHUD(this.ctx, this, {
+                    alpha: hudAlpha,              // 关包缓入 0→1 / 开包缓出 1→0
+                    panelOffsetX: slide * 64,     // 右侧面板滑移距离
+                    bottomOffsetY: slide * 56,   // 底部栏滑移距离
+                });
+            }
+
+            // 绘制背包 UI
+            drawInventory(this.ctx, this);
+            this._updateShaderLighting();
+            this._renderDayNightOverlay();
+            PostProcess.apply(this._offscreenCanvas, this);
+            return;
+        }
+
+        // 其他菜单打开时跳过世界渲染
         if (menuOpen) {
             this._drawOverlay();
             if (GameState.arsenalOpen) {
                 drawArsenalShop(this.ctx, this);
-            } else if (GameState.inventoryOpen) {
-                drawInventory(this.ctx, this);
             }
             this._updateShaderLighting();
             this._renderDayNightOverlay();
@@ -1756,6 +1888,17 @@ export const Renderer = {
         WeatherSystem.drawParticles(this.ctx);
         WeatherSystem.drawOverlay(this.ctx, this);
         WeatherSystem.drawWeatherEdgeEffects(this.ctx, this);
+
+        // 捕获当前画面用于 HUD 面板模糊效果
+        // 按上一帧是否使用模糊面板预测：未使用则跳过全屏拷贝；真正需要时由 _drawBlurRegion 兜底懒捕获
+        // 先回收预测位（_drawBlur* 使用时会重新 raise），再据其决定是否预捕
+        const _needBlurPrev = this._blurNeededNextFrame;
+        this._blurNeededNextFrame = false;
+        this._blurredThisFrame = false;
+        if (_needBlurPrev) {
+            this._captureFrameForBlur();
+        }
+
         this._renderHUD();
 
         // FPS显示
@@ -1780,32 +1923,45 @@ export const Renderer = {
     drawStatusEffectsHUD(ctx, player) {
         const EFFECT_START_X = 20;
         const EFFECT_START_Y = 80;
-        const ICON_SIZE = 32;
+        const ICON_SIZE = 40;
         const ICON_SPACING = 8;
         const FPS = 60;
+        const FONT = '-apple-system, "SF Pro Display", sans-serif';
 
         for (let i = 0; i < player.statusEffects.length; i++) {
             const effect = player.statusEffects[i];
             const x = EFFECT_START_X;
             const y = EFFECT_START_Y + i * (ICON_SIZE + ICON_SPACING);
+            const r = GLASS.radiusSmall;
 
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-            ctx.fillRect(x, y, ICON_SIZE, ICON_SIZE);
+            // 局部毛玻璃模糊 + 玻璃底板
+            this._drawBlurRegion(x, y, ICON_SIZE, ICON_SIZE, r);
+            drawGlassPanel(ctx, x, y, ICON_SIZE, ICON_SIZE, r);
 
-            ctx.strokeStyle = effect.color;
-            ctx.lineWidth = 2;
-            ctx.strokeRect(x, y, ICON_SIZE, ICON_SIZE);
-
+            // 左侧效果色竖条
+            ctx.save();
             ctx.fillStyle = effect.color;
-            ctx.font = '20px sans-serif';
+            ctx.beginPath();
+            ctx.roundRect(x + 4, y + 6, 4, ICON_SIZE - 12, 2);
+            ctx.fill();
+            ctx.restore();
+
+            // emoji 图标
+            ctx.fillStyle = effect.color;
+            ctx.font = '22px ' + FONT;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText(effect.icon, x + ICON_SIZE / 2, y + ICON_SIZE / 2 - 2);
+            ctx.fillText(effect.icon, x + ICON_SIZE / 2 + 6, y + ICON_SIZE / 2 - 6);
 
+            // 倒计时数字（三档色阶）
             const seconds = Math.ceil(effect.remaining / FPS);
-            ctx.fillStyle = '#fff';
-            ctx.font = 'bold 11px sans-serif';
-            ctx.fillText(seconds + 's', x + ICON_SIZE / 2, y + ICON_SIZE - 6);
+            const ratio = effect.duration > 0 ? effect.remaining / effect.duration : 1;
+            const remainColor = ratio <= 0.25 ? GLASS.ammoCritical
+                : ratio <= 0.5 ? GLASS.ammoLow
+                : GLASS.textPrimary;
+            ctx.fillStyle = remainColor;
+            ctx.font = '600 11px ' + FONT;
+            ctx.fillText(seconds + 's', x + ICON_SIZE / 2 + 6, y + ICON_SIZE - 7);
         }
     }
 };
