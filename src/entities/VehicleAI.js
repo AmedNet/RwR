@@ -272,7 +272,7 @@ export function updateVehicleCombat(ai, vehicle) {
         // 射击冷却和瞄准
         if (ai.shootCooldown > 0) {
             ai.shootCooldown--;
-        } else if (activeWeapon.canShoot() && ai.updateVehicleAim(closestTarget)) {
+        } else if (activeWeapon.canShoot() && updateVehicleAim(ai, closestTarget)) {
             // 载具中的射击方向——从座位指向目标
             const angle = Math.atan2(closestTarget.y - ai.y, closestTarget.x - ai.x);
             const speed = activeWeapon.config.bulletSpeed || ai.bulletSpeed;
