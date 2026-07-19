@@ -396,6 +396,18 @@ export class Vehicle extends Entity {
      * 更新所有非驾驶座乘客的AI射击行为
      */
     updatePassengers() {
+        // 驾驶位空缺时，AI乘客自动换到驾驶位
+        if (!this.occupants[0] && this.alive) {
+            for (let i = 1; i < this.occupants.length; i++) {
+                const candidate = this.occupants[i];
+                if (candidate && candidate.alive && candidate !== GameState.player) {
+                    this.changeSeat(candidate, 0);
+                    console.log(`🚗 AI乘客自动换到驾驶位`);
+                    break;
+                }
+            }
+        }
+
         if (!this.passengerCanFire) return;
         for (let i = 0; i < this.occupants.length; i++) {
             const occupant = this.occupants[i];

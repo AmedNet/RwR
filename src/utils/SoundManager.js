@@ -261,7 +261,67 @@ export function playShoot(type, source = 0) {
   const c = getCtx(), n = c.currentTime;
   const vol = getDistanceVolume(source, 1200, 1.5);
   if (vol <= 0) return;
-  
+
+  // 机炮开火：西瓜爆裂声
+  if (type === 'autocannon') {
+    // 1. 瓜皮炸裂脆响
+    const crackNoise = createSrc(c, mkNoise(c, 0.12, 'white'));
+    const crackFilter = c.createBiquadFilter();
+    const crackGain = c.createGain();
+    crackFilter.type = 'highpass';
+    crackFilter.frequency.value = 1200;
+    crackFilter.Q.value = 2;
+    crackGain.gain.setValueAtTime(0, n);
+    crackGain.gain.linearRampToValueAtTime(1.2 * vol, n + 0.003);
+    crackGain.gain.exponentialRampToValueAtTime(0.001, n + 0.1);
+    crackNoise.connect(crackFilter).connect(crackGain).connect(masterGain);
+    crackNoise.start(n);
+
+    // 2. 瓜瓤炸开低频闷响
+    const thumpOsc = c.createOscillator();
+    const thumpGain = c.createGain();
+    const thumpFilter = c.createBiquadFilter();
+    thumpOsc.type = 'triangle';
+    thumpOsc.frequency.setValueAtTime(120, n);
+    thumpOsc.frequency.exponentialRampToValueAtTime(60, n + 0.15);
+    thumpFilter.type = 'lowpass';
+    thumpFilter.frequency.value = 400;
+    thumpGain.gain.setValueAtTime(0, n);
+    thumpGain.gain.linearRampToValueAtTime(1.5 * vol, n + 0.01);
+    thumpGain.gain.exponentialRampToValueAtTime(0.001, n + 0.5);
+    thumpOsc.connect(thumpFilter).connect(thumpGain).connect(masterGain);
+    thumpOsc.start(n);
+    thumpOsc.stop(n + 0.5);
+
+    // 3. 汁水大量飞溅声
+    const juiceNoise = createSrc(c, mkNoise(c, 0.6, 'white'));
+    const juiceFilter = c.createBiquadFilter();
+    const juiceGain = c.createGain();
+    juiceFilter.type = 'bandpass';
+    juiceFilter.frequency.setValueAtTime(2500, n);
+    juiceFilter.frequency.exponentialRampToValueAtTime(800, n + 0.5);
+    juiceFilter.Q.value = 1.5;
+    juiceGain.gain.setValueAtTime(0, n);
+    juiceGain.gain.linearRampToValueAtTime(0.9 * vol, n + 0.008);
+    juiceGain.gain.exponentialRampToValueAtTime(0.001, n + 0.6);
+    juiceNoise.connect(juiceFilter).connect(juiceGain).connect(masterGain);
+    juiceNoise.start(n);
+
+    // 4. 内部压力释放"噗"声
+    const popOsc = c.createOscillator();
+    const popGain = c.createGain();
+    popOsc.type = 'sine';
+    popOsc.frequency.setValueAtTime(200, n + 0.02);
+    popOsc.frequency.exponentialRampToValueAtTime(50, n + 0.2);
+    popGain.gain.setValueAtTime(0, n + 0.02);
+    popGain.gain.linearRampToValueAtTime(0.5 * vol, n + 0.03);
+    popGain.gain.exponentialRampToValueAtTime(0.001, n + 0.25);
+    popOsc.connect(popGain).connect(masterGain);
+    popOsc.start(n + 0.02);
+    popOsc.stop(n + 0.25);
+    return;
+  }
+
   // 枪声的核心物理参数字典
   const C = {
     pistol:   { nD: 0.10, nF: 2600, nQ: 1.5, tF: 220, tD: 0.03, tV: 0.4, nV: 0.7, lF: 110, lV: 0.4,  ring: false },
@@ -326,27 +386,7 @@ export function playShoot(type, source = 0) {
 }
 
 export function playAutocannonImpact(source = 0) {
-  const c = getCtx(), n = c.currentTime;
-  const vol = getDistanceVolume(source, 1400, 1.3);
-  if (vol <= 0) return;
-
-  const nb = mkNoise(c, 0.2, 'brown'), ns = createSrc(c, nb);
-  const nf = c.createBiquadFilter(), ng = c.createGain();
-  nf.type = 'bandpass'; nf.frequency.setValueAtTime(520, n); nf.Q.value = 0.7;
-  ng.gain.setValueAtTime(0.72 * vol, n);
-  ng.gain.exponentialRampToValueAtTime(0.001, n + 0.2);
-  ns.connect(nf).connect(ng).connect(masterGain);
-  ns.start(n); ns.stop(n + 0.2);
-
-  const thump = c.createOscillator(), thumpGain = c.createGain();
-  thump.type = 'sine'; thump.frequency.setValueAtTime(72, n);
-  thump.frequency.exponentialRampToValueAtTime(24, n + 0.16);
-  thumpGain.gain.setValueAtTime(0.65 * vol, n);
-  thumpGain.gain.exponentialRampToValueAtTime(0.001, n + 0.16);
-  thump.connect(thumpGain).connect(masterGain);
-  thump.start(n); thump.stop(n + 0.17);
-
-  playRingRaw(c, n + 0.01, 760 + Math.random() * 140, 0.11, 0.18 * vol, 'triangle');
+  playExplosion(source, false);
 }
 
 // 播放换弹音效 (重构：抛弃无规律的for循环，改为严格的时间轴机械动作序列编排！)

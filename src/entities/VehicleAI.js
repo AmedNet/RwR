@@ -15,6 +15,7 @@ export const DRIVER_MIN_RANK = AIRank.SERGEANT;
 export const VEHICLE_SEARCH_RANGE = 300;
 export const VEHICLE_BOARD_CHECK_INTERVAL = 120;
 export const MIN_PASSENGERS_TO_DEPART = 2;
+export const MAX_WAIT_FRAMES = 900; // 15秒@60fps — 超时独自发车
 
 // ─── 载具瞄准 ───
 export function updateVehicleAim(ai, target) {
@@ -93,11 +94,30 @@ export function updateAIDriving(ai, vehicle) {
 
         // 检查发车条件：乘客数（不含驾驶员）
         const passengerCount = vehicle.occupants.filter((o, i) => i > 0 && o).length;
+
+        // 初始化卡住检测状态
+        if (ai._driveStuckRecoverTimer == null) ai._driveStuckRecoverTimer = 0;
+        if (ai._driveStuckTimer == null) ai._driveStuckTimer = 0;
+        if (ai._driveStuckCount == null) ai._driveStuckCount = 0;
+        if (ai._driveWaitTimer == null) ai._driveWaitTimer = 0;
+
         let throttle = 0;
         let steering = 0;
 
+        // 诊断日志（每120帧一次，避免刷屏）
+        if (!ai._diagFrame) ai._diagFrame = 0;
+        const _diag = (++ai._diagFrame % 120 === 0);
+        if (_diag) console.log(`🚗 PRE: passengerCount=${passengerCount}, throttle=${throttle.toFixed(2)}, steering=${steering.toFixed(2)}`);
+
+        // 等待超时计时
         if (passengerCount >= MIN_PASSENGERS_TO_DEPART) {
-            // 满足发车条件，选择目标
+            ai._driveWaitTimer = 0;
+        } else {
+            ai._driveWaitTimer++;
+        }
+
+        if (passengerCount >= MIN_PASSENGERS_TO_DEPART || ai._driveWaitTimer > MAX_WAIT_FRAMES) {
+            // 满足发车条件或等待超时，选择目标
             const { target: captureTarget } = ai.getClosestTargetPoint();
 
             let targetX, targetY;
@@ -109,6 +129,7 @@ export function updateAIDriving(ai, vehicle) {
                 targetY = enemyTarget.y;
             } else {
                 // 无目标，原地怠速
+                console.log(`🚗 updateAIDriving IDLE: captureTarget=null, enemyTarget=${!!enemyTarget}, vehicle=${vehicle.config?.id || vehicle.id}`);
                 vehicle.updatePhysics(0, 0, 1);
                 return;
             }
@@ -192,6 +213,9 @@ export function updateAIDriving(ai, vehicle) {
                 } else {
                     throttle = 0.3;
                 }
+                if (_diag) console.log(`🚗 DRIVE: angleDiff=${angleDiff.toFixed(2)}, throttle=${throttle.toFixed(2)}, steering=${steering.toFixed(2)}, stuckRecover=${ai._driveStuckRecoverTimer}`);
+            } else if (_diag) {
+                console.log(`🚗 SKIP-DRIVE: stuckRecover=${ai._driveStuckRecoverTimer}`);
             }
         }
 
@@ -201,15 +225,25 @@ export function updateAIDriving(ai, vehicle) {
         const terrainSpeed = speedFactor * weatherSpeed;
 
         // 更新载具物理
+        if (_diag) console.log(`🚗 EXEC: throttle=${throttle.toFixed(2)}, steering=${steering.toFixed(2)}, passengers=${passengerCount}`);
         vehicle.updatePhysics(throttle, steering, terrainSpeed);
 
-        // 处理碰撞位移（同Player逻辑）
+        // 处理碰撞位移（同Player逻辑，支持轴分离滑动）
         const newX = vehicle.x + vehicle.velocityX;
         const newY = vehicle.y + vehicle.velocityY;
-        if (GameState.map && GameState.map.isWalkable(newX, newY, vehicle.radius)) {
+        if (GameState.map && !GameState.map.isWalkable(newX, newY, vehicle.radius)) {
+            // 尝试沿单轴滑动
+            if (GameState.map.isWalkable(newX, vehicle.y, vehicle.radius)) {
+                vehicle.x = newX;
+            } else if (GameState.map.isWalkable(vehicle.x, newY, vehicle.radius)) {
+                vehicle.y = newY;
+            }
+            // 两轴都不行 → 不移动
+        } else {
             vehicle.x = newX;
             vehicle.y = newY;
         }
+        if (_diag) console.log(`🚗 POST: speed=${vehicle.currentSpeed?.toFixed(2)}, vx=${vehicle.velocityX?.toFixed(2)}, vy=${vehicle.velocityY?.toFixed(2)}, terrain=${terrainSpeed.toFixed(2)}`);
     }
 
 // ─── 载具中战斗（乘客射击） ───

@@ -3,7 +3,7 @@ import { GameState } from '../core/GameState.js';
 import { EventBus } from '../core/EventBus.js';
 import { Terrain } from '../core/Map.js';
 import { EffectsManager, ParticleType } from '../utils/EffectsManager.js';
-import { playExplosion, playBulletHit, playRicochet } from '../utils/SoundManager.js';
+import { playExplosion, playBulletHit, playRicochet, playHelmetHit } from '../utils/SoundManager.js';
 import { getRankConfig, AIRank } from '../core/RankSystem.js';
 import { SupportSystem } from '../core/SupportSystem.js';
 import { getHelmetConfig, HelmetTier, tryRicochet } from '../core/HelmetSystem.js';
@@ -270,7 +270,7 @@ export const CollisionSystem = {
                             Math.atan2(bullet.vy, bullet.vx),
                             true
                         );
-                        playRicochet(bullet.x);
+                        playHelmetHit(bullet.x);
                     } else {
                         const windshieldHit = v.hitWindshield(bullet);
                         let damageDealt = 0;
@@ -280,7 +280,7 @@ export const CollisionSystem = {
                                 EffectsManager.spawnGlassShards(windshieldHit.x, windshieldHit.y, 8);
                             }
                             EffectsManager.spawnParticles(windshieldHit.x, windshieldHit.y, ParticleType.SPARK, 6);
-                            playRicochet(bullet.x);
+                            playHelmetHit(bullet.x);
                         } else {
                             damageDealt = bullet.damage;
                             EffectsManager.spawnParticles(bullet.x, bullet.y, ParticleType.SPARK, 12);
