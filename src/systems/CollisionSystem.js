@@ -263,7 +263,7 @@ export const CollisionSystem = {
                     if (bullet.explosion) {
                         this._triggerBulletExplosion(bullet, v);
                     } else if (v.type === "armored") {
-                        // 装甲载具：跳弹减免，armor 比例免伤
+                        // 装甲载具：普通子弹完全跳弹，不造成伤害
                         EffectsManager.spawnRicochetEffect(
                             bullet.x,
                             bullet.y,
@@ -271,9 +271,6 @@ export const CollisionSystem = {
                             true
                         );
                         playRicochet(bullet.x);
-                        const reducedDmg = Math.max(1, Math.floor(bullet.damage * (1 - (v.armor || 0.5))));
-                        v.takeDamage(reducedDmg);
-                        EffectsManager.addDamageNumber(v.x, v.y - v.radius, reducedDmg, false);
                     } else {
                         const windshieldHit = v.hitWindshield(bullet);
                         let damageDealt = 0;
