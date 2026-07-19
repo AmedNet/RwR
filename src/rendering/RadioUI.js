@@ -350,7 +350,7 @@ export function drawRadioUI(ctx, renderer) {
             // 缩放（0.6 -> 1，含过冲）以左下角为锚
             const scale = 0.6 + popEase * 0.4;
             // 从屏幕下方滑入（多落 60px），关闭时落回
-            const slideY = (1 - popProgress) * 60;
+            const slideY = (1 - popProgress) * 50;
 
             const drawW = imgW * scale;
             const drawH = imgH * scale;
@@ -448,7 +448,6 @@ export function drawRadioNoPermit(ctx, renderer) {
     const p = GameState.radioNoPermitAnimProgress;
     if (p <= 0) return;
 
-    const W = renderer.width;
     const H = renderer.height;
 
     // 弹入/弹出共用同一条进度曲线：opening 时 p 0→1，closing 时 p 1→0
