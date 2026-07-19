@@ -8,6 +8,7 @@ import { GrenadeBullet } from "./GrenadeBullet.js";
 import { EffectsManager, ParticleType } from "../utils/EffectsManager.js";
 import * as SoundManager from "../utils/SoundManager.js";
 import { DayNightSystem } from "../core/DayNightSystem.js";
+import { VehicleAI } from "./VehicleAI.js";
 import { VehicleChatSystem } from "../utils/VehicleChatSystem.js";
 
 export class Vehicle extends Entity {
@@ -401,7 +402,7 @@ export class Vehicle extends Entity {
             if (!occupant || occupant === GameState.player) continue;
             if (occupant.vehicleSeat === 0) continue; // 驾驶座不射击
             // 让AI队友在载具中自动寻找敌人射击
-            occupant.updateVehicleCombat(this);
+            VehicleAI.updateVehicleCombat(occupant, this);
         }
     }
 
