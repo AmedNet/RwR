@@ -82,6 +82,35 @@ function weightedRandom(items) {
 }
 
 export const SpawnSystem = {
+    // 剧情模式接口：在指定位置按配置生成一波敌人
+    // config: { count, x, y, radius, rank?, unitClass?, weaponIds? }
+    // rank/unitClass 未指定时随机；weaponIds 未指定时根据 rank/unitClass 随机生成
+    spawnCustomWave(config) {
+        const world = GameState.config.world;
+        const enemies = [];
+        for (let i = 0; i < (config.count || 1); i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = Math.random() * (config.radius || 60);
+            let x = (config.x || world.width / 2) + Math.cos(angle) * dist;
+            let y = (config.y || world.height / 2) + Math.sin(angle) * dist;
+            x = Math.max(10, Math.min(world.width - 10, x));
+            y = Math.max(10, Math.min(world.height - 10, y));
+
+            const enemyConfig = { ...GameState.config.enemy };
+            if (config.rank != null) enemyConfig.rank = config.rank;
+            if (config.unitClass != null) enemyConfig.unitClass = config.unitClass;
+            const enemy = new Enemy(x, y, enemyConfig);
+
+            const weapons = config.weaponIds
+                ? config.weaponIds.map(id => { const w = new Weapon(id); w.isInfiniteAmmo = true; return w; })
+                : this.generateRandomWeapons(enemy.rank, enemy.unitClass);
+            enemy.setWeapons(weapons);
+            enemies.push(enemy);
+        }
+        GameState.enemies.push(...enemies);
+        return enemies;
+    },
+
     spawnEnemy() {
         const config = GameState.config.enemy;
         const world = GameState.config.world;
