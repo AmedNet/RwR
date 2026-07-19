@@ -460,6 +460,14 @@ function gameLoop() {
                         x: (GameState.mouse.x - cx * (1 - zoom) + offsetX) / zoom + cam.x,
                         y: (GameState.mouse.y - cy * (1 - zoom) + offsetY) / zoom + cam.y
                     };
+                } else {
+                    // 权限不足：左下角弹出 call_nohave.png 提示
+                    // 已在显示则从头弹一遍（progress 归零），避免半路重弹造成的跳变
+                    GameState.radioNoPermitActive = true;
+                    GameState.radioNoPermitAnimDirection = 'opening';
+                    GameState.radioNoPermitAnimProgress = 0;
+                    GameState.radioNoPermitShowTimer = 0;
+                    GameState._radioNoPermitAnimLastTime = null;
                 }
             }
             GameState.radioGKeyConsumed = true;

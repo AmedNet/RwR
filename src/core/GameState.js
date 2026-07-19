@@ -106,6 +106,13 @@ export const GameState = {
     radioAnimDirection: null, // 'opening' | 'closing' | null（支持中途反向打断）
     _radioAnimLastTime: null, // 动画计时基准（performance.now）
 
+    // 无权限打开电台提示（RP/军衔不足时试图开电台，左下角弹 call_nohave.png，几秒后自动收回）
+    radioNoPermitActive: false, // 是否正在显示提示
+    radioNoPermitAnimProgress: 0, // 0~1 进度（弹入/弹出共用）
+    radioNoPermitAnimDirection: null, // 'opening' | 'closing' | null
+    radioNoPermitShowTimer: 0, // 完全弹出后已显示的帧数
+    _radioNoPermitAnimLastTime: null, // 动画计时基准（performance.now）
+
     // 电台选中项焦点滑动（↑/↓ 切选时蓝高亮从旧项滑到新项，easeOutBack 末端轻过冲）
     radioItemFocusY: null,       // 当前选中高亮显示 y
     radioItemFocusFromY: null,   // 本次滑动起点 y
@@ -203,6 +210,12 @@ export const GameState = {
         this.gameOverFocusFromX = null; this.gameOverFocusFromY = null;
         this.gameOverFocusIndex = -1; this.gameOverFocusAnim = 0;
         this._gameOverFocusLastTime = null;
+        // 无权限提示也一并清零，防止死亡→复活后凭空冒出 call_nohave.png
+        this.radioNoPermitActive = false;
+        this.radioNoPermitAnimProgress = 0;
+        this.radioNoPermitAnimDirection = null;
+        this.radioNoPermitShowTimer = 0;
+        this._radioNoPermitAnimLastTime = null;
     },
 
     reset() {
@@ -281,6 +294,11 @@ this.inventoryHitAreas = [];
         this.radioItemFocusIndex = -1;
         this.radioItemFocusAnim = 0;
         this._radioFocusLastTime = null;
+        this.radioNoPermitActive = false;
+        this.radioNoPermitAnimProgress = 0;
+        this.radioNoPermitAnimDirection = null;
+        this.radioNoPermitShowTimer = 0;
+        this._radioNoPermitAnimLastTime = null;
         this.debugTab = 0;
     }
 };

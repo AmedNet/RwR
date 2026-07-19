@@ -8,7 +8,7 @@ import { GLASS, drawGlassPanel, easeOutCubic, easeInOutCubic } from './GlassUI.j
 import { drawArsenalShop } from './ArsenalUI.js';
 import { drawDebug } from './DebugUI.js';
 import { drawGameOver } from './GameOverUI.js';
-import { drawRadioUI, updateRadioAnimation } from './RadioUI.js';
+import { drawRadioUI, updateRadioAnimation, updateRadioNoPermit, drawRadioNoPermit } from './RadioUI.js';
 import { WeatherSystem } from '../core/WeatherSystem.js';
 import { TornadoSystem } from '../core/TornadoSystem.js';
 import { WEATHER_DEFS } from '../core/WeatherDefs.js';
@@ -1769,6 +1769,8 @@ export const Renderer = {
 
         // 更新电台动画
         updateRadioAnimation();
+        // 更新“无权限打开电台”提示动画（独立于电台面板，电台此时未必打开）
+        updateRadioNoPermit();
 
         const menuOpen = GameState.inventoryOpen || GameState.arsenalOpen || GameState.radioOpen || GameState.debugOpen;
         const hud = document.getElementById('hud');
@@ -1946,6 +1948,9 @@ export const Renderer = {
         }
 
         this._renderHUD();
+
+        // 无权限打开电台提示图（HUD 之上、最顶层覆盖层）
+        drawRadioNoPermit(this.ctx, this);
 
         // FPS显示
         if (GameState.debugShowFPS) {

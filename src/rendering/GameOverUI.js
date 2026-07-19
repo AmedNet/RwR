@@ -43,8 +43,6 @@ export function drawGameOver(ctx, renderer) {
     GameState._gameOverFocusLastTime = now;
     const dt = Math.min(deltaTime, 0.05);
 
-    const isDefeat = playerPoints.length === 0;
-
     // === 卡片布局：固定尺寸绕屏幕几何中心居中 ===
     const innerPad = 20;
     const headerH = 86;             // 标题"阵亡" + 统计
@@ -55,13 +53,7 @@ export function drawGameOver(ctx, renderer) {
     const footerGap = 14;
 
     const cardW = MAP_W + innerPad * 2;
-    let cardH;
-    if (isDefeat) {
-        // 战败变体：标题 + 副文 + 统计，紧凑居中
-        cardH = 200 + innerPad * 2;
-    } else {
-        cardH = innerPad + headerH + mapTitleH + mapGap + MAP_H + listGap + listH + footerGap + innerPad;
-    }
+    const cardH = innerPad + headerH + mapTitleH + mapGap + MAP_H + listGap + listH + footerGap + innerPad;
     const cardX = cx - cardW / 2;
     const cardY = cy - cardH / 2;
 
@@ -70,27 +62,6 @@ export function drawGameOver(ctx, renderer) {
     ctx.globalAlpha *= appear;
     ctx.translate(0, -20 * (1 - appear));
     drawGlassPanel(ctx, cardX, cardY, cardW, cardH, GLASS.radius);
-
-    if (isDefeat) {
-        // ---- 战败变体：无己方据点 ----
-        const defeatTitleY = cardY + innerPad + 30;
-        ctx.fillStyle = '#ff1744';
-        ctx.font = `bold 42px ${MONO}`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('💀 战败', cx, defeatTitleY);
-
-        ctx.fillStyle = GLASS.textSecondary;
-        ctx.font = `18px ${FONT}`;
-        ctx.fillText('所有据点已失守，游戏结束', cx, defeatTitleY + 48);
-
-        const rank = GameState.player ? GameState.player.getRankName() : '列兵';
-        ctx.fillStyle = '#ff9800';
-        ctx.font = `16px ${MONO}`;
-        ctx.fillText(`最终军衔: ${rank}  |  击杀: ${GameState.kills}  |  得分: ${GameState.score}`, cx, defeatTitleY + 82);
-        ctx.restore();
-        return;
-    }
 
     // ---- 普通阵亡：战术地图复活选择 ----
     // 标题 "阵亡" + 统计

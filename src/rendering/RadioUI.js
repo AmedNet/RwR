@@ -22,6 +22,18 @@ for (const [type, config] of Object.entries(SupportConfig)) {
     }
 }
 
+// 预加载呼叫弹出图片
+const callPopupImg = new Image();
+callPopupImg.src = 'src/pkg/radio/call/call.png';
+let callPopupLoaded = false;
+callPopupImg.onload = () => { callPopupLoaded = true; };
+
+// 预加载“无权限打开电台”提示图片（军衔/RP 不足试图开电台时左下角弹出）
+const callNoPermitImg = new Image();
+callNoPermitImg.src = 'src/pkg/radio/call/call_nohave.png';
+let callNoPermitLoaded = false;
+callNoPermitImg.onload = () => { callNoPermitLoaded = true; };
+
 const easeOutQuint = t => 1 - Math.pow(1 - t, 5);
 // 末端轻过冲再回弹，呼吸感（焦点滑动用，与背包/军械库本地复制体字面相同）
 const easeOutBack = t => {
@@ -314,6 +326,51 @@ export function drawRadioUI(ctx, renderer) {
         );
     }
 
+    // === 左下角呼叫图片弹出动画 ===
+    // 开启时从屏幕左下角弹出（缩放+上滑，easeOutBack 末端轻过冲呼吸感）
+    // 关闭时反向收回，与电台面板共用 animProgress/eased
+    if (callPopupLoaded) {
+        // 相对面板延迟一点出现/消失，层次感更足
+        const popDelay = 0.12;
+        let popProgress;
+        if (animProgress >= popDelay) {
+            popProgress = Math.min(1, (animProgress - popDelay) / (1 - popDelay));
+        } else {
+            popProgress = 0;
+        }
+        if (popProgress > 0) {
+            const popEase = easeOutBack(popProgress);
+            const popAlpha = easeOutCubic(popProgress);
+
+            const imgW = 150;
+            const imgH = imgW * (callPopupImg.height / callPopupImg.width); // 等比（原图 1260x1680 竖图）
+            const marginX = 24;
+            const marginBottom = 24;
+
+            // 缩放（0.6 -> 1，含过冲）以左下角为锚
+            const scale = 0.6 + popEase * 0.4;
+            // 从屏幕下方滑入（多落 60px），关闭时落回
+            const slideY = (1 - popProgress) * 60;
+
+            const drawW = imgW * scale;
+            const drawH = imgH * scale;
+            const baseX = marginX;
+            const baseY = H - marginBottom - imgH;
+
+            ctx.save();
+            ctx.globalAlpha = eased * popAlpha;
+            // 绘制坐标固定在左下角，缩放偏移让锚点落在左下
+            ctx.drawImage(
+                callPopupImg,
+                baseX - (drawW - imgW) / 2,
+                baseY - (drawH - imgH) + slideY,
+                drawW,
+                drawH
+            );
+            ctx.restore();
+        }
+    }
+
     ctx.restore();
 }
 
@@ -344,4 +401,83 @@ export function updateRadioAnimation() {
             GameState._radioFocusLastTime = null;
         }
     }
+}
+
+// 无权限打开电台提示：左下角弹 call_nohave.png，弹出后保持约 2.2s 自动收回
+const NO_PERMIT_HOLD_SECONDS = 2.2;
+const NO_PERMIT_OPEN_SPEED = 4.0;  // ~0.25s 弹入
+const NO_PERMIT_CLOSE_SPEED = 4.4; // ~0.23s 收回
+
+export function updateRadioNoPermit() {
+    if (!GameState.radioNoPermitActive) return;
+
+    const now = performance.now();
+    if (GameState._radioNoPermitAnimLastTime == null) GameState._radioNoPermitAnimLastTime = now;
+    const deltaTime = (now - GameState._radioNoPermitAnimLastTime) / 1000;
+    GameState._radioNoPermitAnimLastTime = now;
+    const dt = Math.min(deltaTime, 0.05);
+
+    const dir = GameState.radioNoPermitAnimDirection;
+    if (dir === 'opening') {
+        GameState.radioNoPermitAnimProgress = Math.min(1, GameState.radioNoPermitAnimProgress + NO_PERMIT_OPEN_SPEED * dt);
+        if (GameState.radioNoPermitAnimProgress >= 1) {
+            GameState.radioNoPermitAnimDirection = null; // 进入保持阶段
+        }
+    } else if (dir === 'closing') {
+        GameState.radioNoPermitAnimProgress = Math.max(0, GameState.radioNoPermitAnimProgress - NO_PERMIT_CLOSE_SPEED * dt);
+        if (GameState.radioNoPermitAnimProgress <= 0) {
+            // 完全收回，清场
+            GameState.radioNoPermitActive = false;
+            GameState.radioNoPermitAnimDirection = null;
+            GameState.radioNoPermitShowTimer = 0;
+            GameState._radioNoPermitAnimLastTime = null;
+            return;
+        }
+    } else {
+        // 保持阶段：计时到点后启动收回
+        GameState.radioNoPermitShowTimer += dt;
+        if (GameState.radioNoPermitShowTimer >= NO_PERMIT_HOLD_SECONDS) {
+            GameState.radioNoPermitAnimDirection = 'closing';
+        }
+    }
+}
+
+// 绘制无权限提示图（左下角弹出；与电台面板完全独立，电台此时并未打开）
+export function drawRadioNoPermit(ctx, renderer) {
+    if (!GameState.radioNoPermitActive || !callNoPermitLoaded) return;
+    const p = GameState.radioNoPermitAnimProgress;
+    if (p <= 0) return;
+
+    const W = renderer.width;
+    const H = renderer.height;
+
+    // 弹入/弹出共用同一条进度曲线：opening 时 p 0→1，closing 时 p 1→0
+    // easeOutBack 在 p 接近 1 时略过冲，呼吸感；收回时 p 减小自然回落
+    const eased = easeOutBack(p);
+    const alpha = Math.min(1, p * 1.6); // 快速显形，避免边弹边透
+
+    const imgW = 150;
+    const imgH = imgW * (callNoPermitImg.height / callNoPermitImg.width); // 等比（原图竖图）
+    const marginX = 24;
+    const marginBottom = 24;
+
+    // 缩放 0.6→1（含过冲），锚点固定屏幕左下角
+    const scale = 0.6 + eased * 0.4;
+    const slideY = (1 - p) * 50; // 从下方滑入，收回时落回
+
+    const drawW = imgW * scale;
+    const drawH = imgH * scale;
+    const baseX = marginX;
+    const baseY = H - marginBottom - imgH;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(
+        callNoPermitImg,
+        baseX - (drawW - imgW) / 2,
+        baseY - (drawH - imgH) + slideY,
+        drawW,
+        drawH
+    );
+    ctx.restore();
 }

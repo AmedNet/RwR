@@ -10,6 +10,12 @@ const easeOutBack = t => {
     return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
 };
 
+// 预加载背包“思考”提示图（打开背包时左下角弹出，关闭时随背包动画同步收回）
+const inventoryThinkImg = new Image();
+inventoryThinkImg.src = 'src/pkg/backpack/qthink.png';
+let inventoryThinkLoaded = false;
+inventoryThinkImg.onload = () => { inventoryThinkLoaded = true; };
+
 export function drawInventory(ctx, renderer) {
     // === 动画更新（基于时间） ===
     const now = performance.now();
@@ -336,4 +342,35 @@ export function drawInventory(ctx, renderer) {
     ctx.fillText('按 Q 关闭   点击格子选中   D 丢弃', cx, slotsBottomY + 55);
 
     ctx.restore();
+
+    // === 左下角“思考”提示图：与 call/call_nohave 同款弹出动画，驱动源换为背包开/关曲线 rawP ===
+    // rawP：背包开 0→1、关 1→0。打开跟着弹出（easeOutBack 呼吸感）、关闭同步收回。
+    if (inventoryThinkLoaded && rawP > 0) {
+        const popEase = easeOutBack(rawP);
+        const alpha = Math.min(1, rawP * 1.6);
+
+        const imgW = 150;
+        const imgH = imgW * (inventoryThinkImg.height / inventoryThinkImg.width); // 等比（原图 1260x1680 竖图）
+        const marginX = 24;
+        const marginBottom = 24;
+
+        const scale = 0.6 + popEase * 0.4;
+        const slideY = (1 - rawP) * 50;
+
+        const drawW = imgW * scale;
+        const drawH = imgH * scale;
+        const baseX = marginX;
+        const baseY = renderer.height - marginBottom - imgH;
+
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.drawImage(
+            inventoryThinkImg,
+            baseX - (drawW - imgW) / 2,
+            baseY - (drawH - imgH) + slideY,
+            drawW,
+            drawH
+        );
+        ctx.restore();
+    }
 }
