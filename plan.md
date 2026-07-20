@@ -52,7 +52,8 @@ for f in files:
 | 阶段三: CombatAI → VehicleAI.js | ✅ | `28d4d39` | CombatAI 1679→1347行 |
 | 阶段四: InputManager 拆解 | ✅ | `055857a` | +6 handler 文件, 973+/857- |
 | 阶段五: GameConfig + SupportConfig 分离 | ✅ | `79ca9df` | +2 data 文件, 255- 行 |
-| 阶段六: main.js 整理 | ✅ | 待提交 | +6行注释, 剧情占位 + 分区头 |
+| 阶段六: main.js 整理 | ✅ | `68bdc82` | +6行注释, 剧情占位 + 分区头 |
+| 阶段七: WeatherRenderer 移动 | ✅ | 待提交 | src/core/ → src/rendering/, 2文件 |
 
 ---
 
@@ -60,7 +61,6 @@ for f in files:
 
 | 阶段 | 优先级 | 预估改动 | 风险 | 说明 |
 |------|--------|----------|------|------|
-| 阶段七: WeatherRenderer 移动 | P2 | 3 文件 | 极低 | src/core/ → src/rendering/ |
 | 阶段八: EffectsManager/SoundManager | P2, 条件性 | 待评估 | 低 | 需先完整阅读再决定 |
 
 ---

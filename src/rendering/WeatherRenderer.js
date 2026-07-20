@@ -1,8 +1,8 @@
-// src/core/WeatherRenderer.js
+// src/rendering/WeatherRenderer.js
 // 天气渲染逻辑：云影、粒子、叠加、闪电
-import { GameState } from './GameState.js';
-import { WEATHER_DEFS, lerp } from './WeatherDefs.js';
-import { TornadoSystem } from './TornadoSystem.js';
+import { GameState } from '../core/GameState.js';
+import { WEATHER_DEFS, lerp } from '../core/WeatherDefs.js';
+import { TornadoSystem } from '../core/TornadoSystem.js';
 
 export const WeatherRenderer = {
     // ─── 渲染：云团阴影（多层叠加，更自然蓬松） ───

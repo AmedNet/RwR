@@ -2,7 +2,7 @@
 // 天气系统核心协调器：状态管理、过渡逻辑、gameplay 接口
 import { GameState } from './GameState.js';
 import { WEATHER_DEFS, lerp, lerpAngle, weightedRandom } from './WeatherDefs.js';
-import { WeatherRenderer } from './WeatherRenderer.js';
+import { WeatherRenderer } from '../rendering/WeatherRenderer.js';
 import { EffectsManager } from '../utils/EffectsManager.js';
 import { TornadoSystem } from './TornadoSystem.js';
 
