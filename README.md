@@ -103,6 +103,10 @@ RwR/
 └── src/
     ├── main.js                # 游戏主循环和初始化
     │
+    ├── campaign/              # 剧情系统（骨架）
+    │   ├── CampaignManager.js # 剧情状态机
+    │   └── MissionData.js     # 关卡数据定义
+    │
     ├── core/                  # 核心系统
     │   ├── EventBus.js        # 事件总线
     │   ├── GameState.js       # 游戏状态管理
@@ -113,14 +117,19 @@ RwR/
     │   ├── RankSystem.js      # 军衔系统
     │   ├── ClassSystem.js     # 兵种系统
     │   ├── WeatherSystem.js   # 天气系统核心
-    │   ├── TornadoSystem.js   # 龙卷风系统（EF 等级/形态/路径/渲染）
     │   ├── WeatherDefs.js     # 18 种天气定义
-    │   ├── WeatherRenderer.js # 天气渲染逻辑
+    │   ├── TornadoSystem.js   # 龙卷风系统（EF 等级/形态/路径/渲染）
     │   ├── DayNightSystem.js  # 昼夜循环系统
     │   ├── LootRegistry.js    # 战利品注册表（120+ 物品，4 稀有度）
     │   ├── LootItem.js        # 背包战利品包装类
     │   ├── VehicleRegistry.js # 载具注册表
     │   └── HelmetSystem.js    # AI 头盔系统（减伤/跳弹）
+    │
+    ├── data/                  # 配置数据
+    │   ├── GameConfig.js      # 游戏核心配置（玩家/敌人/地图等）
+    │   ├── SupportConfig.js   # 支援系统配置（类型/费用/冷却）
+    │   ├── AIMonologues.js    # AI 闲聊文本
+    │   └── VehicleDialogues.js # 载具对话文本
     │
     ├── entities/              # 游戏实体
     │   ├── Entity.js          # 实体基类
@@ -128,6 +137,7 @@ RwR/
     │   ├── Enemy.js           # 敌人
     │   ├── Teammate.js        # AI 队友
     │   ├── CombatAI.js        # 战斗 AI 基类
+    │   ├── VehicleAI.js       # 载具 AI（驾驶/炮塔/座位）
     │   ├── Bullet.js          # 子弹
     │   ├── Grenade.js         # 手雷
     │   ├── GrenadeBullet.js   # 榴弹（XM320 抛物线弹道）
@@ -143,6 +153,9 @@ RwR/
     │
     ├── rendering/             # 渲染系统
     │   ├── Renderer.js        # 主渲染器
+    │   ├── SupportEffectRenderer.js # 支援效果渲染（火炮/空投/烟雾等）
+    │   ├── BubbleRenderer.js  # 气泡/对话框渲染
+    │   ├── WeatherRenderer.js # 天气渲染逻辑（云影/粒子/闪电）
     │   ├── UIManager.js       # UI 管理器
     │   ├── GlassUI.js         # 液态毛玻璃 UI 共享样式与缓动函数
     │   ├── WeaponHUD.js       # 武器 HUD
@@ -157,7 +170,14 @@ RwR/
     │   └── PostProcess.js     # 后处理特效（Bloom/积水反射）
     │
     ├── input/                 # 输入系统
-    │   └── InputManager.js    # 键盘/鼠标输入处理
+    │   ├── InputManager.js    # 输入分发层（薄控制器）
+    │   └── handlers/          # 输入处理器
+    │       ├── GameplayHandler.js  # 游戏逻辑输入
+    │       ├── MenuHandler.js      # 菜单输入
+    │       ├── MouseHandler.js     # 鼠标输入
+    │       ├── RadioHandler.js     # 电台输入
+    │       ├── DebugHandler.js     # Debug 面板输入
+    │       └── DeathHandler.js     # 死亡界面输入
     │
     └── utils/                 # 工具类
         ├── EffectsManager.js  # 特效管理器（粒子、血迹等）
@@ -166,7 +186,9 @@ RwR/
         ├── SoundManager.js    # 音效管理（Web Audio API）
         ├── AmbientSoundManager.js # 环境音效管理（三层混音）
         ├── StatusEffects.js   # 状态效果（燃烧、减速等）
-        └── WeaponAI.js        # AI 武器选择逻辑
+        ├── WeaponAI.js        # AI 武器选择逻辑
+        ├── AIMonologueSystem.js # AI 闲聊系统
+        └── VehicleChatSystem.js # 载具对话系统
 ```
 
 ## 运行方式
@@ -237,6 +259,13 @@ npx serve
 - [x] 液态毛玻璃 UI 重构与统一（背包/武器 HUD/电台/状态效果 + 选中焦点滑动动画）
 - [x] AI闲聊
 - [x] 更多动画
+- [x] **代码重构**（8 阶段，23 文件，+3089/-2764 行）
+  - Renderer 拆解 → SupportEffectRenderer + BubbleRenderer + WeatherRenderer
+  - CombatAI 拆解 → VehicleAI（载具 AI 独立）
+  - InputManager 拆解 → 6 个 handler 文件 + 薄分发层
+  - 配置数据分离 → GameConfig.js + SupportConfig.js
+  - main.js 整理（分区注释 + 剧情占位）
+  - 剧情基础设施 → EventBus + CampaignManager + MissionData
 
 ## 开发中功能
 
@@ -244,7 +273,6 @@ npx serve
 - [ ] 移动动效
 - [ ] 防弹衣
 - [ ] 对话?
-- [ ] 大重构
 - [ ] 主菜单
 - [ ] 剧情模式(未来)
 - [ ] 更多载具类型(未来)

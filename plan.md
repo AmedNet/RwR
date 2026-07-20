@@ -53,15 +53,14 @@ for f in files:
 | 阶段四: InputManager 拆解 | ✅ | `055857a` | +6 handler 文件, 973+/857- |
 | 阶段五: GameConfig + SupportConfig 分离 | ✅ | `79ca9df` | +2 data 文件, 255- 行 |
 | 阶段六: main.js 整理 | ✅ | `68bdc82` | +6行注释, 剧情占位 + 分区头 |
-| 阶段七: WeatherRenderer 移动 | ✅ | 待提交 | src/core/ → src/rendering/, 2文件 |
+| 阶段七: WeatherRenderer 移动 | ✅ | `9eef69a` | src/core/ → src/rendering/, 2文件 |
+| 阶段八: EffectsManager/SoundManager 评估 | ✅ | 不拆分 | 内部状态耦合，拆分收益有限 |
 
 ---
 
 ## 剩余阶段
 
-| 阶段 | 优先级 | 预估改动 | 风险 | 说明 |
-|------|--------|----------|------|------|
-| 阶段八: EffectsManager/SoundManager | P2, 条件性 | 待评估 | 低 | 需先完整阅读再决定 |
+无（全部阶段已完成或评估）
 
 ---
 
