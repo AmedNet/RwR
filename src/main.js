@@ -26,7 +26,10 @@ import { VehicleRegistry } from "./core/VehicleRegistry.js";
 
 // ---------- 配置 ----------
 import { CONFIG, GAME_CONSTANTS } from './data/GameConfig.js';
+// ---------- 剧情系统 (TODO: 后续阶段集成) ----------
+// import { CampaignManager } from './campaign/CampaignManager.js';
 
+// ---------- 工具函数 ----------
 /** 获取所有己方据点 */
 function getPlayerPoints() {
     return GameState.capturePoints.filter(p => p.owner === 'player');
@@ -660,6 +663,7 @@ function updateTeammateRespawns() {
     }
 }
 
+// ---------- 重生逻辑 ----------
 // 启动游戏!
 init();
 
