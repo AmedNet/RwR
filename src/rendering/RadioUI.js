@@ -1,7 +1,8 @@
 // src/rendering/RadioUI.js
 // 电台界面 - 紧凑侧边栏设计（毛玻璃风格，对齐背包/军械库）
 import { GameState } from '../core/GameState.js';
-import { SupportSystem, SupportConfig } from '../core/SupportSystem.js';
+import { SupportSystem } from '../core/SupportSystem.js';
+import { SupportConfig } from '../data/SupportConfig.js';
 import { getRankStars } from '../core/RankSystem.js';
 import { GLASS, easeOutCubic, drawGlassPanel } from './GlassUI.js';
 
