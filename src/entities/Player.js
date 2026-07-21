@@ -25,43 +25,84 @@ export class Player extends Entity {
     static CAMERA_SMOOTH = 0.1;          // 镜头偏移平滑系数
     static WEAPON_DRAW_HEIGHT = 50;      // 武器贴图绘制高度
     static MELEE_KNOCKBACK = 30;         // 近战击退距离
+    static WEAPON_IMAGE_OFFSET_X = 0.3;  // 武器贴图 x 偏移比例（相对绘制宽度）
+    static WEAPON_IMAGE_OFFSET_Y = 0.55; // 武器贴图 y 偏移比例（相对绘制高度）
+    static MUZZLE_IN_IMAGE_X = 0.2;     // 枪口在贴图内 x 位置比例
+    static MUZZLE_IN_IMAGE_Y = 0.50;    // 枪口在贴图内 y 位置比例
+    static WEAPON_PIVOT_LEFT = -3;      // 武器旋转轴心 x（朝左）
+    static WEAPON_PIVOT_RIGHT = 5;      // 武器旋转轴心 x（朝右）
+    static WEAPON_PIVOT_Y = 20;         // 武器旋转轴心 y
 
-    constructor(x, y, config) {
-        super(x, y, {
-            health: config.health,
-            speed: config.speed,
-            radius: config.radius
-        });
-        this.rank = 0;
-        this.rankNames = ['列兵', '下士', '中士', '上士'];
-        this.shootCooldown = 0;
-        this.config = config;
-        this.switchAnimTimer = 0;
-        this.switchAnimDuration = Player.SWITCH_ANIM_DURATION;
-        this.isSwitching = false;
-        this.switchFromSlot = -1;
-        // 射击模式相关
-        this.burstCount = 0;        // 三连射剩余发数
-        this.burstTimer = 0;        // 三连射间隔计时器
-        this.lastMouseDown = false; // 上一帧鼠标状态（用于检测按下边沿）
-        // 通用武器贴图字典
-        this.weaponImages = {};
-        this.weaponImagesLoaded = {};
-        this.reloadImages = {};
-        this.reloadImagesLoaded = {};
-        this.loadWeaponImage('beretta92');
-        this.loadWeaponImage('knife');
-        this.loadWeaponImage('m67');
-        this.loadWeaponImage('ak47');
-        this.loadWeaponImage('m4a1');
-        this.loadWeaponImage('cat'); // 医疗包
-        this.loadWeaponImage('sa28'); // 霰弹枪
-        this.loadWeaponImage('awp'); // 狙击枪
-        this.loadWeaponImage('m82'); // 反器材狙击枪
-        this.loadWeaponImage('at4'); // 火箭筒
-        this.loadWeaponImage('xm320'); // 榴弹发射器
-        this.loadWeaponImage('hkmp5'); // 冲锋枪
-    }
+   constructor(x, y, config) {
+       super(x, y, {
+           health: config.health,
+           speed: config.speed,
+           radius: config.radius
+       });
+       this.rank = 0;
+       this.isPlayer = true;
+       this.rankNames = ['列兵', '下士', '中士', '上士'];
+       this.shootCooldown = 0;
+       this.config = config;
+       this.switchAnimTimer = 0;
+       this.switchAnimDuration = Player.SWITCH_ANIM_DURATION;
+       this.isSwitching = false;
+       this.switchFromSlot = -1;
+       // 射击模式相关
+       this.burstCount = 0;        // 三连射剩余发数
+       this.burstTimer = 0;        // 三连射间隔计时器
+       this.lastMouseDown = false; // 上一帧鼠标状态（用于检测按下边沿）
+       // 通用武器贴图字典
+       this.weaponImages = {};
+       this.weaponImagesLoaded = {};
+       this.reloadImages = {};
+       this.reloadImagesLoaded = {};
+       this.loadWeaponImage('beretta92');
+       this.loadWeaponImage('knife');
+       this.loadWeaponImage('m67');
+       this.loadWeaponImage('ak47');
+       this.loadWeaponImage('m4a1');
+       this.loadWeaponImage('cat'); // 医疗包
+       this.loadWeaponImage('sa28'); // 霰弹枪
+       this.loadWeaponImage('awp'); // 狙击枪
+       this.loadWeaponImage('m82'); // 反器材狙击枪
+       this.loadWeaponImage('at4'); // 火箭筒
+       this.loadWeaponImage('xm320'); // 榴弹发射器
+       this.loadWeaponImage('hkmp5'); // 冲锋枪
+
+        // 角色贴图（身体抖动3帧 + 眨眼3帧）
+        this.bodyFrames = [];
+        this.bodyFramesLoaded = [];
+        for (let i = 0; i < 3; i++) {
+            const img = new Image();
+            img.src = `src/pkg/character/blue/a/0${i + 1}.png`;
+            this.bodyFrames.push(img);
+            this.bodyFramesLoaded.push(false);
+            img.onload = () => { this.bodyFramesLoaded[i] = true; };
+        }
+        this.eyesFrames = [];
+        this.eyesFramesLoaded = [];
+        for (let i = 0; i < 3; i++) {
+            const img = new Image();
+            img.src = `src/pkg/character/blue/a/e${i + 1}.png`;
+            this.eyesFrames.push(img);
+            this.eyesFramesLoaded.push(false);
+            img.onload = () => { this.eyesFramesLoaded[i] = true; };
+        }
+        // 受伤眼睛贴图
+        this.hurtEyeImg = new Image();
+        this.hurtEyeImg.src = 'src/pkg/character/blue/a/e_hurt.png';
+        this.hurtEyeLoaded = false;
+        this.hurtEyeImg.onload = () => { this.hurtEyeLoaded = true; };
+        this.hurtTimer = 0; // 受伤表情持续帧数
+        // 动画状态
+        this.bodyFrame = 0;
+        this.bodyFrameTimer = 0;
+        this.blinkFrame = 0;
+        this.blinkTimer = 0;
+        this.blinkCooldown = 180; // 约3秒
+        this.isBlinking = false;
+   }
 
     loadWeaponImage(weaponId) {
         const config = WeaponRegistry[weaponId];
@@ -83,14 +124,60 @@ export class Player extends Entity {
     }
 
     // 通用获取武器贴图方法
-    getWeaponImage(weaponId, isReloading = false) {
-        if (isReloading && this.reloadImagesLoaded[weaponId]) {
-            return this.reloadImages[weaponId];
+   getWeaponImage(weaponId, isReloading = false) {
+       if (isReloading && this.reloadImagesLoaded[weaponId]) {
+           return this.reloadImages[weaponId];
+       }
+       if (this.weaponImagesLoaded[weaponId]) {
+           return this.weaponImages[weaponId];
+       }
+       return null;
+   }
+
+    /** 计算枪口世界坐标（用于火焰效果） */
+    getMuzzlePosition(angle) {
+        const weapon = GameState.getActiveWeapon();
+        if (!weapon) return { x: this.x, y: this.y };
+        const weaponImage = this.getWeaponImage(weapon.id, weapon.isReloading);
+        if (!weaponImage) return { x: this.x, y: this.y };
+
+        const targetHeight = Player.WEAPON_DRAW_HEIGHT;
+        const scale = targetHeight / weaponImage.naturalHeight;
+        const drawW = weaponImage.naturalWidth * scale;
+        const drawH = targetHeight;
+
+        // 贴图绘制起点（相对于旋转轴心，在旋转前的坐标系中）
+        const imageOffsetX = -drawW * Player.WEAPON_IMAGE_OFFSET_X;
+        const imageOffsetY = -drawH * Player.WEAPON_IMAGE_OFFSET_Y;
+
+        // 枪口在贴图内的相对位置
+        const muzzleInImageX = drawW * Player.MUZZLE_IN_IMAGE_X;
+        const muzzleInImageY = drawH * Player.MUZZLE_IN_IMAGE_Y;
+
+        // 枪口相对于旋转轴心的偏移（旋转前坐标系）
+        const localX = imageOffsetX + muzzleInImageX;
+        const localY = imageOffsetY + muzzleInImageY;
+
+        // 旋转轴心的世界偏移（与 translate 参数对应）
+        const facingLeft = Math.cos(angle) < 0;
+        const pivotOffsetX = facingLeft ? Player.WEAPON_PIVOT_LEFT : Player.WEAPON_PIVOT_RIGHT;
+        const pivotOffsetY = Player.WEAPON_PIVOT_Y;
+
+        const cosA = Math.cos(angle);
+        const sinA = Math.sin(angle);
+
+        if (facingLeft) {
+            // draw() 里先 rotate(-angle) 再 scale(1,-1)
+            // 合成矩阵：[[cos, sin], [sin, -cos]]
+            const worldX = this.x + pivotOffsetX + localX * cosA + localY * sinA;
+            const worldY = this.y + pivotOffsetY + localX * sinA - localY * cosA;
+            return { x: worldX, y: worldY };
+        } else {
+            // 标准旋转矩阵：[[cos, -sin], [sin, cos]]
+            const worldX = this.x + pivotOffsetX + localX * cosA - localY * sinA;
+            const worldY = this.y + pivotOffsetY + localX * sinA + localY * cosA;
+            return { x: worldX, y: worldY };
         }
-        if (this.weaponImagesLoaded[weaponId]) {
-            return this.weaponImages[weaponId];
-        }
-        return null;
     }
 
     getRankName() {
@@ -230,24 +317,55 @@ export class Player extends Entity {
         SoundManager.playMelee(this);
     }
 
-    update() {
-        if (GameState.gameOver) return;
-        this.updateStatusEffects();
-        this.savePrevPosition();
-        if (this.isSwitching) {
-            this.switchAnimTimer--;
-            if (this.switchAnimTimer <= 0) this.isSwitching = false;
-            return;
+   update() {
+       if (GameState.gameOver) return;
+       this.updateStatusEffects();
+       this.savePrevPosition();
+       if (this.isSwitching) {
+           this.switchAnimTimer--;
+           if (this.switchAnimTimer <= 0) this.isSwitching = false;
+           return;
+       }
+       const weapon = GameState.getActiveWeapon();
+       if (weapon && !weapon.isLoot) {
+           weapon.updateReload();
+           weapon.updateRecoilAndSpread();
+       }
+       const isMoving = this._updateMovement();
+       this._updateAiming(weapon, isMoving);
+       this._updateFiring(weapon);
+
+        // 受伤表情计时器递减
+        if (this.hurtTimer > 0) this.hurtTimer--;
+
+        // 身体抖动动画：每8帧切换一次
+        this.bodyFrameTimer++;
+        if (this.bodyFrameTimer >= 30) {
+            this.bodyFrame = (this.bodyFrame + 1) % 3;
+            this.bodyFrameTimer = 0;
         }
-        const weapon = GameState.getActiveWeapon();
-        if (weapon && !weapon.isLoot) {
-            weapon.updateReload();
-            weapon.updateRecoilAndSpread();
+
+        // 眨眼动画
+        if (!this.isBlinking) {
+            this.blinkTimer++;
+            if (this.blinkTimer >= this.blinkCooldown) {
+                this.isBlinking = true;
+                this.blinkFrame = 0;
+                this.blinkTimer = 0;
+            }
+        } else {
+            this.blinkTimer++;
+            if (this.blinkTimer >= 4) {
+                this.blinkFrame++;
+                this.blinkTimer = 0;
+                if (this.blinkFrame > 2) {
+                    this.isBlinking = false;
+                    this.blinkFrame = 0;
+                    this.blinkCooldown = 120 + Math.random() * 180;
+                }
+            }
         }
-        const isMoving = this._updateMovement();
-        this._updateAiming(weapon, isMoving);
-        this._updateFiring(weapon);
-    }
+   }
 
     /** 处理移动逻辑，返回是否正在移动 */
     _updateMovement() {
@@ -512,12 +630,13 @@ export class Player extends Entity {
             const spreadAngle = weapon.config.spreadAngle || 0.35;
             const pelletRadius = (GameState.config.bullet.radius) * 0.6; // 霰弹枪弹丸更小
             const maxRange = weapon.config.range || 250;
+            const muzzlePos = this.getMuzzlePosition(baseAngle);
 
             for (let i = 0; i < pellets; i++) {
-                // 在锥角内均匀随机分布
+                // 在锥角内均匀随机分布；额外 5px 偏移防止弹丸在枪口内重叠
                 const pelletAngle = baseAngle + (Math.random() - 0.5) * spreadAngle;
-                const spawnX = shootX + Math.cos(pelletAngle) * this.radius;
-                const spawnY = shootY + Math.sin(pelletAngle) * this.radius;
+                const spawnX = muzzlePos.x + Math.cos(pelletAngle) * 5;
+                const spawnY = muzzlePos.y + Math.sin(pelletAngle) * 5;
                 GameState.bullets.push(new Bullet(
                     spawnX, spawnY,
                     Math.cos(pelletAngle) * speed,
@@ -541,8 +660,9 @@ export class Player extends Entity {
             const cy = logicalH / 2;
             const worldX = (mouse.x - cx * (1 - cam.zoom) + offsetX) / cam.zoom + cam.x;
             const worldY = (mouse.y - cy * (1 - cam.zoom) + offsetY) / cam.zoom + cam.y;
+            const muzzlePos = this.getMuzzlePosition(baseAngle);
             GameState.bullets.push(new GrenadeBullet(
-                shootX, shootY,
+                muzzlePos.x, muzzlePos.y,
                 worldX, worldY,
                 weapon.config,
                 this
@@ -561,9 +681,10 @@ export class Player extends Entity {
                 ? weapon.config.bulletRadiusMultiplier
                 : 0.6;
             const bulletRadius = GameState.config.bullet.radius * bulletRadiusMult;
+            const muzzlePos = this.getMuzzlePosition(baseAngle);
             GameState.bullets.push(new Bullet(
-                shootX + Math.cos(baseAngle) * this.radius,
-                shootY + Math.sin(baseAngle) * this.radius,
+                muzzlePos.x,
+                muzzlePos.y,
                 Math.cos(baseAngle) * speed, Math.sin(baseAngle) * speed,
                 false, weapon.config.damage, true,
                 knockback, bulletRadius, null, penetration, explosion, hasTrail,
@@ -571,16 +692,17 @@ export class Player extends Entity {
                 this, weapon.config.type
             ));
         }
-        // 播放枪声音效 + 枪口火焰
-        const weaponType = weapon.config.type;
-        if (['pistol', 'rifle', 'smg', 'shotgun', 'sniper', 'launcher'].includes(weaponType)) {
-            SoundManager.playShoot(weaponType, this);
-            EffectsManager.spawnMuzzleFlash(shootX, shootY, baseAngle, weaponType);
-            // 火箭筒：额外生成后焰喷射效果
-            if (weaponType === 'launcher' && weapon.config.hasBackblast !== false) {
-                EffectsManager.spawnBackblast(shootX, shootY, baseAngle);
-            }
-        }
+       // 播放枪声音效 + 枪口火焰
+       const weaponType = weapon.config.type;
+       if (['pistol', 'rifle', 'smg', 'shotgun', 'sniper', 'launcher'].includes(weaponType)) {
+           SoundManager.playShoot(weaponType, this);
+            const muzzlePos = this.getMuzzlePosition(baseAngle);
+            EffectsManager.spawnMuzzleFlash(muzzlePos.x, muzzlePos.y, baseAngle, weaponType);
+           // 火箭筒：额外生成后焰喷射效果
+           if (weaponType === 'launcher' && weapon.config.hasBackblast !== false) {
+                EffectsManager.spawnBackblast(muzzlePos.x, muzzlePos.y, baseAngle);
+           }
+       }
 
         weapon.consumeAmmo();
         weapon.applyRecoilAndSpread(); // 射击后增加后坐力和散布
@@ -747,30 +869,48 @@ export class Player extends Entity {
             }
         } else {
             SoundManager.playHurt();
+            // 受伤表情持续30帧（约0.5秒），仅存活时设置
+            this.hurtTimer = 30;
         }
         EventBus.emit('player_hurt', { health: this.health });
     }
 
-    draw(ctx) {
+   draw(ctx) {
+       ctx.save();
+       const screenX = this.x - GameState.camera.x;
+       const screenY = this.y - GameState.camera.y;
+       const angle = Math.atan2(GameState.mouse.y - screenY, GameState.mouse.x - screenX);
+
+        const facingLeft = Math.cos(angle) < 0;
+
+        // 绘制身体+眼睛（朝左时整体水平镜像）
         ctx.save();
-        const screenX = this.x - GameState.camera.x;
-        const screenY = this.y - GameState.camera.y;
-        const angle = Math.atan2(GameState.mouse.y - screenY, GameState.mouse.x - screenX);
+        if (facingLeft) {
+            ctx.scale(-1, 1);
+        }
+        const bodyImg = this.bodyFrames[this.bodyFrame];
+        if (bodyImg && this.bodyFramesLoaded[this.bodyFrame]) {
+            const size = this.radius * 4;
+            ctx.drawImage(bodyImg, -size / 2, -size / 2, size, size);
+        }
+        const isHurt = this.hurtTimer > 0 && this.hurtEyeLoaded;
+        const eyeImg = isHurt ? this.hurtEyeImg : this.eyesFrames[this.blinkFrame];
+        const eyeLoaded = isHurt ? this.hurtEyeLoaded : this.eyesFramesLoaded[this.blinkFrame];
+        if (eyeImg && eyeLoaded) {
+            const eyeScreenOffsetX = Math.cos(angle) * 1;
+            const eyeOffsetX = facingLeft ? -eyeScreenOffsetX : eyeScreenOffsetX;
+            const eyeOffsetY = Math.sin(angle) * 1;
+            const eyeSize = this.radius * 4;
+            ctx.drawImage(eyeImg, -eyeSize / 2 + eyeOffsetX, -eyeSize / 2 + eyeOffsetY, eyeSize, eyeSize);
+        }
+        ctx.restore();
 
-        ctx.beginPath();
-        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
-        ctx.fillStyle = GameState.config.colors.player;
-        ctx.fill();
-        ctx.strokeStyle = GameState.config.colors.playerStroke;
-        ctx.lineWidth = 3;
-        ctx.stroke();
-
-        const weapon = this.getCurrentWeapon();
+       const weapon = this.getCurrentWeapon();
         if (!weapon) {
             ctx.fillStyle = '#FFD700';
             ctx.font = '16px sans-serif';
             ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-            ctx.fillText('★'.repeat(Math.min(this.rank + 1, 4)), 0, -28);
+            ctx.fillText('★'.repeat(Math.min(this.rank + 1, 4)), 0, -(this.radius * 1.6) - 6);
             ctx.restore();
             return;
         }
@@ -785,7 +925,7 @@ export class Player extends Entity {
             const drawW = weaponImage.naturalWidth * scale;
             const drawH = targetHeight;
 
-            ctx.translate(facingLeft ? -2 : 2, 0);
+           ctx.translate(facingLeft ? Player.WEAPON_PIVOT_LEFT : Player.WEAPON_PIVOT_RIGHT, Player.WEAPON_PIVOT_Y);
             if (facingLeft) {
                 ctx.scale(1, -1); // 先旋转到鼠标方向，再水平翻转
                 ctx.rotate(-angle);
@@ -801,14 +941,14 @@ export class Player extends Entity {
             const recoilBack = weapon.currentRecoil ? weapon.currentRecoil * 33 : 0; // 向后（削减45%）
             const recoilRotate = weapon.currentRecoil ? weapon.currentRecoil * 0.3 : 0; // 逆时针旋转
             ctx.rotate(-recoilRotate); // 枪口上抬（逆时针）
-            ctx.drawImage(weaponImage, -drawW * 0.15 - recoilBack, -drawH / 2 + yOffset, drawW, drawH);
+            ctx.drawImage(weaponImage, -drawW * Player.WEAPON_IMAGE_OFFSET_X - recoilBack, -drawH * Player.WEAPON_IMAGE_OFFSET_Y + yOffset, drawW, drawH);
             ctx.restore();
         }
 
         ctx.fillStyle = '#FFD700';
         ctx.font = '16px sans-serif';
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText('★'.repeat(Math.min(this.rank + 1, 4)), 0, -28);
+        ctx.fillText('★'.repeat(Math.min(this.rank + 1, 4)), 0, -(this.radius * 1.6) - 6);
         this.drawStatusEffects(ctx);
         ctx.restore();
     }

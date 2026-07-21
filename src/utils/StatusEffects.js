@@ -147,14 +147,20 @@ export class AmmoBuffEffect extends StatusEffect {
 
     draw(ctx, entity) {
         if (!entity) return;
-        // 金色脉冲光环
         const pulse = 0.5 + Math.sin(Date.now() * 0.008) * 0.3;
         ctx.save();
         ctx.strokeStyle = `rgba(255, 179, 0, ${pulse * 0.6})`;
         ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(0, 0, entity.radius + 4, 0, Math.PI * 2);
-        ctx.stroke();
+        // 玩家：头顶椭圆光环；其他角色：身体光圈
+        if (entity.isPlayer) {
+            ctx.beginPath();
+            ctx.ellipse(0, -entity.radius * 1.5, entity.radius * 0.9, entity.radius * 0.3, 0, 0, Math.PI * 2);
+            ctx.stroke();
+        } else {
+            ctx.beginPath();
+            ctx.arc(0, 0, entity.radius + 4, 0, Math.PI * 2);
+            ctx.stroke();
+        }
         ctx.restore();
     }
 }
@@ -182,14 +188,20 @@ export class HealAuraEffect extends StatusEffect {
 
     draw(ctx, entity) {
         if (!entity) return;
-        // 绿色脉冲光环
         const pulse = 0.5 + Math.sin(Date.now() * 0.006) * 0.3;
         ctx.save();
         ctx.strokeStyle = `rgba(76, 175, 80, ${pulse * 0.5})`;
         ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(0, 0, entity.radius + 4, 0, Math.PI * 2);
-        ctx.stroke();
+        // 玩家：头顶椭圆光环；其他角色：身体光圈
+        if (entity.isPlayer) {
+            ctx.beginPath();
+            ctx.ellipse(0, -entity.radius * 1.5, entity.radius * 0.9, entity.radius * 0.3, 0, 0, Math.PI * 2);
+            ctx.stroke();
+        } else {
+            ctx.beginPath();
+            ctx.arc(0, 0, entity.radius + 4, 0, Math.PI * 2);
+            ctx.stroke();
+        }
         ctx.restore();
     }
 }

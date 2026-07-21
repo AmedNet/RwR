@@ -163,15 +163,45 @@ function drawOccupant(ctx, entity, x, y, vehicleScale, vehicleAngle, seatIndex =
             entity.drawWeapon(ctx, facingAngle);
         }
     } else if (isPlayer) {
-        // 玩家：身体始终绘制，驾驶员(seat 0)不画武器，乘客(seat>0)画武器+后坐力
+        // 玩家：身体贴图 + 眼睛贴图，驾驶员(seat 0)不画武器，乘客(seat>0)画武器+后坐力
         const radius = entity.radius || 18;
-        ctx.beginPath();
-        ctx.arc(0, 0, radius, 0, Math.PI * 2);
-        ctx.fillStyle = '#4CAF50';
-        ctx.fill();
-        ctx.strokeStyle = '#1B5E20';
-        ctx.lineWidth = 3;
-        ctx.stroke();
+
+        // 计算瞄准方向（用于镜像和眼睛偏移）
+        const cam = GameState.camera;
+        const screenX = entity.x - cam.x;
+        const screenY = entity.y - cam.y;
+        // 镜像方向基于车辆朝向，而不是鼠标
+        const facingLeft = Math.cos(vehicleAngle) < 0;
+        // 眼睛偏移仍然基于鼠标方向（让眼睛看向鼠标）
+        const aimWorld = Math.atan2(GameState.mouse.y - screenY, GameState.mouse.x - screenX);
+        const localAngle = aimWorld - vehicleAngle;
+
+        // 绘制身体+眼睛（朝左时镜像）
+        ctx.save();
+        if (facingLeft) {
+            ctx.scale(-1, 1);
+        }
+
+        // 身体贴图
+        const bodyImg = entity.bodyFrames ? entity.bodyFrames[entity.bodyFrame] : null;
+        const bodyLoaded = entity.bodyFramesLoaded ? entity.bodyFramesLoaded[entity.bodyFrame] : false;
+        if (bodyImg && bodyLoaded) {
+            const size = radius * 4;
+            ctx.drawImage(bodyImg, -size / 2, -size * 0.9, size, size);
+        }
+
+        // 眼睛贴图（带方向偏移；受伤时使用 hurt 贴图）
+        const isHurt = entity.hurtTimer > 0 && entity.hurtEyeLoaded;
+        const eyeImg = isHurt ? entity.hurtEyeImg : entity.eyesFrames[entity.blinkFrame];
+        const eyeLoaded = isHurt ? entity.hurtEyeLoaded : (entity.eyesFramesLoaded ? entity.eyesFramesLoaded[entity.blinkFrame] : false);
+        if (eyeImg && eyeLoaded) {
+            const eyeScreenOffsetX = Math.cos(localAngle) * 1.5;
+            const eyeOffsetX = facingLeft ? -eyeScreenOffsetX : eyeScreenOffsetX;
+            const eyeOffsetY = Math.sin(localAngle) * 1.5;
+            const eyeSize = radius * 4;
+            ctx.drawImage(eyeImg, -eyeSize / 2 + eyeOffsetX, -eyeSize * 0.9 + eyeOffsetY, eyeSize, eyeSize);
+        }
+        ctx.restore();
 
         if (seatIndex > 0) {
             const weapon = entity.getCurrentWeapon();
@@ -184,9 +214,10 @@ function drawOccupant(ctx, entity, x, y, vehicleScale, vehicleAngle, seatIndex =
                     const cam = GameState.camera;
                     const screenX = entity.x - cam.x;
                     const screenY = entity.y - cam.y;
+                    // 武器镜像也基于车辆方向
+                    const facingLeft = Math.cos(vehicleAngle) < 0;
                     const aimWorld = Math.atan2(GameState.mouse.y - screenY, GameState.mouse.x - screenX);
                     const localAngle = aimWorld - vehicleAngle;
-                    const facingLeft = Math.cos(localAngle) < 0;
                     const targetHeight = 34;
                     const scale = targetHeight / weaponImage.naturalHeight;
                     const drawW = weaponImage.naturalWidth * scale;
@@ -213,7 +244,7 @@ function drawOccupant(ctx, entity, x, y, vehicleScale, vehicleAngle, seatIndex =
         ctx.font = '16px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('★'.repeat(Math.min(entity.rank + 1, 4)), 0, -28);
+        ctx.fillText('★'.repeat(Math.min(entity.rank + 1, 4)), 0, -(radius * 3.6) - 6);
     }
     ctx.restore();
 }
@@ -345,9 +376,9 @@ export function drawJeep(ctx, angle = 0, scale = 0.48, occupants = [], steeringA
     drawSeat(ctx, -87, 18, 73, 81);
     drawSeat(ctx, 14, 18, 73, 81);
     drawSeat(ctx, -88, 105, 176, 70);
-    drawOccupant(ctx, occupants[0], -50, 55, scale, angle + visualLean, 0);
-    drawOccupant(ctx, occupants[1], 50, 55, scale, angle + visualLean, 1);
-    drawOccupant(ctx, occupants[2], 0, 138, scale, angle + visualLean, 2);
+    drawOccupant(ctx, occupants[0], -50, 59, scale, angle + visualLean, 0);
+    drawOccupant(ctx, occupants[1], 50, 59, scale, angle + visualLean, 1);
+    drawOccupant(ctx, occupants[2], 0, 140, scale, angle + visualLean, 2);
     drawSteeringWheel(ctx, steeringAngle);
 
     ctx.strokeStyle = COLORS.tireDark;
