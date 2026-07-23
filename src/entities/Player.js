@@ -8,7 +8,7 @@ import { GrenadeBullet } from './GrenadeBullet.js';
 import { WeaponRegistry, FireMode } from '../core/WeaponRegistry.js';
 import { Weapon } from '../core/Weapon.js';
 import { WeaponPickup } from './WeaponPickup.js';
-import { EffectsManager } from '../utils/EffectsManager.js';
+import { EffectsManager, ParticleType } from '../utils/EffectsManager.js';
 import * as SoundManager from '../utils/SoundManager.js';
 import { SlowEffect, STATUS_EFFECT_CONFIG } from '../utils/StatusEffects.js';
 import { WeatherSystem } from '../core/WeatherSystem.js';
@@ -32,6 +32,7 @@ export class Player extends Entity {
     static WEAPON_PIVOT_LEFT = -3;      // 武器旋转轴心 x（朝左）
     static WEAPON_PIVOT_RIGHT = 5;      // 武器旋转轴心 x（朝右）
     static WEAPON_PIVOT_Y = 20;         // 武器旋转轴心 y
+    static DEATH_ANIM_DURATION = 30;    // 死亡动画持续帧数
 
    constructor(x, y, config) {
        super(x, y, {
@@ -102,6 +103,14 @@ export class Player extends Entity {
         this.blinkTimer = 0;
         this.blinkCooldown = 180; // 约3秒
         this.isBlinking = false;
+        // 走路形变动画
+        this.walkPhase = 0;          // 步行周期相位 (0 ~ 2π)
+        this.walkSpeed = 0;          // 平滑后的移动速度（用于控制形变幅度）
+        this.isWalking = false;      // 是否在移动
+        // 死亡动画
+        this.dying = false;           // 是否正在播放死亡动画
+        this.deathTimer = 0;          // 死亡动画倒计时帧数
+        this.deathDir = 0;            // 死亡动画方向 (1=右, -1=左)
    }
 
     loadWeaponImage(weaponId) {
@@ -318,6 +327,23 @@ export class Player extends Entity {
     }
 
    update() {
+       // 死亡动画播放期间，仍然推进动画计时
+       if (this.dying) {
+           this.deathTimer--;
+           if (this.deathTimer <= 0) {
+               // 倒地瞬间：碎裂消散粒子 + 烟雾
+               EffectsManager.spawnParticles(this.x, this.y, ParticleType.EXPLOSION, 15);
+               EffectsManager.spawnParticles(this.x, this.y, ParticleType.SMOKE, 8);
+               // 动画结束，执行实际死亡逻辑
+               this.alive = false;
+               this._dropItemsOnDeath();
+               if (!GameState.gameOver) {
+                   GameState.triggerDeath();
+                   EventBus.emit('game_over', { reason: 'player_died' });
+               }
+           }
+           return;
+       }
        if (GameState.gameOver) return;
        this.updateStatusEffects();
        this.savePrevPosition();
@@ -334,6 +360,21 @@ export class Player extends Entity {
        const isMoving = this._updateMovement();
        this._updateAiming(weapon, isMoving);
        this._updateFiring(weapon);
+
+        // 走路形变动画更新
+        const dx = this.x - this.prevX;
+        const dy = this.y - this.prevY;
+        const moveSpeed = Math.sqrt(dx * dx + dy * dy);
+        this.isWalking = moveSpeed > 0.3;
+        const targetSpeed = this.isWalking ? Math.min(moveSpeed, 4) : 0;
+        // 非对称插值：加速快、减速慢，停下时有自然过渡
+        this.walkSpeed += (targetSpeed - this.walkSpeed) * (targetSpeed > this.walkSpeed ? 0.15 : 0.08);
+        if (this.walkSpeed < 0.02) this.walkSpeed = 0;
+        // 有残余速度时继续推进相位，停下后自然滑入静止姿态
+        if (this.walkSpeed > 0.02) {
+            this.walkPhase += this.walkSpeed * 0.08;
+            if (this.walkPhase > Math.PI * 2) this.walkPhase -= Math.PI * 2;
+        }
 
         // 受伤表情计时器递减
         if (this.hurtTimer > 0) this.hurtTimer--;
@@ -818,7 +859,7 @@ export class Player extends Entity {
 
     // 重写父类的 takeDamage 方法以播放音效
     takeDamage(amount, hitX, hitY, vx = 0, vy = 0) {
-        if (!this.alive) return;
+        if (!this.alive || this.dying) return;
         this.health -= amount;
         // 血液飞溅：绑定到伤害
         if (amount > 0) {
@@ -831,42 +872,19 @@ export class Player extends Entity {
         this.addStatusEffect(new SlowEffect(slowDuration));
         if (this.health <= 0) {
             this.health = 0;
-            this.alive = false;
+            // 触发死亡动画（不立刻 alive=false）
+            this.dying = true;
+            this.deathTimer = Player.DEATH_ANIM_DURATION;
+            this.deathDir = Math.cos(Math.atan2(
+                GameState.mouse.y - (this.y - GameState.camera.y),
+                GameState.mouse.x - (this.x - GameState.camera.x)
+            )) < 0 ? -1 : 1;
 
             if (this.mountedVehicle) {
                 this.mountedVehicle.unmount(this);
             }
 
-            // 死亡时掉落所有武器（初始手枪 beretta92 除外），战利品保留在背包中
-            const droppedWeapons = new Set(); // 追踪已掉落的武器，避免重复
-            for (let i = 0; i < GameState.inventory.length; i++) {
-                const item = GameState.inventory[i];
-                if (!item) continue;
-                if (item.isLoot) {
-                    // 稀有及以上战利品：100% 掉落到地面
-                    if (item.config.rarity === Rarity.RARE || item.config.rarity === Rarity.LEGENDARY) {
-                        const offsetX = (Math.random() - 0.5) * 60;
-                        const offsetY = (Math.random() - 0.5) * 60;
-                        GameState.lootPickups.push(new LootPickup(this.x + offsetX, this.y + offsetY, item.lootId));
-                        GameState.inventory[i] = null;
-                    }
-                    // 普通/优良战利品：保留在背包中
-                } else {
-                    // 武器：掉落（beretta92 除外）
-                    if (item.id !== 'beretta92' && !droppedWeapons.has(item.id)) {
-                        const offsetX = (Math.random() - 0.5) * 60;
-                        const offsetY = (Math.random() - 0.5) * 60;
-                        GameState.weaponPickups.push(new WeaponPickup(this.x + offsetX, this.y + offsetY, item));
-                        droppedWeapons.add(item.id);
-                    }
-                }
-            }
-
-            if (!GameState.gameOver) {
-                GameState.triggerDeath();
-                EventBus.emit('game_over', { reason: 'player_died' });
-                SoundManager.playDie();
-            }
+            SoundManager.playDie();
         } else {
             SoundManager.playHurt();
             // 受伤表情持续30帧（约0.5秒），仅存活时设置
@@ -875,11 +893,90 @@ export class Player extends Entity {
         EventBus.emit('player_hurt', { health: this.health });
     }
 
+    // 死亡时掉落所有武器和稀有战利品
+    _dropItemsOnDeath() {
+        const droppedWeapons = new Set();
+        for (let i = 0; i < GameState.inventory.length; i++) {
+            const item = GameState.inventory[i];
+            if (!item) continue;
+            if (item.isLoot) {
+                if (item.config.rarity === Rarity.RARE || item.config.rarity === Rarity.LEGENDARY) {
+                    const offsetX = (Math.random() - 0.5) * 60;
+                    const offsetY = (Math.random() - 0.5) * 60;
+                    GameState.lootPickups.push(new LootPickup(this.x + offsetX, this.y + offsetY, item.lootId));
+                    GameState.inventory[i] = null;
+                }
+            } else {
+                if (item.id !== 'beretta92' && !droppedWeapons.has(item.id)) {
+                    const offsetX = (Math.random() - 0.5) * 60;
+                    const offsetY = (Math.random() - 0.5) * 60;
+                    GameState.weaponPickups.push(new WeaponPickup(this.x + offsetX, this.y + offsetY, item));
+                    droppedWeapons.add(item.id);
+                }
+            }
+        }
+    }
+
    draw(ctx) {
        ctx.save();
        const screenX = this.x - GameState.camera.x;
        const screenY = this.y - GameState.camera.y;
        const angle = Math.atan2(GameState.mouse.y - screenY, GameState.mouse.x - screenX);
+
+        // === 死亡动画：MC风格 — 先倒下，再淡出 ===
+        if (this.dying) {
+            const progress = 1 - this.deathTimer / Player.DEATH_ANIM_DURATION; // 0→1
+            // 两阶段分离：前60%倒下，后40%淡出
+            const fallProgress = Math.min(progress / 0.6, 1);
+            const fadeProgress = progress > 0.6 ? (progress - 0.6) / 0.4 : 0;
+            const alpha = 1 - fadeProgress;
+            // 重力加速曲线（开始慢、越倒越快）
+            const eased = fallProgress * fallProgress;
+            const fallAngle = eased * (Math.PI / 2) * this.deathDir;
+            const pivotY = this.radius * 2; // 脚底
+
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            // 以脚底为轴心旋转倒下
+            ctx.translate(0, pivotY);
+            ctx.rotate(fallAngle);
+            ctx.translate(0, -pivotY);
+
+            // 身体贴图
+            const bodyImg = this.bodyFrames[this.bodyFrame];
+            if (bodyImg && this.bodyFramesLoaded[this.bodyFrame]) {
+                const size = this.radius * 4;
+                ctx.drawImage(bodyImg, -size / 2, -size / 2, size, size);
+            }
+            // 眼睛贴图（死亡时用受伤表情）
+            const eyeImg = this.hurtEyeLoaded ? this.hurtEyeImg : this.eyesFrames[this.blinkFrame];
+            const eyeLoaded = this.hurtEyeLoaded || this.eyesFramesLoaded[this.blinkFrame];
+            if (eyeImg && eyeLoaded) {
+                const eyeSize = this.radius * 4;
+                ctx.drawImage(eyeImg, -eyeSize / 2, -eyeSize / 2, eyeSize, eyeSize);
+            }
+            // 武器（在同一个变换下，随身体一起倒下，不做任何独立旋转）
+            const weapon = this.getCurrentWeapon();
+            if (weapon) {
+                const weaponImage = this.getWeaponImage(weapon.id);
+                if (weaponImage) {
+                    const targetHeight = Player.WEAPON_DRAW_HEIGHT;
+                    const ws = targetHeight / weaponImage.naturalHeight;
+                    const drawW = weaponImage.naturalWidth * ws;
+                    const drawH = targetHeight;
+                    ctx.drawImage(
+                        weaponImage,
+                        Player.WEAPON_PIVOT_RIGHT - drawW * Player.WEAPON_IMAGE_OFFSET_X,
+                        Player.WEAPON_PIVOT_Y - drawH * Player.WEAPON_IMAGE_OFFSET_Y,
+                        drawW, drawH
+                    );
+                }
+            }
+            ctx.restore();
+            ctx.restore();
+            return;
+        }
+        // === 死亡动画结束 ===
 
         const facingLeft = Math.cos(angle) < 0;
 
@@ -887,6 +984,21 @@ export class Player extends Entity {
         ctx.save();
         if (facingLeft) {
             ctx.scale(-1, 1);
+        }
+        // 走路形变：弹跳 + 摇摆 + 挤压拉伸
+        const t = this.walkSpeed > 0.1 ? Math.min(this.walkSpeed / 3, 1) : 0;
+        if (t > 0) {
+            const phase = this.walkPhase;
+            // 弹跳只向上：(1-cos)/2 保证 >= 0，踩地瞬间最低、腾空最高
+            const bounce = (1 - Math.cos(phase * 2)) * 1.2 * t;
+            const sway = Math.sin(phase) * (2.5 * Math.PI / 180) * t;
+            // 挤压拉伸随步伐振荡：踩地压扁、腾空拉长
+            const squashWave = Math.sin(phase * 2);
+            const squashX = 1 + 0.05 * t * squashWave;
+            const squashY = 1 - 0.04 * t * squashWave;
+            ctx.translate(0, -bounce);
+            ctx.rotate(sway);
+            ctx.scale(squashX, squashY);
         }
         const bodyImg = this.bodyFrames[this.bodyFrame];
         if (bodyImg && this.bodyFramesLoaded[this.bodyFrame]) {

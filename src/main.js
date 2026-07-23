@@ -433,8 +433,8 @@ function gameLoop() {
     }
     // 据点刷新吉普（上限内、炸毁后自动补刷）
     updateVehicleSpawns();
-    // 玩家仅在存活时更新
-    if (GameState.player && !GameState.gameOver) GameState.player.update();
+    // 玩家在存活或死亡动画期间更新
+    if (GameState.player && (!GameState.gameOver || GameState.player.dying)) GameState.player.update();
     SpawnSystem.update();
     for (const enemy of GameState.enemies) enemy.update();
     for (const teammate of GameState.teammates) teammate.update();

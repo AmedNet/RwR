@@ -126,6 +126,10 @@ export class CombatAI extends Entity {
         // 移动方向记录（用于头盔镜像）
         this._prevX = x;       // 上一帧X坐标（用于头盔镜像）
         this._lastMoveDir = 1;  // 1=右, -1=左
+        // 走路形变动画
+        this.walkPhase = 0;
+        this.walkSpeed = 0;
+        this.isWalking = false;
         // 头盔系统
         this.helmet = HelmetTier.NONE;
         this.helmetVariant = 0;
@@ -657,6 +661,21 @@ export class CombatAI extends Entity {
             this.obstacleTargetCache.point = null;
         }
 
+        // 走路形变动画更新（在移动之后计算真实位移）
+        const walkDx = this.x - this.prevX;
+        const walkDy = this.y - this.prevY;
+        const moveSpeed = Math.sqrt(walkDx * walkDx + walkDy * walkDy);
+        this.isWalking = moveSpeed > 0.3;
+        const targetSpeed = this.isWalking ? Math.min(moveSpeed, 4) : 0;
+        // 非对称插值：加速快、减速慢，停下时有自然过渡
+        this.walkSpeed += (targetSpeed - this.walkSpeed) * (targetSpeed > this.walkSpeed ? 0.15 : 0.08);
+        if (this.walkSpeed < 0.02) this.walkSpeed = 0;
+        // 有残余速度时继续推进相位，停下后自然滑入静止姿态
+        if (this.walkSpeed > 0.02) {
+            this.walkPhase += this.walkSpeed * 0.08;
+            if (this.walkPhase > Math.PI * 2) this.walkPhase -= Math.PI * 2;
+        }
+
         if (closestTarget) this.switchWeaponBasedOnCombat(closestTarget, closestDist);
 
         const weapon = this.getActiveWeapon();
@@ -1144,7 +1163,7 @@ export class CombatAI extends Entity {
             this._lastMoveDir = this.x > this._prevX ? 1 : -1;
         }
         this._prevX = this.x;
-        
+
         if (this.dying) {
             const progress = 1 - this.deathTimer / 15;
             ctx.save();
@@ -1155,8 +1174,28 @@ export class CombatAI extends Entity {
             ctx.restore();
             return;
         }
+        // 走路形变：弹跳 + 摇摆 + 挤压拉伸（与 Player 一致）
+        const t = this.walkSpeed > 0.1 ? Math.min(this.walkSpeed / 3, 1) : 0;
+        if (t > 0) {
+            ctx.save();
+            const phase = this.walkPhase;
+            const bounce = (1 - Math.cos(phase * 2)) * 1.2 * t;
+            const sway = Math.sin(phase) * (2.5 * Math.PI / 180) * t;
+            const squashWave = Math.sin(phase * 2);
+            const squashX = 1 + 0.05 * t * squashWave;
+            const squashY = 1 - 0.04 * t * squashWave;
+            ctx.translate(0, -bounce);
+            ctx.rotate(sway);
+            ctx.scale(squashX, squashY);
+        }
+
         this.drawBody(ctx, weaponAngle);
         this.drawWeapon(ctx, weaponAngle);
+
+        if (t > 0) {
+            ctx.restore();
+        }
+
         this.drawStatusEffects(ctx);
     }
 

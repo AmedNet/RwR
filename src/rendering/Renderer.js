@@ -354,7 +354,7 @@ export const Renderer = {
         for (const t of teammates) {
             if (t.alive && !t.mountedVehicle) this._drawAtWorldPos(t, false);
         }
-        if (player && player.alive && !player.mountedVehicle) {
+        if (player && (player.alive || player.dying) && !player.mountedVehicle) {
             this._drawAtWorldPos(player, true);
         }
     },
