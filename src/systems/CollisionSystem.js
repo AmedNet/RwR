@@ -8,6 +8,7 @@ import { getRankConfig, AIRank } from '../core/RankSystem.js';
 import { SupportSystem } from '../core/SupportSystem.js';
 import { WeaponRegistry } from '../core/WeaponRegistry.js';
 import { getHelmetConfig, HelmetTier, tryRicochet, RICOCHET_IMMUNE_TYPES } from '../core/HelmetSystem.js';
+import { triggerHitMarker, triggerKill } from '../rendering/CrosshairRenderer.js';
 
 /** 碰撞特效配置常量 */
 const COLLISION_FX = {
@@ -497,11 +498,13 @@ export const CollisionSystem = {
         EffectsManager.spawnParticles(bullet.x, bullet.y, ParticleType.SPARK, COLLISION_FX.SPARK_PARTICLE_COUNT);
         EffectsManager.addDamageNumber(enemy.x, enemy.y, bullet.damage, false);
         playBulletHit(enemy);
+        if (bullet.shooter === player) triggerHitMarker();
         // 检测敌人刚进入dying状态的瞬间（takeDamage中设置的）
         if (!wasDying && enemy.dying) {
             EffectsManager.triggerShake(COLLISION_FX.ENEMY_DEATH_SHAKE_INTENSITY, COLLISION_FX.ENEMY_DEATH_SHAKE_DURATION);
             if (bullet.shooter === player && player.alive) {
                 player.addKill();
+                triggerKill();
                 const rankCfg = getRankConfig(enemy.rank || AIRank.PRIVATE);
                 const rpReward = rankCfg.killReward;
                 GameState.rp += rpReward;

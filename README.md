@@ -153,6 +153,7 @@ RwR/
     │
     ├── rendering/             # 渲染系统
     │   ├── Renderer.js        # 主渲染器
+    │   ├── CrosshairRenderer.js # 动态准星（散布/后坐力/命中标记/连杀光晕）
     │   ├── SupportEffectRenderer.js # 支援效果渲染（火炮/空投/烟雾等）
     │   ├── BubbleRenderer.js  # 气泡/对话框渲染
     │   ├── WeatherRenderer.js # 天气渲染逻辑（云影/粒子/闪电）

@@ -16,6 +16,7 @@ import { Rarity } from '../core/LootRegistry.js';
 import { LootPickup } from './LootPickup.js';
 import { getHelmetVariantImagePath, rollHelmetVariant, HelmetTier } from '../core/HelmetSystem.js';
 import { drawHelmet } from '../rendering/HelmetRenderer.js';
+import { triggerFireKick } from '../rendering/CrosshairRenderer.js';
 export class Player extends Entity {
     // 类常量
     static SWITCH_ANIM_DURATION = 15;
@@ -762,6 +763,7 @@ export class Player extends Entity {
 
         weapon.consumeAmmo();
         weapon.applyRecoilAndSpread(); // 射击后增加后坐力和散布
+        triggerFireKick(weapon.config.recoil ? weapon.config.recoil.maxAngle * 10 : 1);
         this.shootCooldown = weapon.config.shootDelay;
 
         // 检查是否打空，播放空仓音效

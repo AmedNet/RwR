@@ -16,6 +16,7 @@ import { TornadoSystem } from '../core/TornadoSystem.js';
 import { WEATHER_DEFS } from '../core/WeatherDefs.js';
 import { DayNightSystem } from '../core/DayNightSystem.js';
 import { PostProcess } from './PostProcess.js';
+import { drawCrosshair, isCrosshairActive } from './CrosshairRenderer.js';
 
 export const Renderer = {
     canvas: null,
@@ -368,6 +369,8 @@ export const Renderer = {
         if (player && player.alive && player.statusEffects && player.statusEffects.length > 0) {
             this.drawStatusEffectsHUD(this.ctx, player);
         }
+        // 动态准星（最顶层 HUD）
+        drawCrosshair(this.ctx);
     },
 
     _renderDayNightOverlay() {
@@ -496,6 +499,12 @@ export const Renderer = {
         const hud = document.getElementById('hud');
         if (hud) {
             hud.style.display = (menuOpen || GameState.gameOver) ? 'none' : 'flex';
+        }
+
+        // 准星显示时隐藏系统鼠标；准星不显示（菜单/死亡/医疗包/战利品）时恢复系统鼠标
+        const canvas = document.getElementById("gameCanvas");
+        if (canvas) {
+            canvas.style.cursor = isCrosshairActive() ? "none" : "default";
         }
 
         // Game Over 优先级最高
