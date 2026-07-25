@@ -452,5 +452,21 @@ export const WeaponRegistry = {
         imagePath: 'src/pkg/weapon/CAT/CAT.png',
         aiWeight: 12,                // AI持有概率权重
         fireMode: FireMode.SEMI
+    },
+
+    // 防弹衣 - 提供减伤和跳弹（不占背包格子）
+    armor: {
+        id: 'armor',
+        name: '防弹衣',
+        type: 'armor',
+        buyPrice: 100,
+        sellPrice: 0,                // 不可出售
+        icon: '🛡️',
+        imagePath: 'src/pkg/gear/m35_green.png',
+        armorDurability: 100,        // 满耐久
+        damageReduction: 0.20,       // 20% 减伤
+        ricochetChance: 0.12,        // 12% 跳弹概率
+        durabilityPerHit: 8,         // 每次受击扣除耐久
+        expandedInventorySize: 9     // 购买时物品栏扩容到的格数
     }
 };

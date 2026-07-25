@@ -167,6 +167,7 @@ RwR/
     │   ├── Minimap.js         # 小地图（含载具标记）
     │   ├── JeepRenderer.js    # 吉普车渲染器
     │   ├── BTR80Renderer.js   # BTR-80 装甲车渲染器
+    │   ├── HelmetRenderer.js  # 头盔渲染（玩家/AI 头部钢盔，共享 drawHelmet）
     │   └── PostProcess.js     # 后处理特效（Bloom/积水反射）
     │
     ├── input/                 # 输入系统
@@ -269,7 +270,6 @@ npx serve
 
 ## 开发中功能
 
-- [ ] 防弹衣
 - [ ] 对话?
 - [ ] 主菜单
 - [ ] 剧情模式(未来)

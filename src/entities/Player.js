@@ -14,6 +14,8 @@ import { SlowEffect, STATUS_EFFECT_CONFIG } from '../utils/StatusEffects.js';
 import { WeatherSystem } from '../core/WeatherSystem.js';
 import { Rarity } from '../core/LootRegistry.js';
 import { LootPickup } from './LootPickup.js';
+import { getHelmetVariantImagePath, rollHelmetVariant, HelmetTier } from '../core/HelmetSystem.js';
+import { drawHelmet } from '../rendering/HelmetRenderer.js';
 export class Player extends Entity {
     // 类常量
     static SWITCH_ANIM_DURATION = 15;
@@ -111,6 +113,13 @@ export class Player extends Entity {
         this.dying = false;           // 是否正在播放死亡动画
         this.deathTimer = 0;          // 死亡动画倒计时帧数
         this.deathDir = 0;            // 死亡动画方向 (1=右, -1=左)
+        // 防弹衣系统
+        this.armorDurability = 0;      // 当前耐久（0=无防弹衣）
+        this.armorMaxDurability = 100; // 最大耐久
+        this.armorHelmetImg = null;    // 头盔贴图 Image 对象
+        this.armorHelmetImgLoaded = false;
+        this.armorHelmetRotation = 0.1; // 头盔旋转角度（弧度），正值=顺时针微调约 5.7°
+        this.armorEquipFlash = 0;      // 装备闪光计时器（帧数，>0 时渲染蓝色光晕）
    }
 
     loadWeaponImage(weaponId) {
@@ -212,7 +221,7 @@ export class Player extends Entity {
     }
 
     switchWeapon(slot) {
-        if (slot < 0 || slot > 6 || slot === GameState.activeWeaponSlot || !GameState.inventory[slot]) return false;
+        if (slot < 0 || slot >= GameState.inventory.length || slot === GameState.activeWeaponSlot || !GameState.inventory[slot]) return false;
         const current = GameState.getActiveWeapon();
         if (current && !current.isLoot) {
             current.isReloading = false;
@@ -331,15 +340,18 @@ export class Player extends Entity {
        if (this.dying) {
            this.deathTimer--;
            if (this.deathTimer <= 0) {
-               // 倒地瞬间：碎裂消散粒子 + 烟雾
-               EffectsManager.spawnParticles(this.x, this.y, ParticleType.EXPLOSION, 15);
-               EffectsManager.spawnParticles(this.x, this.y, ParticleType.SMOKE, 8);
-               // 动画结束，执行实际死亡逻辑
-               this.alive = false;
-               this._dropItemsOnDeath();
-               if (!GameState.gameOver) {
-                   GameState.triggerDeath();
-                   EventBus.emit('game_over', { reason: 'player_died' });
+               // 一次性死亡逻辑：用 alive 守卫确保掉落/死亡只执行一次（修复掉落物循环生成）。
+               // 不重置 dying —— 尸体倒下淡出后仍需留在原地渲染，重置 dying 会让尸体从死亡界面消失。
+               if (this.alive) {
+                   // 倒地瞬间：碎裂消散粒子 + 烟雾
+                   EffectsManager.spawnParticles(this.x, this.y, ParticleType.EXPLOSION, 15);
+                   EffectsManager.spawnParticles(this.x, this.y, ParticleType.SMOKE, 8);
+                   this.alive = false;
+                   this._dropItemsOnDeath();
+                   if (!GameState.gameOver) {
+                       GameState.triggerDeath();
+                       EventBus.emit('game_over', { reason: 'player_died' });
+                   }
                }
            }
            return;
@@ -378,6 +390,9 @@ export class Player extends Entity {
 
         // 受伤表情计时器递减
         if (this.hurtTimer > 0) this.hurtTimer--;
+
+        // 防弹衣装备闪光递减
+        if (this.armorEquipFlash > 0) this.armorEquipFlash--;
 
         // 身体抖动动画：每8帧切换一次
         this.bodyFrameTimer++;
@@ -893,6 +908,35 @@ export class Player extends Entity {
         EventBus.emit('player_hurt', { health: this.health });
     }
 
+    // 激活防弹衣（购买时调用）
+    activateArmor() {
+        const armorConfig = WeaponRegistry.armor;
+        this.armorDurability = armorConfig.armorDurability;
+        this.armorMaxDurability = armorConfig.armorDurability;
+        // 随机选头盔外观（4张贴图中任选）
+        const tier = Math.random() < 0.5 ? HelmetTier.STEEL : HelmetTier.TITANIUM;
+        const variant = rollHelmetVariant(tier); // 自适应各等级变体数量
+        const imgPath = getHelmetVariantImagePath(tier, variant);
+        this.armorHelmetImg = new Image();
+        this.armorHelmetImg.src = imgPath;
+        this.armorHelmetImgLoaded = false;
+        this.armorHelmetImg.onload = () => { this.armorHelmetImgLoaded = true; };
+        this.armorEquipFlash = 30; // 闪光持续 30 帧（约0.5秒）
+    }
+
+    // 绘制防弹衣装备闪光（购买瞬间的蓝色光晕；baseAlpha 叠加死亡淡出等外层透明度）
+    _drawArmorEquipFlash(ctx, baseAlpha = 1) {
+        if (this.armorEquipFlash <= 0) return;
+        const flashAlpha = this.armorEquipFlash / 30;
+        ctx.save();
+        ctx.globalAlpha = baseAlpha * flashAlpha * 0.4;
+        ctx.fillStyle = '#4FC3F7';
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius * 2.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+
     // 死亡时掉落所有武器和稀有战利品
     _dropItemsOnDeath() {
         const droppedWeapons = new Set();
@@ -955,6 +999,8 @@ export class Player extends Entity {
                 const eyeSize = this.radius * 4;
                 ctx.drawImage(eyeImg, -eyeSize / 2, -eyeSize / 2, eyeSize, eyeSize);
             }
+            // 防弹衣头盔（死亡动画中也要渲染）
+            drawHelmet(ctx, this, this.radius);
             // 武器（在同一个变换下，随身体一起倒下，不做任何独立旋转）
             const weapon = this.getCurrentWeapon();
             if (weapon) {
@@ -972,6 +1018,8 @@ export class Player extends Entity {
                     );
                 }
             }
+            // 装备闪光效果（随死亡淡出同步衰减）
+            this._drawArmorEquipFlash(ctx, alpha);
             ctx.restore();
             ctx.restore();
             return;
@@ -1015,6 +1063,10 @@ export class Player extends Entity {
             const eyeSize = this.radius * 4;
             ctx.drawImage(eyeImg, -eyeSize / 2 + eyeOffsetX, -eyeSize / 2 + eyeOffsetY, eyeSize, eyeSize);
         }
+        // 防弹衣头盔渲染
+        drawHelmet(ctx, this, this.radius);
+        // 装备闪光效果
+        this._drawArmorEquipFlash(ctx);
         ctx.restore();
 
        const weapon = this.getCurrentWeapon();

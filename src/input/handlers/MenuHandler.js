@@ -11,17 +11,20 @@ import { playUISound } from '../../utils/SoundManager.js';
 
 // ─── 军械库辅助函数（原 InputManager._getCategoryItems / _scrollToSelected） ───
 
+// 军械库分类列表（与 ArsenalUI.CATEGORIES 一一对应；分类数量以本数组长度为准，勿硬编码）
+const ARSENAL_CATEGORIES = [
+    { types: ['pistol'] },
+    { types: ['rifle'] },
+    { types: ['smg'] },
+    { types: ['shotgun'] },
+    { types: ['sniper'] },
+    { types: ['launcher'] },
+    { types: ['armor'] },
+    { types: ['melee', 'grenade', 'medical'] }
+];
+
 function getCategoryItems() {
-    const categories = [
-        { types: ['pistol'] },
-        { types: ['rifle'] },
-        { types: ['smg'] },
-        { types: ['shotgun'] },
-        { types: ['sniper'] },
-        { types: ['launcher'] },
-        { types: ['melee', 'grenade', 'medical'] }
-    ];
-    const cat = categories[GameState.arsenalCategory] || categories[0];
+    const cat = ARSENAL_CATEGORIES[GameState.arsenalCategory] || ARSENAL_CATEGORIES[0];
     return Object.entries(WeaponRegistry).filter(([, config]) =>
         config.buyPrice >= 0 && cat.types.includes(config.type)
     );
@@ -43,7 +46,7 @@ function scrollToSelected(itemH, rowGap, listTop, viewportHeight) {
 
 function dropSelectedInventoryItem() {
     const selSlot = GameState.inventorySelectedSlot;
-    if (selSlot < 0 || selSlot >= 7 || !GameState.inventory[selSlot]) return;
+    if (selSlot < 0 || selSlot >= GameState.inventory.length || !GameState.inventory[selSlot]) return;
     const item = GameState.inventory[selSlot];
     const player = GameState.player;
     if (!player || !player.alive) return;
@@ -60,7 +63,7 @@ function dropSelectedInventoryItem() {
     GameState.inventory[selSlot] = null;
     GameState.inventorySelectedSlot = -1;
     if (GameState.activeWeaponSlot === selSlot) {
-        for (let j = 0; j < 7; j++) {
+        for (let j = 0; j < GameState.inventory.length; j++) {
             if (GameState.inventory[j]) { GameState.activeWeaponSlot = j; break; }
         }
     }
@@ -101,14 +104,14 @@ export function handleMenuKeydown(e, key) {
     // === 军械库专属按键 ===
     if (GameState.arsenalOpen && GameState.arsenalAnimDirection === null) {
         if (key === 'arrowup') {
-            GameState.arsenalCategory = (GameState.arsenalCategory + 6) % 7;
+            GameState.arsenalCategory = (GameState.arsenalCategory + ARSENAL_CATEGORIES.length - 1) % ARSENAL_CATEGORIES.length;
             GameState.arsenalSelectedIndex = 0;
             GameState.arsenalScrollOffset = 0;
             e.preventDefault();
             return true;
         }
         if (key === 'arrowdown') {
-            GameState.arsenalCategory = (GameState.arsenalCategory + 1) % 7;
+            GameState.arsenalCategory = (GameState.arsenalCategory + 1) % ARSENAL_CATEGORIES.length;
             GameState.arsenalSelectedIndex = 0;
             GameState.arsenalScrollOffset = 0;
             e.preventDefault();
@@ -136,6 +139,41 @@ export function handleMenuKeydown(e, key) {
             const items = getCategoryItems();
             if (items.length === 0) { e.preventDefault(); return true; }
             const [selectedId, config] = items[GameState.arsenalSelectedIndex];
+            // 防弹衣特殊处理：不占背包，直接激活
+            if (config.type === 'armor') {
+                if (GameState.player.armorDurability <= 0) {
+                    // 首次购买：需 RP，激活并永久扩容物品栏
+                    if (GameState.rp >= config.buyPrice) {
+                        GameState.player.activateArmor();
+                        GameState.rp -= config.buyPrice;
+                        // 首次获得防弹衣：永久扩容物品栏（阵亡清空回 7 格后需重新购买才会再扩）
+                        const expandedSize = config.expandedInventorySize || 9;
+                        if (GameState.inventory.length < expandedSize) {
+                            // 记录扩容起点与时刻，供军械库底部新格子弹入动画使用
+                            GameState.inventoryExpandFromIndex = GameState.inventory.length;
+                            GameState.inventoryExpandAnimStart = performance.now();
+                            while (GameState.inventory.length < expandedSize) GameState.inventory.push(null);
+                        }
+                        playUISound('click');
+                        console.log(`🛡️ 购买防弹衣！耐久 ${GameState.player.armorDurability}/${GameState.player.armorMaxDurability}，物品栏扩至 ${GameState.inventory.length} 格`);
+                        UIManager.updateAll(GameState);
+                    } else {
+                        playUISound('error');
+                        console.log(`🛡️ RP 不足，无法购买防弹衣`);
+                    }
+                } else if (GameState.player.armorDurability < GameState.player.armorMaxDurability) {
+                    // 修复：免费回满耐久（仅首次购买收费）
+                    GameState.player.armorDurability = GameState.player.armorMaxDurability;
+                    playUISound('click');
+                    console.log(`🛡️ 修复防弹衣！耐久已回满（免费）`);
+                    UIManager.updateAll(GameState);
+                } else {
+                    playUISound('error');
+                    console.log(`🛡️ 防弹衣耐久已满，无需修复`);
+                }
+                e.preventDefault();
+                return true;
+            }
             const slot = GameState.arsenalSelectedSlot;
             if (GameState.rp >= config.buyPrice) {
                 if (!GameState.inventory[slot]) {
@@ -171,7 +209,7 @@ export function handleMenuKeydown(e, key) {
                 GameState.rp += item.config.value;
                 GameState.inventory[slot] = null;
                 if (GameState.activeWeaponSlot === slot) {
-                    for (let i = 0; i < 7; i++) {
+                    for (let i = 0; i < GameState.inventory.length; i++) {
                         if (GameState.inventory[i]) { GameState.activeWeaponSlot = i; break; }
                     }
                 }
@@ -181,7 +219,7 @@ export function handleMenuKeydown(e, key) {
                 GameState.rp += item.config.sellPrice;
                 GameState.inventory[slot] = null;
                 if (GameState.activeWeaponSlot === slot) {
-                    for (let i = 0; i < 7; i++) {
+                    for (let i = 0; i < GameState.inventory.length; i++) {
                         if (GameState.inventory[i]) { GameState.activeWeaponSlot = i; break; }
                     }
                 }
@@ -192,7 +230,7 @@ export function handleMenuKeydown(e, key) {
             return true;
         }
         const num = parseInt(e.key);
-        if (num >= 1 && num <= 7) {
+        if (num >= 1 && num <= GameState.inventory.length) {
             GameState.arsenalSelectedSlot = num - 1;
             e.preventDefault();
             return true;

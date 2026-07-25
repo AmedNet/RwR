@@ -14,6 +14,10 @@ const easeOutBack = t => {
     return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
 };
 
+// 物品栏扩容时新格子弹入动画参数
+const EXPAND_SLOT_DUR = 0.28;     // 单格弹出时长（秒）
+const EXPAND_SLOT_STAGGER = 0.07; // 相邻新格错峰延迟（秒）
+
 function hexToRgba(hex, alpha) {
     const r = parseInt(hex.slice(1, 3), 16);
     const g = parseInt(hex.slice(3, 5), 16);
@@ -29,6 +33,7 @@ const CATEGORIES = [
     { name: '霰弹枪', color: '#FF9800', types: ['shotgun'] },
     { name: '狙击枪', color: '#2196F3', types: ['sniper'] },
     { name: '重武器', color: '#f44336', types: ['launcher'] },
+    { name: '装备', color: '#607D8B', types: ['armor'] },
     { name: '其他', color: '#9E9E9E', types: ['melee', 'grenade', 'medical'] }
 ];
 
@@ -38,7 +43,7 @@ function getTypeName(type) {
         rifle: '步枪', smg: '冲锋枪', shotgun: '霰弹枪',
         sniper: '狙击枪', pistol: '手枪',
         grenade: '手雷', launcher: '重武器', medical: '医疗',
-        melee: '近战'
+        melee: '近战', armor: '防弹衣'
     };
     return names[type] || type;
 }
@@ -113,9 +118,11 @@ export function drawArsenalShop(ctx, renderer) {
     const listX = groupX + sideBarW + sideBarGroupGap;
     const rightAreaCenterX = listX + listW / 2; // 背包行 / INVENTORY 标签 / 出售提示 居中参考
 
-    const slotSize = 72;
+    const slotCount = GameState.inventory.length;
     const slotGap = 8;
-    const totalSlotsW = 7 * slotSize + 6 * slotGap;
+    // 7 格时保持 72px；格数更多时按比例缩小以适配列表宽度
+    const slotSize = Math.min(72, Math.floor((listW - (slotCount - 1) * slotGap) / slotCount));
+    const totalSlotsW = slotCount * slotSize + (slotCount - 1) * slotGap;
     const slotStartX = rightAreaCenterX - totalSlotsW / 2;
 
     const itemH = 76;
@@ -127,7 +134,7 @@ export function drawArsenalShop(ctx, renderer) {
     // 卡片宽 = 整组宽 + 左右内边距
     const cardW = groupW + innerPad * 2;
     // 卡片高 = 顶栏 + 侧边栏与列表区 + 分隔 + INVENTORY标签 + 背包行 + 出售 + 底部提示 + 底内边距
-    const listOfCats = 7;
+    const listOfCats = CATEGORIES.length;
     const catBlockH = listOfCats * sideBarItemH + (listOfCats - 1) * sideBarGap;
     const listH = Math.max(catBlockH, 360); // 列表高度与侧边栏等高，整齐
     const contentTopToBottom = listH + 16 /*分隔间隔*/ + 24 /*INVENTORY标签*/ + slotSize + 20 /*出售行基线离背包底*/ + 32 /*出售行到底部提示间距*/;
@@ -246,6 +253,10 @@ export function drawArsenalShop(ctx, renderer) {
     if (GameState.arsenalSelectedIndex >= items.length) {
         GameState.arsenalSelectedIndex = Math.max(0, items.length - 1);
     }
+    // 限制选中槽位（物品栏可能因阵亡清空从 9 缩回 7，夹回有效范围避免选中框指向空格）
+    if (GameState.arsenalSelectedSlot >= slotCount) {
+        GameState.arsenalSelectedSlot = slotCount - 1;
+    }
 
     // === 商品列表选中项焦点滑动（W/S 切选时高亮从旧项滑到新项，easeOutBack 呼吸感；随滚动实时跟随）===
     const itemTargetY = listTop + 6 + GameState.arsenalSelectedIndex * (itemH + rowGap) - scroll;
@@ -331,6 +342,8 @@ export function drawArsenalShop(ctx, renderer) {
             info += ` · 堆叠${config.maxStack}`;
         } else if (config.type === 'grenade' || config.type === 'medical') {
             info += ` · 堆叠${config.magSize}`;
+        } else if (config.type === 'armor') {
+            info += ` · 减伤${Math.round(config.damageReduction * 100)}% · 耐久${config.armorDurability}`;
         } else if (config.magSize) {
             info += ` · 弹容${config.magSize}`;
         }
@@ -379,12 +392,32 @@ export function drawArsenalShop(ctx, renderer) {
     ctx.textAlign = 'center';
     ctx.fillText('I N V E N T O R Y', rightAreaCenterX, invY + 4);
 
+    // 扩容动画基准：新格子从 inventoryExpandFromIndex 起逐格错峰弹入（now 已在函数顶部取过）
+    const expandFrom = GameState.inventoryExpandFromIndex;
+    const expandStart = GameState.inventoryExpandAnimStart;
+    const expandElapsed = expandStart != null ? (now - expandStart) / 1000 : 0;
+
     // 背包格子
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < slotCount; i++) {
         const sx = slotStartX + i * (slotSize + slotGap);
         const isSlotSel = i === GameState.arsenalSelectedSlot;
         const weapon = GameState.inventory[i];
         const isLootItem = weapon && weapon.isLoot;
+
+        // 新格子弹入动画：扩容时从 expandFrom 起逐格缩放+淡入弹出（easeOutBack 末端轻微过冲）
+        const isExpandingSlot = expandFrom >= 0 && expandStart != null && i >= expandFrom;
+        if (isExpandingSlot) {
+            const localDelay = (i - expandFrom) * EXPAND_SLOT_STAGGER;
+            const t = Math.max(0, Math.min(1, (expandElapsed - localDelay) / EXPAND_SLOT_DUR));
+            const sc = 0.3 + 0.7 * easeOutBack(t);
+            ctx.save();
+            ctx.globalAlpha *= easeOutCubic(t);
+            const scx = sx + slotSize / 2;
+            const scy = slotY + slotSize / 2;
+            ctx.translate(scx, scy);
+            ctx.scale(sc, sc);
+            ctx.translate(-scx, -scy);
+        }
 
         // 毛玻璃槽位底板（选中态不再画静态描边，改由下方焦点滑动框统一表现）
         drawGlassPanel(ctx, sx, slotY, slotSize, slotSize, GLASS.radiusSmall);
@@ -436,6 +469,17 @@ export function drawArsenalShop(ctx, renderer) {
         ctx.textAlign = 'left';
         ctx.textBaseline = 'top';
         ctx.fillText(`${i + 1}`, sx + 4, slotY + 3);
+
+        if (isExpandingSlot) ctx.restore();
+    }
+
+    // 扩容动画结束后清理状态，避免后续帧继续走动画分支（save/translate/scale/restore）
+    if (expandStart != null && expandFrom >= 0) {
+        const totalAnimDur = EXPAND_SLOT_DUR + (slotCount - 1 - expandFrom) * EXPAND_SLOT_STAGGER;
+        if (expandElapsed >= totalAnimDur) {
+            GameState.inventoryExpandAnimStart = null;
+            GameState.inventoryExpandFromIndex = -1;
+        }
     }
 
     // === 1-7 背包槽焦点滑动框（切换选中槽时从旧槽滑到新槽，easeOutBack 呼吸感）===

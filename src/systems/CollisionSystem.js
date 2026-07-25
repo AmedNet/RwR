@@ -6,7 +6,8 @@ import { EffectsManager, ParticleType } from '../utils/EffectsManager.js';
 import { playExplosion, playBulletHit, playRicochet, playHelmetHit } from '../utils/SoundManager.js';
 import { getRankConfig, AIRank } from '../core/RankSystem.js';
 import { SupportSystem } from '../core/SupportSystem.js';
-import { getHelmetConfig, HelmetTier, tryRicochet } from '../core/HelmetSystem.js';
+import { WeaponRegistry } from '../core/WeaponRegistry.js';
+import { getHelmetConfig, HelmetTier, tryRicochet, RICOCHET_IMMUNE_TYPES } from '../core/HelmetSystem.js';
 
 /** 碰撞特效配置常量 */
 const COLLISION_FX = {
@@ -325,7 +326,8 @@ export const CollisionSystem = {
 
     /** 敌人子弹 → 玩家 & 队友 */
     _checkEnemyBulletVsEntities(bullet, player, teammates) {
-        if (this._bulletHitsCircle(bullet, player)) {
+        // 玩家死亡动画中/已死亡时不再被子弹命中（与队友/敌人的 !alive 守卫一致，避免击中尸体）
+        if (player.alive && !player.dying && this._bulletHitsCircle(bullet, player)) {
             this._onBulletHitPlayer(bullet, player);
             return true;
         }
@@ -414,6 +416,25 @@ export const CollisionSystem = {
     // ─── 命中处理回调 ───
 
     _onBulletHitPlayer(bullet, player) {
+        // 防弹衣减伤/跳弹判定（与 AI 头盔机制一致）
+        if (player.armorDurability > 0) {
+            const armorConfig = WeaponRegistry.armor;
+            const weaponType = bullet.weaponType || null;
+            // 跳弹判定（免疫武器不触发，与 AI 头盔共用 RICOCHET_IMMUNE_TYPES）
+            if (weaponType && !RICOCHET_IMMUNE_TYPES.has(weaponType)) {
+                if (Math.random() < armorConfig.ricochetChance) {
+                    bullet.alive = false;
+                    player.armorDurability = Math.max(0, player.armorDurability - 2);
+                    EffectsManager.spawnRicochetEffect(bullet.x, bullet.y);
+                    playRicochet(player);
+                    return;
+                }
+            }
+            // 减伤
+            bullet.damage = Math.floor(bullet.damage * (1 - armorConfig.damageReduction));
+            // 扣耐久
+            player.armorDurability = Math.max(0, player.armorDurability - armorConfig.durabilityPerHit);
+        }
         player.takeDamage(bullet.damage, bullet.x, bullet.y, bullet.vx, bullet.vy);
         EffectsManager.spawnParticles(bullet.x, bullet.y, ParticleType.HIT, COLLISION_FX.HIT_PARTICLE_COUNT);
         EffectsManager.addDamageNumber(bullet.x, bullet.y, bullet.damage, true);

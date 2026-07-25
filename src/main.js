@@ -700,15 +700,29 @@ function respawnPlayer(pointIndex) {
         console.log('✅ 自杀：保留背包物品');
     }
 
-    // 重置自杀标记
-    GameState.suicideDeath = false;
-
     // 保留当前军衔（阵亡不降级）
     const savedRank = GameState.player ? GameState.player.rank : 0;
+
+    // 自杀死亡：保留防弹衣状态（与武器不掉落规则一致）
+    const savedArmor = (GameState.suicideDeath && GameState.player) ? {
+        armorDurability: GameState.player.armorDurability,
+        armorMaxDurability: GameState.player.armorMaxDurability,
+        armorHelmetImg: GameState.player.armorHelmetImg,
+        armorHelmetImgLoaded: GameState.player.armorHelmetImgLoaded,
+        armorHelmetRotation: GameState.player.armorHelmetRotation,
+    } : null;
+
+    // 重置自杀标记（必须在读取 suicideDeath 之后）
+    GameState.suicideDeath = false;
 
     // 重置玩家状态（位置、血量等）
     GameState.player = new Player(spawnX, spawnY, config.player);
     GameState.player.rank = savedRank;
+    // 恢复防弹衣状态（自杀死亡时）
+    if (savedArmor) {
+        Object.assign(GameState.player, savedArmor);
+        console.log(`🛡️ 自杀保留防弹衣：耐久 ${savedArmor.armorDurability}/${savedArmor.armorMaxDurability}`);
+    }
     GameState.gameOver = false;
     GameState.respawnSelection = false;
     // 清死亡弹出动画状态（否则下次死亡瞬间跳过动画直接弹出）

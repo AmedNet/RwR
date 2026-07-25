@@ -2,6 +2,7 @@
 
 import { DayNightSystem } from '../core/DayNightSystem.js';
 import { GameState } from '../core/GameState.js';
+import { drawHelmet } from './HelmetRenderer.js';
 
 const COLORS = {
     shadow: 'rgba(47, 43, 29, 0.28)',
@@ -202,6 +203,10 @@ function drawOccupant(ctx, entity, x, y, vehicleScale, vehicleAngle, seatIndex =
             ctx.drawImage(eyeImg, -eyeSize / 2 + eyeOffsetX, -eyeSize * 0.9 + eyeOffsetY, eyeSize, eyeSize);
         }
         ctx.restore();
+
+        // 头盔（防弹衣系统）— 乘员身体画在 -size*0.9（比站立 -size/2 上移 1.6r），
+        // 头盔偏移在站立 -0.6r 基础上同步上移：-0.6r - 1.6r = -2.2r，保持与身体相对位置一致；朝左时镜像
+        drawHelmet(ctx, entity, radius, { offsetY: -radius * 2.2, mirror: facingLeft });
 
         if (seatIndex > 0) {
             const weapon = entity.getCurrentWeapon();

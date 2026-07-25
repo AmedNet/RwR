@@ -73,9 +73,17 @@ export function drawInventory(ctx, renderer) {
     ctx.translate(-cx, -cy + offsetY);
     ctx.globalAlpha = alphaFactor;
 
-    // === 主面板 ===
+    // === 背包格子布局参数（提前定义，供面板高度计算）===
+    const slotSize = 80;
+    const slotGap = 16;
+    const slotsPerRow = 4;
+    const slotCount = GameState.inventory.length;
+    const totalRows = Math.ceil(slotCount / slotsPerRow);
+
+    // === 主面板（高度随物品栏行数动态增长：基准 2 行 = 520）===
     const panelW = 480;
-    const panelH = 520;
+    // 面板高度始终包住全部格子行 + 详情 + 底部提示（不单独裁剪，否则内容会溢出面板矩形）
+    const panelH = 520 + (totalRows - 2) * (slotSize + slotGap);
     const panelX = cx - panelW / 2;
     const panelY = 50;
 
@@ -121,9 +129,6 @@ export function drawInventory(ctx, renderer) {
     infoY += 35;
 
     // === 背包格子 ===
-    const slotSize = 80;
-    const slotGap = 16;
-    const slotsPerRow = 4;
     const gridW = slotsPerRow * slotSize + (slotsPerRow - 1) * slotGap;
     const gridX = cx - gridW / 2;
     const gridY = infoY;
@@ -131,7 +136,7 @@ export function drawInventory(ctx, renderer) {
     GameState.inventoryHitAreas = [];
     const slotCenters = []; // 每格中心坐标，供焦点框滑动使用
 
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < slotCount; i++) {
         const row = Math.floor(i / slotsPerRow);
         const col = i % slotsPerRow;
         const x = gridX + col * (slotSize + slotGap);
@@ -313,7 +318,6 @@ export function drawInventory(ctx, renderer) {
     }
 
     // === 选中物品详情 ===
-    const totalRows = Math.ceil(7 / slotsPerRow);
     const slotsBottomY = gridY + totalRows * (slotSize + slotGap);
     const selected = GameState.inventory[GameState.inventorySelectedSlot];
 

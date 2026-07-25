@@ -196,6 +196,31 @@ export function drawWeaponHUD(ctx, renderer, opts = {}) {
         }
     }
     
+    // === 防弹衣耐久条 ===
+    const player = GameState.player;
+    if (player && player.armorDurability > 0 && !drivenVehicle) {
+        const armorPanelW = 200;
+        const armorPanelH = 28;
+        const armorPanelX = renderer.width - armorPanelW - 20 + panelOffsetX;
+        const armorPanelY = renderer.height - 85 - 90 - armorPanelH - 6;
+
+        if (renderer._drawBlurRegion) {
+            renderer._drawBlurRegion(armorPanelX, armorPanelY, armorPanelW, armorPanelH, 12);
+        }
+        drawGlassPanel(ctx, armorPanelX, armorPanelY, armorPanelW, armorPanelH, 10);
+
+        const armorRatio = player.armorDurability / player.armorMaxDurability;
+        const armorColor = armorRatio > 0.5 ? '#4FC3F7' : armorRatio > 0.25 ? '#29B6F6' : '#0288D1';
+
+        ctx.fillStyle = armorColor;
+        ctx.font = '500 10px -apple-system, "SF Pro Display", sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`🛡️ ${Math.ceil(player.armorDurability)}/${player.armorMaxDurability}`, armorPanelX + 10, armorPanelY + 10);
+
+        drawProgressBar(ctx, armorPanelX + 10, armorPanelY + 19, armorPanelW - 20, 4, armorRatio, armorColor);
+    }
+
     // 驾驶BTR时隐藏底部物品栏
     if (drivenVehicle && drivenVehicle.id === 'btr80') {
         ctx.restore();
@@ -203,9 +228,11 @@ export function drawWeaponHUD(ctx, renderer, opts = {}) {
     }
     
     // === 底部武器槽位 ===
-    const slotCount = 7;
-    const slotSize = 52;
+    const slotCount = GameState.inventory.length;
     const gap = 8;
+    // 格数多于 7 时按比例缩小，避免 9 格总宽（532px）在窄屏溢出
+    const maxTotalW = renderer.width * 0.6;
+    const slotSize = Math.min(52, Math.floor((maxTotalW - (slotCount - 1) * gap) / slotCount));
     const totalW = slotCount * slotSize + (slotCount - 1) * gap;
     const startX = (renderer.width - totalW) / 2;
     const startY = renderer.height - slotSize - 24 + bottomOffsetY;

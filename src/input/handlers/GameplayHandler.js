@@ -63,9 +63,9 @@ export function handleGameplayKeydown(e, key) {
         return true;
     }
 
-    // 数字键 1-7：切换武器 / BTR机炮切换
+    // 数字键 1-N：切换武器（N=物品栏格数）/ BTR机炮切换
     const num = parseInt(e.key);
-    if (num >= 1 && num <= 7) {
+    if (num >= 1 && num <= GameState.inventory.length) {
         if (GameState.player && GameState.player.mountedVehicle && GameState.player.vehicleSeat === 0) {
             const vehicle = GameState.player.mountedVehicle;
             if (vehicle.id === 'btr80' && vehicle.weaponConfig) {
@@ -268,6 +268,8 @@ export function handleGameplayKeydown(e, key) {
 
 export function handleGameplayKeyup(e, key) {
     if (key === 'c') seatModifierPressed = false;
+    // 9 键抬起即清除 debug 组合键标志，避免扩容后「按 9 切枪 → 按 1 切枪」误触发 debug 面板
+    if (key === '9') GameState.debugKey9Pressed = false;
     if (key in GameState.keys) {
         GameState.keys[key] = false;
         e.preventDefault();

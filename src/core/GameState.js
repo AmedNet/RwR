@@ -22,6 +22,9 @@ export const GameState = {
     inventoryOpen: false, // 背包是否打开
     inventoryAnimProgress: 0, // 背包动画进度 0-1
     inventoryAnimDirection: null, // 'opening' | 'closing' | null
+    // 物品栏扩容弹入动画（购买防弹衣扩容时触发，军械库底部新格子逐格弹出）
+    inventoryExpandAnimStart: null, // 扩容时刻 performance.now()，null=无动画
+    inventoryExpandFromIndex: -1,   // 新格子起始索引（扩容前的 length），-1=无
     rp: 0, // RP值（金钱）
     map: null,
     weather: 'sunny', // 当前天气类型
@@ -141,7 +144,7 @@ export const GameState = {
 
     // 切换武器
     switchWeapon(slot) {
-        if (slot < 0 || slot > 6) return false;
+        if (slot < 0 || slot >= this.inventory.length) return false;
         if (this.activeWeaponSlot === slot) return false;
         this.activeWeaponSlot = slot;
         return true;
@@ -248,6 +251,8 @@ this.inventoryHitAreas = [];
         this.inventoryAnimProgress = 0;
         this.inventoryAnimDirection = null;
         this._inventoryAnimLastTime = null;
+        this.inventoryExpandAnimStart = null;
+        this.inventoryExpandFromIndex = -1;
         this.arsenalOpen = false;
         this.arsenalAnimProgress = 0;
         this.arsenalAnimDirection = null;
