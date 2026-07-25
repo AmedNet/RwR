@@ -30,6 +30,12 @@ export const GLASS = {
 // 缓动函数
 export function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
 
+// 末端轻过冲回弹（用于面板弹出/焦点滑动的呼吸感）
+export function easeOutBack(t) {
+    const c1 = 1.70158, c3 = c1 + 1;
+    return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+}
+
 // 入出对称的三次缓动，关闭动画时让前后都缓，给人更顺滑的过渡感
 export function easeInOutCubic(t) {
     return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;

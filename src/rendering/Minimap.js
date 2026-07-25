@@ -3,6 +3,7 @@ import { GameState } from '../core/GameState.js';
 import { WeatherSystem } from '../core/WeatherSystem.js';
 import { TornadoSystem } from '../core/TornadoSystem.js';
 import { Renderer } from './Renderer.js';
+import { Settings } from '../data/Settings.js';
 
 export const Minimap = {
     canvas: null,
@@ -46,6 +47,12 @@ export const Minimap = {
 
     render() {
         if (!this.initialized) return;
+        // 设置：小地图开关（隐藏独立 DOM canvas 并跳过绘制，比纯跳过 render 更省）
+        if (!Settings.graphics.minimap) {
+            if (this.canvas.style.display !== 'none') this.canvas.style.display = 'none';
+            return;
+        }
+        if (this.canvas.style.display === 'none') this.canvas.style.display = 'block';
         const ctx = this.ctx;
         const size = this.size;
         ctx.clearRect(0, 0, size, size);

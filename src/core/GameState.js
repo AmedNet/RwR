@@ -122,6 +122,29 @@ export const GameState = {
     radioItemFocusIndex: -1,     // 焦点当前归属的支援项索引（检测变化用）
     radioItemFocusAnim: 0,       // 滑动进度 0→1
     _radioFocusLastTime: null,   // 焦点滑动 deltaTime 计时基准（performance.now）
+
+    // 暂停 + 设置系统（镜像 radio/inventory 的动画三件套，渲染函数内自驱 deltaTime）
+    paused: false,              // 游戏是否暂停（世界 update 冻结，仍 render 暂停菜单）
+    settingsOpen: false,        // 设置面板是否打开（从暂停菜单进入，世界保持冻结）
+    settingsTab: 0,             // 设置当前分类 (0=图像, 1=声音, 2=控制)
+    pauseAnimProgress: 0,       // 暂停菜单动画进度 0~1（开/关共用，倒带式）
+    pauseAnimDirection: null,   // 'opening' | 'closing' | null（支持中途反向打断）
+    _pauseAnimLastTime: null,   // 动画计时基准（performance.now）
+    settingsAnimProgress: 0,    // 设置面板动画进度 0~1
+    settingsAnimDirection: null,
+    _settingsAnimLastTime: null,
+    pauseHitAreas: [],          // 暂停菜单按钮热区 [{id,x,y,w,h}]
+    settingsHitAreas: [],       // 设置面板控件热区 [{type,id,x,y,w,h,...}]
+    settingsSliderDragging: null, // 正在拖动的音量滑块 id（'master'/'ambient'/'sfx'/'ui'），null=无
+    settingsSliderDragArea: null, // 正在拖动的滑块热区对象（含 trackX/trackW，供 mousemove 换算）
+    keybindCapturing: null,     // 正在捕获键位的动作名（如 'reload'），null=未捕获
+    // 设置分类焦点滑动（tab 切换时指示器竖向滑动，easeOutBack 末端轻过冲）
+    settingsTabFocusY: null,
+    settingsTabFocusFromY: null,
+    settingsTabFocusIndex: -1,
+    settingsTabFocusAnim: 0,
+    _settingsTabFocusLastTime: null,
+
     gameOverSelectedPoint: -1, // 死亡界面当前悬浮的据点索引
     respawnHitAreas: [], // 死亡界面据点点击热区 [{x, y, r, index}]
     // 死亡界面据点焦点滑动（鼠标悬浮/数字键切选时高亮从旧据点滑到新据点，easeOutBack 末端轻过冲）
@@ -199,6 +222,40 @@ export const GameState = {
             this.radioAnimDirection = 'opening';
         }
         this._radioAnimLastTime = null;
+    },
+
+    // 切换暂停开/关（支持中途反向打断：progress 不归零从半路反向）
+    togglePause() {
+        const dir = this.pauseAnimDirection;
+        if (dir === 'closing') {
+            this.pauseAnimDirection = 'opening';
+        } else if (dir === 'opening') {
+            this.pauseAnimDirection = 'closing';
+        } else if (this.paused) {
+            this.pauseAnimDirection = 'closing';
+        } else {
+            this.paused = true;
+            this.pauseAnimProgress = 0;
+            this.pauseAnimDirection = 'opening';
+        }
+        this._pauseAnimLastTime = null;
+    },
+
+    // 切换设置面板开/关（从暂停菜单进入/退回，世界保持冻结）
+    toggleSettings() {
+        const dir = this.settingsAnimDirection;
+        if (dir === 'closing') {
+            this.settingsAnimDirection = 'opening';
+        } else if (dir === 'opening') {
+            this.settingsAnimDirection = 'closing';
+        } else if (this.settingsOpen) {
+            this.settingsAnimDirection = 'closing';
+        } else {
+            this.settingsOpen = true;
+            this.settingsAnimProgress = 0;
+            this.settingsAnimDirection = 'opening';
+        }
+        this._settingsAnimLastTime = null;
     },
 
     // 触发死亡：统一清零弹出动画与焦点滑动状态，防止跨死亡周期残留
@@ -305,5 +362,25 @@ this.inventoryHitAreas = [];
         this.radioNoPermitShowTimer = 0;
         this._radioNoPermitAnimLastTime = null;
         this.debugTab = 0;
+        // 暂停 + 设置系统重置
+        this.paused = false;
+        this.settingsOpen = false;
+        this.settingsTab = 0;
+        this.pauseAnimProgress = 0;
+        this.pauseAnimDirection = null;
+        this._pauseAnimLastTime = null;
+        this.settingsAnimProgress = 0;
+        this.settingsAnimDirection = null;
+        this._settingsAnimLastTime = null;
+        this.pauseHitAreas = [];
+        this.settingsHitAreas = [];
+        this.settingsSliderDragging = null;
+        this.settingsSliderDragArea = null;
+        this.keybindCapturing = null;
+        this.settingsTabFocusY = null;
+        this.settingsTabFocusFromY = null;
+        this.settingsTabFocusIndex = -1;
+        this.settingsTabFocusAnim = 0;
+        this._settingsTabFocusLastTime = null;
     }
 };

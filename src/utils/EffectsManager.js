@@ -2,6 +2,7 @@
 
 import { playShellLand } from './SoundManager.js';
 import { WeatherSystem } from '../core/WeatherSystem.js';
+import { Settings, BLOOD_CONFIG } from '../data/Settings.js';
 
 import { GameState } from '../core/GameState.js';
 import { DayNightSystem } from '../core/DayNightSystem.js';
@@ -378,6 +379,7 @@ export const EffectsManager = {
 
     // 添加伤害数字
     addDamageNumber(x, y, damage, isPlayer = false) {
+        if (!Settings.graphics.damageNumbers) return; // 设置：伤害数字开关
         this.damageNumbers.push({
             x, y,
             text: damage.toString(),
@@ -408,6 +410,7 @@ export const EffectsManager = {
         }
 
         // 显示治疗数字
+        if (!Settings.graphics.damageNumbers) return; // 设置：伤害数字开关
         this.damageNumbers.push({
             x, y: y + FX.HEAL_NUM_OFFSET_Y,
             text: `+${amount}`,
@@ -708,6 +711,7 @@ export const EffectsManager = {
             }
         }
         // 灰色 "resist!" 伤害数字
+        if (!Settings.graphics.damageNumbers) return; // 设置：伤害数字开关
         this.damageNumbers.push({
             x, y: y - 10,
             text: vehicleImpact ? 'ricochet' : 'resist!',
@@ -723,13 +727,15 @@ export const EffectsManager = {
     // bulletVx, bulletVy: 子弹速度方向（决定溅射方向）
     // damage: 伤害值（可选，用于缩放飞溅程度）
     spawnBloodSplatter(hitX, hitY, bulletVx = 0, bulletVy = 0, damage = 30) {
+        const bloodCfg = BLOOD_CONFIG[Settings.graphics.bloodLevel] || BLOOD_CONFIG.mid;
+        if (bloodCfg.scale <= 0) return; // 设置：血迹关闭档，不生成任何喷溅
         const bulletAngle = Math.atan2(bulletVy, bulletVx);
         const hasDirection = bulletVx !== 0 || bulletVy !== 0;
         // 按伤害量缩放（基准30伤害=1.0倍）
         const dmgScale = Math.min(2.0, Math.max(0.5, damage / FX.BLOOD_BASE_DAMAGE));
 
        // 生成血滴粒子（带方向，落地后变血迹）
-       const dropCount = Math.floor((FX.BLOOD_DROP_BASE + Math.random() * FX.BLOOD_DROP_RANDOM) * dmgScale);
+       const dropCount = Math.floor((FX.BLOOD_DROP_BASE + Math.random() * FX.BLOOD_DROP_RANDOM) * dmgScale * bloodCfg.scale);
        for (let i = 0; i < dropCount; i++) {
            let angle;
            if (hasDirection) {
@@ -766,7 +772,7 @@ export const EffectsManager = {
         });
 
         // 命中瞬间的小血雾粒子
-        const mistCount = Math.floor((FX.BLOOD_MIST_COUNT_BASE + Math.random() * FX.BLOOD_MIST_COUNT_RANDOM) * dmgScale);
+        const mistCount = Math.floor((FX.BLOOD_MIST_COUNT_BASE + Math.random() * FX.BLOOD_MIST_COUNT_RANDOM) * dmgScale * bloodCfg.scale);
         for (let i = 0; i < mistCount; i++) {
             const angle = Math.random() * Math.PI * 2;
             const speed = 0.5 + Math.random() * 2;
@@ -835,10 +841,14 @@ export const EffectsManager = {
         const rotation = Math.random() * Math.PI * 2;
         const alpha = 0.5 + Math.random() * 0.4;
         this.bloodStains.push({ x, y, texIndex, scale, rotation, alpha });
+        // 设置：永久血迹上限（按档位，修复原无上限无限增长的性能隐患）
+        const cap = (BLOOD_CONFIG[Settings.graphics.bloodLevel] || BLOOD_CONFIG.mid).cap;
+        while (this.bloodStains.length > cap) this.bloodStains.shift();
     },
 
     // 触发屏幕震动
     triggerShake(intensity = 8, duration = 12) {
+        if (!Settings.graphics.shake) return; // 设置：画面抖动开关（所有抖动唯一入口）
         this.screenShake.intensity = intensity;
         this.screenShake.timer = duration;
     },
@@ -1256,6 +1266,7 @@ export const EffectsManager = {
 
     // 绘制地面血迹（预渲染纹理 + drawImage盖章 + 视口裁剪）
     drawBloodStains(ctx, camera) {
+        if (Settings.graphics.bloodLevel === 'off') return; // 设置：血迹关闭档不画存量
         if (this.bloodStains.length === 0) return;
         if (!this.bloodTexturesReady) this.initBloodTextures();
 

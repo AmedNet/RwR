@@ -5,7 +5,7 @@ import { WeatherSystem } from '../core/WeatherSystem.js';
 import { DayNightSystem } from '../core/DayNightSystem.js';
 import { GameState } from '../core/GameState.js';
 import { Terrain } from '../core/Map.js';
-import { getAudioContext } from './SoundManager.js';
+import { getAudioContext, getMasterBus } from './SoundManager.js';
 
 const BASE = 'src/pkg/sounds/';
 
@@ -114,7 +114,7 @@ class Channel {
         if (this.playing) return;
         this.gainNode = ctx.createGain();
         this.gainNode.gain.value = 0;
-        this.gainNode.connect(ctx.destination);
+        this.gainNode.connect(getMasterBus());
 
         this.source = ctx.createBufferSource();
         this.source.buffer = this.buffer;
@@ -149,7 +149,7 @@ function playOneShot(id, vol, maxDuration, fadeOut) {
     const gain = ctx.createGain();
     gain.gain.value = Math.min(1, vol);
     source.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(getMasterBus());
 
     // Random start offset within the buffer for variety
     const bufLen = channel.buffer.duration;

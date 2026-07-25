@@ -6,6 +6,7 @@ import { WeaponPickup } from '../../entities/WeaponPickup.js';
 import { LootPickup } from '../../entities/LootPickup.js';
 import { LootItem } from '../../core/LootItem.js';
 import { playPickup, playUISound, playVehicleHorn } from '../../utils/SoundManager.js';
+import { Settings, semanticMoveKey } from '../../data/Settings.js';
 
 let seatModifierPressed = false;
 
@@ -15,6 +16,20 @@ export function getSeatModifier() { return seatModifierPressed; }
 // ─── keydown 处理（正常游戏状态） ───
 
 export function handleGameplayKeydown(e, key) {
+    // ESC：纯游戏态打开暂停菜单（仅此一处接管，radio/debug 的 ESC 关闭行为在各自分支不变）
+    if (key === 'escape') {
+        // 清除手雷/电台长按状态，防止暂停期间 keyup 触发 throwGrenade
+        if (GameState.radioGKeyPressed) {
+            GameState.radioGKeyPressed = false;
+            GameState.radioGKeyConsumed = false;
+            GameState.radioGKeyTimer = 0;
+        }
+        GameState.togglePause();
+        playUISound('click');
+        e.preventDefault();
+        return true;
+    }
+
     // C 键：座位修饰键
     if (key === 'c') {
         seatModifierPressed = true;
@@ -47,8 +62,8 @@ export function handleGameplayKeydown(e, key) {
         return true;
     }
 
-    // K 键：自杀
-    if (key === 'k') {
+    // 自杀（键位可重绑）
+    if (key === Settings.controls.suicide) {
         if (GameState.player && GameState.player.alive) {
             GameState.suicideDeath = true;
             if (GameState.player.mountedVehicle) {
@@ -82,8 +97,8 @@ export function handleGameplayKeydown(e, key) {
         return true;
     }
 
-    // G 键：手雷/电台长按
-    if (key === 'g') {
+    // 手雷/电台长按（键位可重绑）
+    if (key === Settings.controls.grenade) {
         if (!GameState.radioGKeyPressed) {
             GameState.radioGKeyPressed = true;
             GameState.radioGKeyTimer = 0;
@@ -93,15 +108,15 @@ export function handleGameplayKeydown(e, key) {
         return true;
     }
 
-    // R 键：换弹
-    if (key === 'r') {
+    // 换弹（键位可重绑）
+    if (key === Settings.controls.reload) {
         if (GameState.player) { GameState.player.reload(); }
         e.preventDefault();
         return true;
     }
 
-    // H 键：吉普车喇叭
-    if (key === 'h') {
+    // 吉普车喇叭（键位可重绑）
+    if (key === Settings.controls.horn) {
         if (GameState.player && GameState.player.mountedVehicle) {
             playVehicleHorn(GameState.player.mountedVehicle);
         }
@@ -109,8 +124,8 @@ export function handleGameplayKeydown(e, key) {
         return true;
     }
 
-    // F 键：上下车 / 拾取地面物品
-    if (key === 'f') {
+    // 上下车 / 拾取地面物品（键位可重绑）
+    if (key === Settings.controls.interact) {
         if (GameState.player && GameState.player.alive) {
             const player = GameState.player;
 
@@ -231,8 +246,8 @@ export function handleGameplayKeydown(e, key) {
         return true;
     }
 
-    // E 键：打开/关闭军械库
-    if (key === 'e') {
+    // 打开/关闭军械库（键位可重绑）
+    if (key === Settings.controls.arsenal) {
         const arsenal = GameState.arsenal;
         const player = GameState.player;
         if (arsenal && player && arsenal.contains(player)) {
@@ -243,8 +258,8 @@ export function handleGameplayKeydown(e, key) {
         return true;
     }
 
-    // Q 键：打开/关闭背包
-    if (key === 'q') {
+    // 打开/关闭背包（键位可重绑）
+    if (key === Settings.controls.inventory) {
         GameState.toggleInventory();
         playUISound('click');
         console.log(GameState.inventoryOpen ? '🎒 打开背包' : '🎒 关闭背包');
@@ -252,12 +267,13 @@ export function handleGameplayKeydown(e, key) {
         return true;
     }
 
-    // WASD 移动
-    if (key in GameState.keys) {
-        GameState.keys[key] = true;
+    // 移动（写入层翻译：物理键 → 语义键 w/a/s/d，Player 读者零改动）
+    const moveKey = semanticMoveKey(key);
+    if (moveKey) {
+        GameState.keys[moveKey] = true;
         e.preventDefault();
     }
-    if (key === ' ' || key === 'space') {
+    if (key === Settings.controls.shoot) {
         if (GameState.player) GameState.player.shoot();
         e.preventDefault();
     }
@@ -270,11 +286,13 @@ export function handleGameplayKeyup(e, key) {
     if (key === 'c') seatModifierPressed = false;
     // 9 键抬起即清除 debug 组合键标志，避免扩容后「按 9 切枪 → 按 1 切枪」误触发 debug 面板
     if (key === '9') GameState.debugKey9Pressed = false;
-    if (key in GameState.keys) {
-        GameState.keys[key] = false;
+    // 移动键抬起（写入层翻译：物理键 → 语义键）
+    const moveKey = semanticMoveKey(key);
+    if (moveKey) {
+        GameState.keys[moveKey] = false;
         e.preventDefault();
     }
-    if (key === 'g' && GameState.radioGKeyPressed) {
+    if (key === Settings.controls.grenade && GameState.radioGKeyPressed) {
         if (GameState.radioGKeyTimer < 18 && !GameState.radioOpen && !GameState.gameOver && !GameState.radioGKeyConsumed) {
             if (GameState.player) { GameState.player.throwGrenade(); }
         }

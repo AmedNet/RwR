@@ -7,6 +7,7 @@ import { handleRadioKeydown, handleRadioMousedown, handleRadioContextmenu } from
 import { handleDebugKeydown, handleDebugMousedown } from './handlers/DebugHandler.js';
 import { handleGameplayKeydown, handleGameplayKeyup } from './handlers/GameplayHandler.js';
 import { handleMousemove, handleNormalMousedown, handleMouseup, handleBlur } from './handlers/MouseHandler.js';
+import { handlePauseKeydown, handlePauseMousedown, handleSettingsKeydown, handleSettingsMousedown } from './handlers/PauseHandler.js';
 
 export const InputManager = {
     setup() {
@@ -18,6 +19,18 @@ export const InputManager = {
             // 死亡状态
             if (GameState.gameOver) {
                 handleDeathKeydown(e, key);
+                return;
+            }
+
+            // 设置面板打开（ESC 退回暂停菜单，吞噬其余键；世界保持冻结）
+            if (GameState.settingsOpen || GameState.settingsAnimDirection === 'closing') {
+                handleSettingsKeydown(e, key);
+                return;
+            }
+
+            // 暂停菜单打开（ESC 恢复游戏，吞噬其余键）
+            if (GameState.paused || GameState.pauseAnimDirection === 'closing') {
+                handlePauseKeydown(e, key);
                 return;
             }
 
@@ -62,6 +75,18 @@ export const InputManager = {
             }
             if (e.button === 0) {
                 GameState.mouse.down = true;
+
+                // 设置面板点击（优先于暂停菜单，设置叠在上层）
+                if (GameState.settingsOpen || GameState.settingsAnimDirection === 'closing') {
+                    handleSettingsMousedown(e, canvas);
+                    return;
+                }
+
+                // 暂停菜单点击
+                if (GameState.paused || GameState.pauseAnimDirection === 'closing') {
+                    handlePauseMousedown(e, canvas);
+                    return;
+                }
 
                 // 电台界面点击
                 if (GameState.radioOpen) {

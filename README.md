@@ -128,6 +128,7 @@ RwR/
     ├── data/                  # 配置数据
     │   ├── GameConfig.js      # 游戏核心配置（玩家/敌人/地图等）
     │   ├── SupportConfig.js   # 支援系统配置（类型/费用/冷却）
+    │   ├── Settings.js        # 设置数据模型（图形/音频/键位）+ apply 函数
     │   ├── AIMonologues.js    # AI 闲聊文本
     │   └── VehicleDialogues.js # 载具对话文本
     │
@@ -165,6 +166,8 @@ RwR/
     │   ├── GameOverUI.js      # 阵亡/战败界面
     │   ├── DebugUI.js         # Debug 面板（标签页 + 战利品调试）
     │   ├── RadioUI.js         # 电台呼叫支援界面
+    │   ├── PauseMenuUI.js     # 暂停菜单界面
+    │   ├── SettingsUI.js      # 设置面板界面（图像/声音/控制）
     │   ├── Minimap.js         # 小地图（含载具标记）
     │   ├── JeepRenderer.js    # 吉普车渲染器
     │   ├── BTR80Renderer.js   # BTR-80 装甲车渲染器
@@ -173,9 +176,11 @@ RwR/
     │
     ├── input/                 # 输入系统
     │   ├── InputManager.js    # 输入分发层（薄控制器）
+    │   ├── canvasCoords.js    # 共享坐标换算（鼠标事件 → canvas 逻辑坐标）
     │   └── handlers/          # 输入处理器
     │       ├── GameplayHandler.js  # 游戏逻辑输入
     │       ├── MenuHandler.js      # 菜单输入
+    │       ├── PauseHandler.js     # 暂停菜单 + 设置面板输入
     │       ├── MouseHandler.js     # 鼠标输入
     │       ├── RadioHandler.js     # 电台输入
     │       ├── DebugHandler.js     # Debug 面板输入

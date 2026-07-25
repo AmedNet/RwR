@@ -26,6 +26,7 @@ import { VehicleRegistry } from "./core/VehicleRegistry.js";
 
 // ---------- 配置 ----------
 import { CONFIG, GAME_CONSTANTS } from './data/GameConfig.js';
+import { applyGraphics, applyAudio } from './data/Settings.js';
 // ---------- 剧情系统 (TODO: 后续阶段集成) ----------
 // import { CampaignManager } from './campaign/CampaignManager.js';
 
@@ -345,6 +346,16 @@ function gameLoop() {
         GameState._fpsFrames = 0;
         GameState._fpsLastTime = now;
     }
+
+    // 暂停冻结：跳过所有世界 update（特效/天气/昼夜/环境音/支援/摄像机/实体/碰撞），
+    // 但仍 render —— 暂停菜单/设置面板动画是渲染函数内自驱 deltaTime，照常推进
+    if (GameState.paused) {
+        Renderer.render();
+        Minimap.render();
+        requestAnimationFrame(gameLoop);
+        return;
+    }
+
     // 更新特效（粒子、伤害数字等）
     EffectsManager.update();
     // 更新天气系统
@@ -612,6 +623,10 @@ function init() {
 
     // 初始化支援系统
     SupportSystem.init();
+
+    // 应用设置（把默认图形/音频参数写入运行系统；音频总线在 SoundManager.initAudio 后已就绪）
+    applyGraphics();
+    applyAudio();
 
     console.log('🎮 游戏初始化完成！');
     console.log(`📐 地图大小: ${CONFIG.world.width} x ${CONFIG.world.height}`);

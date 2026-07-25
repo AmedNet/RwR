@@ -3,6 +3,8 @@
 
 let actx = null;
 let masterGain = null;
+let sfxGain = null;   // 枪械/爆炸/战斗/载具子总线 → masterGain
+let uiGain = null;    // UI/电台音效子总线 → masterGain
 let audioUnlocked = false;
 let listenerProvider = null;
 let vehicleHornAudio = null;
@@ -17,9 +19,18 @@ function initAudio() {
   if (actx) return;
   try {
     actx = new (window.AudioContext || window.webkitAudioContext)();
+    // 混音总线：master(主音量) ← sfx(枪械/爆炸) + ui(UI/电台)；环境音经 getMasterBus() 接入 master
+    // ⚠️ 契约：此处硬编码默认值必须与 Settings.audio 一致（权威值由 main.js init() 的 applyAudio() 写入）。
+    // 当前：master 1.0 / sfx 0.5 / ui 0.5。若修改 Settings.audio 默认值，此处同步修改或依赖 applyAudio 覆盖。
     masterGain = actx.createGain();
-    masterGain.gain.value = 0.5; // 默认音量 50%
+    masterGain.gain.value = 1.0; // 主音量（「主音量」滑块）
     masterGain.connect(actx.destination);
+    sfxGain = actx.createGain();
+    sfxGain.gain.value = 0.5; // 枪械/爆炸音效（「枪械/爆炸」滑块）
+    sfxGain.connect(masterGain);
+    uiGain = actx.createGain();
+    uiGain.gain.value = 0.5; // UI 音效（「UI」滑块）
+    uiGain.connect(masterGain);
     
     // 在第一次用户交互时解锁 AudioContext
     const unlockHandler = () => {
@@ -57,6 +68,22 @@ function getCtx() {
 
 export function setVolume(vol) {
   if (masterGain) masterGain.gain.value = vol;
+}
+
+// ─── 四路混音音量接口（设置界面调用） ───
+export function setMasterVolume(vol) {
+  if (masterGain) masterGain.gain.value = Math.max(0, Math.min(1, vol));
+}
+export function setSfxVolume(vol) {
+  if (sfxGain) sfxGain.gain.value = Math.max(0, Math.min(1, vol));
+}
+export function setUIVolume(vol) {
+  if (uiGain) uiGain.gain.value = Math.max(0, Math.min(1, vol));
+}
+// 供环境音接入主总线（环境音量仍由 AmbientSoundManager.masterVolume 分路控制）
+export function getMasterBus() {
+  getCtx();
+  return masterGain;
 }
 
 export function getAudioContext() {
@@ -126,7 +153,7 @@ export function startVehicleEngine(vehicle = null) {
     engineSource.playbackRate.value = 0.82;
     engineGain.gain.setValueAtTime(0, now);
     engineGain.gain.linearRampToValueAtTime(targetVolume, now + 0.45);
-    engineSource.connect(engineGain).connect(masterGain);
+    engineSource.connect(engineGain).connect(sfxGain);
     engineSource.start(now);
     vehicleEngineVoices.set(vehicle, { source: engineSource, gain: engineGain });
   });
@@ -173,7 +200,7 @@ export function playVehicleHorn(source = 0) {
       gain.gain.linearRampToValueAtTime(gainScale * vol, n + 0.035);
       gain.gain.setValueAtTime(gainScale * vol, n + 0.31);
       gain.gain.exponentialRampToValueAtTime(0.001, n + 0.48);
-      oscillator.connect(gain).connect(masterGain);
+      oscillator.connect(gain).connect(sfxGain);
       oscillator.start(n); oscillator.stop(n + 0.5);
     }
     return;
@@ -237,7 +264,7 @@ function playClickRaw(c, time, freq, duration, gainVal) {
   const osc = c.createOscillator(), g = c.createGain();
   osc.type = 'square'; osc.frequency.setValueAtTime(freq, time);
   g.gain.setValueAtTime(gainVal, time); g.gain.exponentialRampToValueAtTime(0.001, time + duration);
-  osc.connect(g).connect(masterGain); osc.start(time); osc.stop(time + duration);
+  osc.connect(g).connect(sfxGain); osc.start(time); osc.stop(time + duration);
 }
 
 // 内部封装：快捷生成一声金属长回响（解除枪声/换弹的电子单薄感）
@@ -245,7 +272,7 @@ function playRingRaw(c, time, freq, duration, gainVal, type = 'triangle') {
   const osc = c.createOscillator(), g = c.createGain();
   osc.type = type; osc.frequency.setValueAtTime(freq, time);
   g.gain.setValueAtTime(gainVal, time); g.gain.exponentialRampToValueAtTime(0.001, time + duration);
-  osc.connect(g).connect(masterGain); osc.start(time); osc.stop(time + duration);
+  osc.connect(g).connect(sfxGain); osc.start(time); osc.stop(time + duration);
 }
 
 // 内部封装：生成带有金属颗粒杂音的刮擦摩擦声
@@ -253,7 +280,7 @@ function playScrapeRaw(c, time, duration, freq, gainVal) {
   const nb = mkNoise(c, duration, 'white'), ns = c.createBufferSource(), nf = c.createBiquadFilter(), ng = c.createGain();
   ns.buffer = nb; nf.type = 'bandpass'; nf.frequency.setValueAtTime(freq, time);
   ng.gain.setValueAtTime(gainVal, time); ng.gain.exponentialRampToValueAtTime(0.001, time + duration);
-  ns.connect(nf).connect(ng).connect(masterGain); ns.start(time); ns.stop(time + duration);
+  ns.connect(nf).connect(ng).connect(sfxGain); ns.start(time); ns.stop(time + duration);
 }
 
 // 播放枪声 (重构：完美集成 M82 与 AT4 火箭筒，加强瞬态打击感与枪管共鸣尾音)
@@ -274,7 +301,7 @@ export function playShoot(type, source = 0) {
     crackGain.gain.setValueAtTime(0, n);
     crackGain.gain.linearRampToValueAtTime(1.2 * vol, n + 0.003);
     crackGain.gain.exponentialRampToValueAtTime(0.001, n + 0.1);
-    crackNoise.connect(crackFilter).connect(crackGain).connect(masterGain);
+    crackNoise.connect(crackFilter).connect(crackGain).connect(sfxGain);
     crackNoise.start(n);
 
     // 2. 瓜瓤炸开低频闷响
@@ -289,7 +316,7 @@ export function playShoot(type, source = 0) {
     thumpGain.gain.setValueAtTime(0, n);
     thumpGain.gain.linearRampToValueAtTime(1.5 * vol, n + 0.01);
     thumpGain.gain.exponentialRampToValueAtTime(0.001, n + 0.5);
-    thumpOsc.connect(thumpFilter).connect(thumpGain).connect(masterGain);
+    thumpOsc.connect(thumpFilter).connect(thumpGain).connect(sfxGain);
     thumpOsc.start(n);
     thumpOsc.stop(n + 0.5);
 
@@ -304,7 +331,7 @@ export function playShoot(type, source = 0) {
     juiceGain.gain.setValueAtTime(0, n);
     juiceGain.gain.linearRampToValueAtTime(0.9 * vol, n + 0.008);
     juiceGain.gain.exponentialRampToValueAtTime(0.001, n + 0.6);
-    juiceNoise.connect(juiceFilter).connect(juiceGain).connect(masterGain);
+    juiceNoise.connect(juiceFilter).connect(juiceGain).connect(sfxGain);
     juiceNoise.start(n);
 
     // 4. 内部压力释放"噗"声
@@ -316,7 +343,7 @@ export function playShoot(type, source = 0) {
     popGain.gain.setValueAtTime(0, n + 0.02);
     popGain.gain.linearRampToValueAtTime(0.5 * vol, n + 0.03);
     popGain.gain.exponentialRampToValueAtTime(0.001, n + 0.25);
-    popOsc.connect(popGain).connect(masterGain);
+    popOsc.connect(popGain).connect(sfxGain);
     popOsc.start(n + 0.02);
     popOsc.stop(n + 0.25);
     return;
@@ -344,7 +371,7 @@ export function playShoot(type, source = 0) {
   const ng = c.createGain();
   ng.gain.setValueAtTime(x.nV * vol, n);
   ng.gain.exponentialRampToValueAtTime(0.001, n + x.nD);
-  ns.connect(nf); nf.connect(ng); ng.connect(masterGain);
+  ns.connect(nf); nf.connect(ng); ng.connect(sfxGain);
   ns.start(n); ns.stop(n + x.nD);
 
   // 2. 低频冲击层（"轰"的一声枪托顶肩与胸腔共鸣声）
@@ -353,7 +380,7 @@ export function playShoot(type, source = 0) {
   lo.frequency.exponentialRampToValueAtTime(20, n + x.nD * 1.6);
   lg.gain.setValueAtTime(x.lV * vol, n);
   lg.gain.exponentialRampToValueAtTime(0.001, n + x.nD * 1.6);
-  lo.connect(lg); lg.connect(masterGain);
+  lo.connect(lg); lg.connect(sfxGain);
   lo.start(n); lo.stop(n + x.nD * 1.6);
 
   // 3. 瞬态音调层（高频方波，负责提供子弹破膛时的坚硬感与穿透力）
@@ -362,7 +389,7 @@ export function playShoot(type, source = 0) {
   to.frequency.exponentialRampToValueAtTime(30, n + x.tD);
   tg.gain.setValueAtTime(x.tV * vol, n);
   tg.gain.exponentialRampToValueAtTime(0.001, n + x.tD);
-  to.connect(tg); tg.connect(masterGain);
+  to.connect(tg); tg.connect(sfxGain);
   to.start(n); to.stop(n + x.tD + 0.01);
 
   // 4. 高频碎裂层（子弹撞击空气的清脆声痕）
@@ -371,7 +398,7 @@ export function playShoot(type, source = 0) {
     const cf = c.createBiquadFilter(), cg = c.createGain();
     cf.type = 'highpass'; cf.frequency.value = 5500;
     cg.gain.setValueAtTime(x.nV * 0.4 * vol, n); cg.gain.exponentialRampToValueAtTime(0.001, n + 0.025);
-    cs.connect(cf); cf.connect(cg); cg.connect(masterGain);
+    cs.connect(cf); cf.connect(cg); cg.connect(sfxGain);
     cs.start(n); cs.stop(n + 0.025);
   }
 
@@ -421,13 +448,13 @@ export function playReload(type, source = 0) {
   const oscSine = c.createOscillator(), gSine = c.createGain(); // 沉闷撞击主音
   oscSine.type = 'sine'; oscSine.frequency.setValueAtTime(130, t_ins);
   gSine.gain.setValueAtTime(0.8 * vol, t_ins); gSine.gain.exponentialRampToValueAtTime(0.001, t_ins + 0.08);
-  oscSine.connect(gSine).connect(masterGain); oscSine.start(t_ins); oscSine.stop(t_ins + 0.08);
+  oscSine.connect(gSine).connect(sfxGain); oscSine.start(t_ins); oscSine.stop(t_ins + 0.08);
   
   // 补一声枪身内部的低频回响空腔
   const oscSine2 = c.createOscillator(), gSine2 = c.createGain();
   oscSine2.type = 'sine'; oscSine2.frequency.setValueAtTime(65, t_ins);
   gSine2.gain.setValueAtTime(0.5 * vol, t_ins); gSine2.gain.exponentialRampToValueAtTime(0.001, t_ins + 0.14);
-  oscSine2.connect(gSine2).connect(masterGain); oscSine2.start(t_ins); oscSine2.stop(t_ins + 0.14);
+  oscSine2.connect(gSine2).connect(sfxGain); oscSine2.start(t_ins); oscSine2.stop(t_ins + 0.14);
 
   playClickRaw(c, t_ins, 1400, 0.015, 0.4 * vol); // 咬合脆响
   playScrapeRaw(c, t_ins, 0.04, 2800, 0.35 * vol); // 撞击瞬间金属小碎渣音
@@ -441,7 +468,7 @@ export function playReload(type, source = 0) {
   const oscSine3 = c.createOscillator(), gSine3 = c.createGain();
   oscSine3.type = 'sine'; oscSine3.frequency.setValueAtTime(150, t_lock);
   gSine3.gain.setValueAtTime(0.8 * vol, t_lock); gSine3.gain.exponentialRampToValueAtTime(0.001, t_lock + 0.05);
-  oscSine3.connect(gSine3).connect(masterGain); oscSine3.start(t_lock); oscSine3.stop(t_lock + 0.05);
+  oscSine3.connect(gSine3).connect(sfxGain); oscSine3.start(t_lock); oscSine3.stop(t_lock + 0.05);
 
   playRingRaw(c, t_lock, 680, 0.25, 0.35 * vol, 'triangle'); // 机匣低频回响
   playRingRaw(c, t_lock, 1120, 0.18, 0.20 * vol, 'triangle'); // 弹簧高频余震
@@ -464,7 +491,7 @@ export function playMelee(source = 0) {
   g.gain.setValueAtTime(.001, n);
   g.gain.linearRampToValueAtTime(.6 * vol, n + .04);
   g.gain.exponentialRampToValueAtTime(.001, n + .15);
-  ns.connect(f); f.connect(g); g.connect(masterGain);
+  ns.connect(f); f.connect(g); g.connect(sfxGain);
   ns.start(n); ns.stop(n + .15);
 
   const o = c.createOscillator();
@@ -475,7 +502,7 @@ export function playMelee(source = 0) {
   og.gain.setValueAtTime(.001, n);
   og.gain.linearRampToValueAtTime(.25 * vol, n + .06);
   og.gain.exponentialRampToValueAtTime(.001, n + .12);
-  o.connect(og); og.connect(masterGain);
+  o.connect(og); og.connect(sfxGain);
   o.start(n); o.stop(n + .13);
 }
 
@@ -497,7 +524,7 @@ export function playVehicleDoor(source = 0) {
     const ng = c.createGain();
     ng.gain.setValueAtTime((armored ? 0.48 : 0.3) * vol, n);
     ng.gain.exponentialRampToValueAtTime(0.001, n + latchDuration);
-    ns.connect(nf).connect(ng).connect(masterGain);
+    ns.connect(nf).connect(ng).connect(sfxGain);
     ns.start(n);
     ns.stop(n + latchDuration);
     
@@ -509,7 +536,7 @@ export function playVehicleDoor(source = 0) {
     const thumpGain = c.createGain();
     thumpGain.gain.setValueAtTime((armored ? 0.72 : 0.4) * vol, n);
     thumpGain.gain.exponentialRampToValueAtTime(0.001, n + (armored ? 0.2 : 0.12));
-    thump.connect(thumpGain).connect(masterGain);
+    thump.connect(thumpGain).connect(sfxGain);
     thump.start(n);
     thump.stop(n + (armored ? 0.2 : 0.12));
     if (armored) {
@@ -529,7 +556,7 @@ export function playVehicleImpact(source = 0, intensity = 1) {
   nf.type = 'lowpass'; nf.frequency.setValueAtTime(650, n);
   ng.gain.setValueAtTime(0.65 * vol, n);
   ng.gain.exponentialRampToValueAtTime(0.001, n + 0.18);
-  ns.connect(nf).connect(ng).connect(masterGain);
+  ns.connect(nf).connect(ng).connect(sfxGain);
   ns.start(n); ns.stop(n + 0.18);
 
   const thump = c.createOscillator(), thumpGain = c.createGain();
@@ -538,7 +565,7 @@ export function playVehicleImpact(source = 0, intensity = 1) {
   thump.frequency.exponentialRampToValueAtTime(38, n + 0.16);
   thumpGain.gain.setValueAtTime(0.7 * vol, n);
   thumpGain.gain.exponentialRampToValueAtTime(0.001, n + 0.16);
-  thump.connect(thumpGain).connect(masterGain);
+  thump.connect(thumpGain).connect(sfxGain);
   thump.start(n); thump.stop(n + 0.17);
 
   playRingRaw(c, n + 0.01, 420, 0.14, 0.22 * vol, 'triangle');
@@ -563,7 +590,7 @@ export function playExplosion(source = 0, isReaper = false) {
   const lg = c.createGain();
   lg.gain.setValueAtTime(baseVol * vol, n);
   lg.gain.exponentialRampToValueAtTime(.001, n + (isReaper ? 1.5 : 1.0));
-  ns.connect(lf); lf.connect(lg); lg.connect(masterGain);
+  ns.connect(lf); lf.connect(lg); lg.connect(sfxGain);
   ns.start(n); ns.stop(n + (isReaper ? 1.5 : 1.0));
 
   // Layer 2: 正弦波（低频震荡，增强冲击感）
@@ -574,7 +601,7 @@ export function playExplosion(source = 0, isReaper = false) {
   const og = c.createGain();
   og.gain.setValueAtTime((isReaper ? 1.5 : 1.2) * vol, n);
   og.gain.exponentialRampToValueAtTime(.001, n + (isReaper ? 1.2 : 0.8));
-  o.connect(og); og.connect(masterGain);
+  o.connect(og); og.connect(sfxGain);
   o.start(n); o.stop(n + (isReaper ? 1.2 : 0.8));
 
   // Layer 3: 白色噪声（高频碎片声）
@@ -585,7 +612,7 @@ export function playExplosion(source = 0, isReaper = false) {
   const dg = c.createGain();
   dg.gain.setValueAtTime((isReaper ? 0.7 : 0.5) * vol, n);
   dg.gain.exponentialRampToValueAtTime(.001, n + (isReaper ? 0.6 : 0.4));
-  ds.connect(hf); hf.connect(dg); dg.connect(masterGain);
+  ds.connect(hf); hf.connect(dg); dg.connect(sfxGain);
   ds.start(n); ds.stop(n + (isReaper ? 0.6 : 0.4));
   
   // Layer 4: 次声波震荡（死神支援专属，增强震撼感）
@@ -597,7 +624,7 @@ export function playExplosion(source = 0, isReaper = false) {
     const subG = c.createGain();
     subG.gain.setValueAtTime(1.0 * vol, n);
     subG.gain.exponentialRampToValueAtTime(.001, n + 2.0);
-    sub.connect(subG); subG.connect(masterGain);
+    sub.connect(subG); subG.connect(sfxGain);
     sub.start(n); sub.stop(n + 2.0);
   }
 }
@@ -614,7 +641,7 @@ export function playEmpty(source = 0) {
   const og = c.createGain();
   og.gain.setValueAtTime(.25 * vol, n);
   og.gain.exponentialRampToValueAtTime(.001, n + .035);
-  o.connect(og); og.connect(masterGain);
+  o.connect(og); og.connect(sfxGain);
   o.start(n); o.stop(n + .04);
 
   const nb = mkNoise(c, .015, 'white'), ns = c.createBufferSource();
@@ -624,7 +651,7 @@ export function playEmpty(source = 0) {
   const g = c.createGain();
   g.gain.setValueAtTime(.15 * vol, n);
   g.gain.exponentialRampToValueAtTime(.001, n + .015);
-  ns.connect(f); f.connect(g); g.connect(masterGain);
+  ns.connect(f); f.connect(g); g.connect(sfxGain);
   ns.start(n); ns.stop(n + .015);
 }
 
@@ -640,7 +667,7 @@ export function playHurt(source = 0) {
   const impGain = c.createGain();
   impGain.gain.setValueAtTime(0.45 * vol, n);
   impGain.gain.exponentialRampToValueAtTime(0.001, n + 0.09);
-  impOsc.connect(impGain); impGain.connect(masterGain);
+  impOsc.connect(impGain); impGain.connect(sfxGain);
   impOsc.start(n); impOsc.stop(n + 0.09);
 
   const nb = mkNoise(c, 0.14, 'brown'), ns = c.createBufferSource();
@@ -651,7 +678,7 @@ export function playHurt(source = 0) {
   const g = c.createGain();
   g.gain.setValueAtTime(0.55 * vol, n);
   g.gain.exponentialRampToValueAtTime(0.001, n + 0.14);
-  ns.connect(f); f.connect(g); g.connect(masterGain);
+  ns.connect(f); f.connect(g); g.connect(sfxGain);
   ns.start(n); ns.stop(n + 0.14);
 }
 
@@ -667,7 +694,7 @@ export function playDie(source = 0) {
   const og = c.createGain();
   og.gain.setValueAtTime(0.35 * vol, n);
   og.gain.exponentialRampToValueAtTime(0.001, n + 0.9);
-  o.connect(og); og.connect(masterGain);
+  o.connect(og); og.connect(sfxGain);
   o.start(n); o.stop(n + 0.9);
 
   const nb = mkNoise(c, 0.45, 'brown'), ns = c.createBufferSource();
@@ -677,7 +704,7 @@ export function playDie(source = 0) {
   const g = c.createGain();
   g.gain.setValueAtTime(0.45 * vol, n);
   g.gain.exponentialRampToValueAtTime(0.001, n + 0.45);
-  ns.connect(f); f.connect(g); g.connect(masterGain);
+  ns.connect(f); f.connect(g); g.connect(sfxGain);
   ns.start(n); ns.stop(n + 0.45);
 }
 
@@ -692,7 +719,7 @@ export function playPickup(source = 0) {
   const og = c.createGain();
   og.gain.setValueAtTime(.25 * vol, n);
   og.gain.exponentialRampToValueAtTime(.001, n + .09);
-  o.connect(og); og.connect(masterGain);
+  o.connect(og); og.connect(sfxGain);
   o.start(n); o.stop(n + .09);
 
   const nb = mkNoise(c, 0.12, 'white'), ns = c.createBufferSource();
@@ -702,7 +729,7 @@ export function playPickup(source = 0) {
   const g = c.createGain();
   g.gain.setValueAtTime(.15 * vol, n);
   g.gain.exponentialRampToValueAtTime(.001, n + .12);
-  ns.connect(f); f.connect(g); g.connect(masterGain);
+  ns.connect(f); f.connect(g); g.connect(sfxGain);
   ns.start(n); ns.stop(n + .12);
 }
 
@@ -730,7 +757,7 @@ export function playWeaponSwitch(type = 'pistol', source = 0) {
   const g = c.createGain();
   g.gain.setValueAtTime(x.v * vol, n);
   g.gain.exponentialRampToValueAtTime(.001, n + .06);
-  ns.connect(f); f.connect(g); g.connect(masterGain);
+  ns.connect(f); f.connect(g); g.connect(sfxGain);
   ns.start(n); ns.stop(n + .06);
 
   playClickRaw(c, n + .035, x.f2, .018, x.v * 1.3 * vol);
@@ -750,7 +777,7 @@ export function playThrow(source = 0) {
   g.gain.setValueAtTime(.001, n);
   g.gain.linearRampToValueAtTime(.22 * vol, n + .035);
   g.gain.exponentialRampToValueAtTime(.001, n + .16);
-  ns.connect(f); f.connect(g); g.connect(masterGain);
+  ns.connect(f); f.connect(g); g.connect(sfxGain);
   ns.start(n); ns.stop(n + .16);
 }
 
@@ -769,7 +796,7 @@ export function playUISound(type = 'click') {
   const og = c.createGain();
   og.gain.setValueAtTime(x.v, n);
   og.gain.exponentialRampToValueAtTime(.001, n + x.d);
-  o.connect(og); og.connect(masterGain);
+  o.connect(og); og.connect(uiGain);
   o.start(n); o.stop(n + x.d);
 }
 
@@ -795,7 +822,7 @@ export function playShellEject(type = 'pistol', source = 0) {
     osc.type = 'triangle'; osc.frequency.setValueAtTime(rp, t);
     gain.gain.setValueAtTime(0.25 * vm, t);
     gain.gain.exponentialRampToValueAtTime(0.001, t + 0.035 * vm);
-    osc.connect(gain).connect(masterGain);
+    osc.connect(gain).connect(sfxGain);
     osc.start(t); osc.stop(t + 0.04);
 
     // 2. 空心管道金属泛音
@@ -803,7 +830,7 @@ export function playShellEject(type = 'pistol', source = 0) {
     oscH.type = 'sine'; oscH.frequency.setValueAtTime(rp * 1.43, t);
     gainH.gain.setValueAtTime(0.12 * vm, t);
     gainH.gain.exponentialRampToValueAtTime(0.001, t + 0.02 * vm);
-    oscH.connect(gainH).connect(masterGain);
+    oscH.connect(gainH).connect(sfxGain);
     oscH.start(t); oscH.stop(t + 0.03);
 
     // 3. 擦地碎音（前两下）
@@ -815,7 +842,7 @@ export function playShellEject(type = 'pistol', source = 0) {
       const gn = c.createGain();
       gn.gain.setValueAtTime(0.08 * vm, t);
       gn.gain.exponentialRampToValueAtTime(0.001, t + 0.015);
-      ns.connect(flt).connect(gn).connect(masterGain);
+      ns.connect(flt).connect(gn).connect(sfxGain);
       ns.start(t); ns.stop(t + 0.015);
     }
   }
@@ -845,7 +872,7 @@ export function playBulletHit(source) {
   gain.gain.value = 0.35 * vol;
   src.connect(filter);
   filter.connect(gain);
-  gain.connect(masterGain);
+  gain.connect(sfxGain);
   src.start(n);
 
   // 第二层 - 高频"啪"声
@@ -865,7 +892,7 @@ export function playBulletHit(source) {
   gain2.gain.value = 0.2 * vol;
   src2.connect(hp);
   hp.connect(gain2);
-  gain2.connect(masterGain);
+  gain2.connect(sfxGain);
   src2.start(n);
 }
 
@@ -887,7 +914,7 @@ export function playHelmetHit(source = 0) {
     const ng = c.createGain();
     ng.gain.setValueAtTime(0.18 * vol, t);
     ng.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
-    ns.connect(nf).connect(ng).connect(masterGain);
+    ns.connect(nf).connect(ng).connect(sfxGain);
     ns.start(t); ns.stop(t + 0.05);
   }
 }
@@ -907,7 +934,7 @@ export function playRicochet(source = 0) {
   const ng = c.createGain();
   ng.gain.setValueAtTime(0.12 * vol, n);
   ng.gain.exponentialRampToValueAtTime(0.001, n + 0.06);
-  ns.connect(nf).connect(ng).connect(masterGain);
+  ns.connect(nf).connect(ng).connect(sfxGain);
   ns.start(n); ns.stop(n + 0.06);
 }
 
@@ -933,7 +960,7 @@ export function playShellLand(type = 'pistol', bounceIndex = 0, source = 0) {
   osc.frequency.exponentialRampToValueAtTime(rp * 0.6, n + 0.04);
   gain.gain.setValueAtTime(0.08 * vm, n);
   gain.gain.exponentialRampToValueAtTime(0.001, n + 0.04);
-  osc.connect(gain).connect(masterGain);
+  osc.connect(gain).connect(sfxGain);
   osc.start(n); osc.stop(n + 0.05);
 
   // 2. 高频泛音（空心黄铜管共鸣）— 音量降低
@@ -942,7 +969,7 @@ export function playShellLand(type = 'pistol', bounceIndex = 0, source = 0) {
   oscH.frequency.setValueAtTime(rp * 1.47, n);
   gainH.gain.setValueAtTime(0.04 * vm, n);
   gainH.gain.exponentialRampToValueAtTime(0.001, n + 0.025);
-  oscH.connect(gainH).connect(masterGain);
+  oscH.connect(gainH).connect(sfxGain);
   oscH.start(n); oscH.stop(n + 0.03);
 
   // 3. 擦地噪声（仅前两次弹跳）— 音量降低
@@ -953,7 +980,7 @@ export function playShellLand(type = 'pistol', bounceIndex = 0, source = 0) {
     const gn = c.createGain();
     gn.gain.setValueAtTime(0.025 * vm, n);
     gn.gain.exponentialRampToValueAtTime(0.001, n + 0.018);
-    ns.connect(flt).connect(gn).connect(masterGain);
+    ns.connect(flt).connect(gn).connect(sfxGain);
     ns.start(n); ns.stop(n + 0.02);
   }
 }
@@ -969,7 +996,7 @@ export function playRadioOpen() {
     g1.gain.setValueAtTime(0, t);
     g1.gain.linearRampToValueAtTime(0.18, t + 0.005);
     g1.gain.exponentialRampToValueAtTime(0.0001, t + 0.08);
-    osc1.connect(g1).connect(masterGain);
+    osc1.connect(g1).connect(uiGain);
     osc1.start(t); osc1.stop(t + 0.08);
     // 电流噪声
     const sr = c.sampleRate, dur = 0.45, len = sr * dur;
@@ -978,7 +1005,7 @@ export function playRadioOpen() {
     const ns = c.createBufferSource(); ns.buffer = buf;
     const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2600; bp.Q.value = 1.5;
     const ng = c.createGain(); ng.gain.value = 0.6;
-    ns.connect(bp).connect(ng).connect(masterGain);
+    ns.connect(bp).connect(ng).connect(uiGain);
     ns.start(t + 0.08);
     // 信号爆裂
     for (let i = 0; i < 10; i++) {
@@ -987,7 +1014,7 @@ export function playRadioOpen() {
         const st = t + 0.12 + i * 0.008;
         g.gain.setValueAtTime(0.08, st);
         g.gain.exponentialRampToValueAtTime(0.0001, st + 0.005);
-        osc.connect(g).connect(masterGain);
+        osc.connect(g).connect(uiGain);
         osc.start(st); osc.stop(st + 0.005);
     }
     // 中间停顿噪声
@@ -996,7 +1023,7 @@ export function playRadioOpen() {
     const ns2 = c.createBufferSource(); ns2.buffer = buf2;
     const bp2 = c.createBiquadFilter(); bp2.type = 'bandpass'; bp2.frequency.value = 2600; bp2.Q.value = 1.5;
     const ng2 = c.createGain(); ng2.gain.value = 0.6;
-    ns2.connect(bp2).connect(ng2).connect(masterGain);
+    ns2.connect(bp2).connect(ng2).connect(uiGain);
     ns2.start(t + 0.65);
 }
 
@@ -1010,6 +1037,6 @@ export function playRadioClose() {
     g.gain.setValueAtTime(0, t);
     g.gain.linearRampToValueAtTime(0.18, t + 0.005);
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
-    osc.connect(g).connect(masterGain);
+    osc.connect(g).connect(uiGain);
     osc.start(t); osc.stop(t + 0.12);
 }

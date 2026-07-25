@@ -17,6 +17,8 @@ import { WEATHER_DEFS } from '../core/WeatherDefs.js';
 import { DayNightSystem } from '../core/DayNightSystem.js';
 import { PostProcess } from './PostProcess.js';
 import { drawCrosshair, isCrosshairActive } from './CrosshairRenderer.js';
+import { drawPauseMenu, updatePauseAnimation } from './PauseMenuUI.js';
+import { drawSettings, updateSettingsAnimation } from './SettingsUI.js';
 
 export const Renderer = {
     canvas: null,
@@ -494,8 +496,11 @@ export const Renderer = {
         updateRadioAnimation();
         // 更新“无权限打开电台”提示动画（独立于电台面板，电台此时未必打开）
         updateRadioNoPermit();
+        // 更新暂停菜单 / 设置面板动画（自驱 deltaTime，倒带式；需在分支判断前推进，保证关闭动画能播完）
+        updatePauseAnimation();
+        updateSettingsAnimation();
 
-        const menuOpen = GameState.inventoryOpen || GameState.arsenalOpen || GameState.radioOpen || GameState.debugOpen;
+        const menuOpen = GameState.inventoryOpen || GameState.arsenalOpen || GameState.radioOpen || GameState.debugOpen || GameState.paused || GameState.settingsOpen;
         const hud = document.getElementById('hud');
         if (hud) {
             hud.style.display = (menuOpen || GameState.gameOver) ? 'none' : 'flex';
@@ -539,6 +544,39 @@ export const Renderer = {
 
             this._updateShaderLighting();
             drawGameOver(this.ctx, this);   // 内部读 gameOverDelay/gameOverAppearAnim 做早退与 scale/alpha
+            this._renderDayNightOverlay();
+            PostProcess.apply(this._offscreenCanvas, this);
+            return;
+        }
+
+        // 暂停 + 设置：渲染冻结世界 + 毛玻璃模糊背景 + UI 叠加（与背包/军械库同管线）
+        // 暂停菜单作底层（暂停期间始终绘制），设置面板从暂停菜单进入后叠在上层
+        if (GameState.paused || GameState.pauseAnimDirection === 'closing' ||
+            GameState.settingsOpen || GameState.settingsAnimDirection === 'closing') {
+            this._renderWorld();
+            this._renderEntities();
+            WeatherSystem.drawCloudShadows(this.ctx, GameState.camera);
+            WeatherSystem.drawParticles(this.ctx);
+            WeatherSystem.drawOverlay(this.ctx, this);
+            WeatherSystem.drawWeatherEdgeEffects(this.ctx, this);
+
+            this._captureFrameForBlur();
+
+            // 模糊背板取暂停/设置两者进度的较大值，保证 暂停→设置 过渡时模糊不回落闪烁
+            const _pauseRaw = Math.max(GameState.pauseAnimProgress, GameState.settingsAnimProgress);
+            const blurP = easeOutCubic(_pauseRaw);
+            this._drawBlurBackgroundAlpha(0.85 * blurP);
+
+            // 设置打开时暂停菜单 cross-fade 淡出（设置淡入、暂停淡出，二者不同屏叠加）
+            const _settingsP = easeOutCubic(GameState.settingsAnimProgress || 0);
+            if (GameState.paused || GameState.pauseAnimDirection === 'closing') {
+                drawPauseMenu(this.ctx, this, 1 - _settingsP);
+            }
+            if (GameState.settingsOpen || GameState.settingsAnimDirection === 'closing') {
+                drawSettings(this.ctx, this);
+            }
+
+            this._updateShaderLighting();
             this._renderDayNightOverlay();
             PostProcess.apply(this._offscreenCanvas, this);
             return;

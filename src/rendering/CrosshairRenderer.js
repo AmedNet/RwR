@@ -1,6 +1,7 @@
 // src/rendering/CrosshairRenderer.js
 // 动态准星：跟随鼠标，响应散布/后坐力/移动状态
 import { GameState } from '../core/GameState.js';
+import { Settings } from '../data/Settings.js';
 
 // 准星视觉状态（平滑插值用）
 let _visualGap = 6;
@@ -55,7 +56,8 @@ export function isCrosshairActive() {
     const { player } = GameState;
     if (!player || !player.alive || player.dying) return false;
     if (GameState.gameOver || GameState.inventoryOpen || GameState.arsenalOpen ||
-        GameState.radioOpen || GameState.debugOpen) return false;
+        GameState.radioOpen || GameState.debugOpen ||
+        GameState.paused || GameState.settingsOpen) return false;
     const weapon = GameState.getActiveWeapon();
     if (!weapon || weapon.isLoot) return false;
     // 医疗包不显示射击准星
@@ -160,6 +162,9 @@ export function drawCrosshair(ctx) {
         finalColor = `${r},${g},${b}`;
     }
 
+    // 设置：准星颜色覆盖（null=按武器默认/弹药渐变，否则用预设 'R,G,B'）
+    if (Settings.graphics.crosshairColor) finalColor = Settings.graphics.crosshairColor;
+
     // 综合透明度 = 换弹变暗 × 空弹匣闪烁
     const masterAlpha = reloadDim * emptyFlash;
 
@@ -184,17 +189,27 @@ export function drawCrosshair(ctx) {
     ctx.lineWidth = thickness;
     ctx.lineCap = 'round';
 
-    // 四臂
-    ctx.beginPath();
-    ctx.moveTo(0, -gap);
-    ctx.lineTo(0, -gap - armLen);
-    ctx.moveTo(0, gap);
-    ctx.lineTo(0, gap + armLen);
-    ctx.moveTo(-gap, 0);
-    ctx.lineTo(-gap - armLen, 0);
-    ctx.moveTo(gap, 0);
-    ctx.lineTo(gap + armLen, 0);
-    ctx.stroke();
+    // 准星主体（设置样式：0=经典十字 / 1=仅中心点 / 2=圆环；中心点三种样式都保留）
+    const crosshairStyle = Settings.graphics.crosshairStyle;
+    if (crosshairStyle === 2) {
+        // 圆环
+        ctx.beginPath();
+        ctx.arc(0, 0, gap + armLen * 0.5, 0, Math.PI * 2);
+        ctx.stroke();
+    } else if (crosshairStyle === 0) {
+        // 经典十字：四臂
+        ctx.beginPath();
+        ctx.moveTo(0, -gap);
+        ctx.lineTo(0, -gap - armLen);
+        ctx.moveTo(0, gap);
+        ctx.lineTo(0, gap + armLen);
+        ctx.moveTo(-gap, 0);
+        ctx.lineTo(-gap - armLen, 0);
+        ctx.moveTo(gap, 0);
+        ctx.lineTo(gap + armLen, 0);
+        ctx.stroke();
+    }
+    // 样式 1（仅中心点）：不画臂/环，只保留下方中心点
 
     // 中心点
     ctx.shadowBlur = 0;

@@ -5,6 +5,7 @@ import { Renderer } from '../../rendering/Renderer.js';
 import { AmbientSoundManager } from '../../utils/AmbientSoundManager.js';
 import { DayNightSystem } from '../../core/DayNightSystem.js';
 import { setSeatModifier } from './GameplayHandler.js';
+import { applySliderValue } from './PauseHandler.js';
 
 // ─── mousemove ───
 
@@ -26,6 +27,11 @@ export function handleMousemove(e, canvas) {
         const clickX2 = (e.clientX - rect.left) * scaleX;
         const ratio2 = (clickX2 - slider.x) / slider.w;
         DayNightSystem.setTime(Math.max(0, Math.min(1, ratio2)));
+    }
+    // 设置面板音量滑块拖动
+    if (GameState.settingsSliderDragging && GameState.settingsSliderDragArea) {
+        const clickX3 = (e.clientX - rect.left) * scaleX;
+        applySliderValue(GameState.settingsSliderDragArea, clickX3);
     }
 }
 
@@ -50,6 +56,8 @@ export function handleMouseup(e) {
         GameState.mouse.down = false;
         GameState.ambientSliderDragging = false;
         GameState.debugSliderDragging = false;
+        GameState.settingsSliderDragging = null;
+        GameState.settingsSliderDragArea = null;
     }
     if (e.button === 2) GameState.mouse.rightDown = false;
 }

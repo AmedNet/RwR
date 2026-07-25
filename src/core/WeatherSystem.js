@@ -5,6 +5,7 @@ import { WEATHER_DEFS, lerp, lerpAngle, weightedRandom } from './WeatherDefs.js'
 import { WeatherRenderer } from '../rendering/WeatherRenderer.js';
 import { EffectsManager } from '../utils/EffectsManager.js';
 import { TornadoSystem } from './TornadoSystem.js';
+import { Settings, WEATHER_DENSITY_SCALE } from '../data/Settings.js';
 
 export const WeatherSystem = {
   // 状态
@@ -203,7 +204,9 @@ export const WeatherSystem = {
 
     const prevDensity = prevDef.particleDensity || 0;
     const currDensity = currDef.particleDensity || 0;
-    const targetDensity = this.transitioning ? lerp(prevDensity, currDensity, t) : currDensity;
+    // 设置：天气粒子密度档位倍率（off/low/mid/high → 0/0.4/1.0/1.5），一处同时管主粒子+所有派生粒子
+    const densityScale = WEATHER_DENSITY_SCALE[Settings.graphics.weatherDensity] ?? 1.0;
+    const targetDensity = (this.transitioning ? lerp(prevDensity, currDensity, t) : currDensity) * densityScale;
 
     // 使用实际视口尺寸
     const viewW = GameState.viewport.width || 1200;

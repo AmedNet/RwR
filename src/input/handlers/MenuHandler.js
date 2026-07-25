@@ -8,6 +8,7 @@ import { WeaponPickup } from '../../entities/WeaponPickup.js';
 import { LootPickup } from '../../entities/LootPickup.js';
 import { LootItem } from '../../core/LootItem.js';
 import { playUISound } from '../../utils/SoundManager.js';
+import { Settings } from '../../data/Settings.js';
 
 // ─── 军械库辅助函数（原 InputManager._getCategoryItems / _scrollToSelected） ───
 
@@ -74,8 +75,8 @@ function dropSelectedInventoryItem() {
 // ─── keydown 处理（菜单打开时） ───
 
 export function handleMenuKeydown(e, key) {
-    // 关闭菜单（支持中途可反向打断）
-    if (key === 'e') {
+    // 关闭菜单（支持中途可反向打断；与 GameplayHandler 开/关用同一绑定）
+    if (key === Settings.controls.arsenal) {
         if (GameState.arsenalOpen) {
             GameState.toggleArsenal();
             playUISound('click');
@@ -83,7 +84,7 @@ export function handleMenuKeydown(e, key) {
         e.preventDefault();
         return true;
     }
-    if (key === 'q') {
+    if (key === Settings.controls.inventory) {
         if (GameState.inventoryOpen) {
             GameState.toggleInventory();
             playUISound('click');
