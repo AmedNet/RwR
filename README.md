@@ -130,6 +130,7 @@ RwR/
     │   ├── SupportConfig.js   # 支援系统配置（类型/费用/冷却）
     │   ├── Settings.js        # 设置数据模型（图形/音频/键位）+ apply 函数
     │   ├── AIMonologues.js    # AI 闲聊文本
+    │   ├── BriefingDialogues.js # 开局任务简报台词模板 + 随机组装
     │   └── VehicleDialogues.js # 载具对话文本
     │
     ├── entities/              # 游戏实体
@@ -168,6 +169,7 @@ RwR/
     │   ├── RadioUI.js         # 电台呼叫支援界面
     │   ├── PauseMenuUI.js     # 暂停菜单界面
     │   ├── SettingsUI.js      # 设置面板界面（图像/声音/控制）
+    │   ├── DialogueUI.js      # 全屏对话演出层（开局任务简报）
     │   ├── Minimap.js         # 小地图（含载具标记）
     │   ├── JeepRenderer.js    # 吉普车渲染器
     │   ├── BTR80Renderer.js   # BTR-80 装甲车渲染器
@@ -181,6 +183,7 @@ RwR/
     │       ├── GameplayHandler.js  # 游戏逻辑输入
     │       ├── MenuHandler.js      # 菜单输入
     │       ├── PauseHandler.js     # 暂停菜单 + 设置面板输入
+    │       ├── DialogueHandler.js  # 对话演出层输入（推进对话）
     │       ├── MouseHandler.js     # 鼠标输入
     │       ├── RadioHandler.js     # 电台输入
     │       ├── DebugHandler.js     # Debug 面板输入
@@ -195,6 +198,7 @@ RwR/
         ├── StatusEffects.js   # 状态效果（燃烧、减速等）
         ├── WeaponAI.js        # AI 武器选择逻辑
         ├── AIMonologueSystem.js # AI 闲聊系统
+        ├── DialogueSystem.js  # 对话状态机（打字机/逐句推进）
         └── VehicleChatSystem.js # 载具对话系统
 ```
 
@@ -273,10 +277,10 @@ npx serve
   - 配置数据分离 → GameConfig.js + SupportConfig.js
   - main.js 整理（分区注释 + 剧情占位）
   - 剧情基础设施 → EventBus + CampaignManager + MissionData
+- [x] 对话
 
 ## 开发中功能
 
-- [ ] 对话?
 - [ ] 主菜单
 - [ ] 剧情模式(未来)
 - [ ] 更多载具类型(未来)

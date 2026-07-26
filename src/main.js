@@ -23,6 +23,8 @@ import { AmbientSoundManager } from './utils/AmbientSoundManager.js';
 import { SupportSystem } from './core/SupportSystem.js';
 import { Vehicle } from "./entities/Vehicle.js";
 import { VehicleRegistry } from "./core/VehicleRegistry.js";
+import { DialogueSystem } from './utils/DialogueSystem.js';
+import { generateBriefing } from './data/BriefingDialogues.js';
 
 // ---------- 配置 ----------
 import { CONFIG, GAME_CONSTANTS } from './data/GameConfig.js';
@@ -347,9 +349,9 @@ function gameLoop() {
         GameState._fpsLastTime = now;
     }
 
-    // 暂停冻结：跳过所有世界 update（特效/天气/昼夜/环境音/支援/摄像机/实体/碰撞），
-    // 但仍 render —— 暂停菜单/设置面板动画是渲染函数内自驱 deltaTime，照常推进
-    if (GameState.paused) {
+    // 暂停/对话冻结：跳过所有世界 update（特效/天气/昼夜/环境音/支援/摄像机/实体/碰撞），
+    // 但仍 render —— 暂停菜单/设置面板/对话框动画是渲染函数内自驱 deltaTime，照常推进
+    if (GameState.paused || GameState.dialogueOpen) {
         Renderer.render();
         Minimap.render();
         requestAnimationFrame(gameLoop);
@@ -631,6 +633,9 @@ function init() {
     console.log('🎮 游戏初始化完成！');
     console.log(`📐 地图大小: ${CONFIG.world.width} x ${CONFIG.world.height}`);
     console.log(`📍 据点数量: ${GameState.capturePoints.length}`);
+
+    // 开局任务简报：天气/地形/据点已就绪，弹出 galgame 式对话演出（世界冻结，逐句推进）
+    DialogueSystem.start(generateBriefing());
 
     gameLoop();
 }

@@ -19,6 +19,7 @@ import { PostProcess } from './PostProcess.js';
 import { drawCrosshair, isCrosshairActive } from './CrosshairRenderer.js';
 import { drawPauseMenu, updatePauseAnimation } from './PauseMenuUI.js';
 import { drawSettings, updateSettingsAnimation } from './SettingsUI.js';
+import { drawDialogue, updateDialogueAnimation } from './DialogueUI.js';
 
 export const Renderer = {
     canvas: null,
@@ -499,8 +500,10 @@ export const Renderer = {
         // 更新暂停菜单 / 设置面板动画（自驱 deltaTime，倒带式；需在分支判断前推进，保证关闭动画能播完）
         updatePauseAnimation();
         updateSettingsAnimation();
+        // 更新对话演出动画 + 打字机（世界冻结期仍每帧 tick）
+        updateDialogueAnimation();
 
-        const menuOpen = GameState.inventoryOpen || GameState.arsenalOpen || GameState.radioOpen || GameState.debugOpen || GameState.paused || GameState.settingsOpen;
+        const menuOpen = GameState.inventoryOpen || GameState.arsenalOpen || GameState.radioOpen || GameState.debugOpen || GameState.paused || GameState.settingsOpen || GameState.dialogueOpen;
         const hud = document.getElementById('hud');
         if (hud) {
             hud.style.display = (menuOpen || GameState.gameOver) ? 'none' : 'flex';
@@ -544,6 +547,27 @@ export const Renderer = {
 
             this._updateShaderLighting();
             drawGameOver(this.ctx, this);   // 内部读 gameOverDelay/gameOverAppearAnim 做早退与 scale/alpha
+            this._renderDayNightOverlay();
+            PostProcess.apply(this._offscreenCanvas, this);
+            return;
+        }
+
+        // 对话演出（开局简报等）：渲染冻结世界 + 毛玻璃模糊背景 + 全屏对话层（与暂停/电台同管线）
+        // 优先级高于暂停菜单：简报期间世界冻结，逐句推进，看完关闭动画播完才解冻
+        if (GameState.dialogueOpen || GameState.dialogueAnimDirection === 'closing') {
+            this._renderWorld();
+            this._renderEntities();
+            WeatherSystem.drawCloudShadows(this.ctx, GameState.camera);
+            WeatherSystem.drawParticles(this.ctx);
+            WeatherSystem.drawOverlay(this.ctx, this);
+            WeatherSystem.drawWeatherEdgeEffects(this.ctx, this);
+
+            this._captureFrameForBlur();
+            const blurP = easeOutCubic(GameState.dialogueAnimProgress);
+            this._drawBlurBackgroundAlpha(0.85 * blurP);
+
+            drawDialogue(this.ctx, this);
+            this._updateShaderLighting();
             this._renderDayNightOverlay();
             PostProcess.apply(this._offscreenCanvas, this);
             return;

@@ -145,6 +145,13 @@ export const GameState = {
     settingsTabFocusAnim: 0,
     _settingsTabFocusLastTime: null,
 
+    // 对话演出系统（开局简报等 galgame 式全屏对话，镜像 pause 的动画三件套）
+    dialogueOpen: false,            // 对话框是否打开（世界 update 冻结，仍 render 对话层）
+    dialogueAnimProgress: 0,        // 对话动画进度 0~1（开/关共用，倒带式）
+    dialogueAnimDirection: null,    // 'opening' | 'closing' | null（支持中途反向打断）
+    _dialogueAnimLastTime: null,    // 动画计时基准（performance.now）
+    dialogueHitAreas: [],           // 对话框点击热区 [{id,x,y,w,h}]（点击任意处推进）
+
     gameOverSelectedPoint: -1, // 死亡界面当前悬浮的据点索引
     respawnHitAreas: [], // 死亡界面据点点击热区 [{x, y, r, index}]
     // 死亡界面据点焦点滑动（鼠标悬浮/数字键切选时高亮从旧据点滑到新据点，easeOutBack 末端轻过冲）
@@ -382,5 +389,11 @@ this.inventoryHitAreas = [];
         this.settingsTabFocusIndex = -1;
         this.settingsTabFocusAnim = 0;
         this._settingsTabFocusLastTime = null;
+        // 对话演出系统重置
+        this.dialogueOpen = false;
+        this.dialogueAnimProgress = 0;
+        this.dialogueAnimDirection = null;
+        this._dialogueAnimLastTime = null;
+        this.dialogueHitAreas = [];
     }
 };

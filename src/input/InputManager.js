@@ -8,6 +8,7 @@ import { handleDebugKeydown, handleDebugMousedown } from './handlers/DebugHandle
 import { handleGameplayKeydown, handleGameplayKeyup } from './handlers/GameplayHandler.js';
 import { handleMousemove, handleNormalMousedown, handleMouseup, handleBlur } from './handlers/MouseHandler.js';
 import { handlePauseKeydown, handlePauseMousedown, handleSettingsKeydown, handleSettingsMousedown } from './handlers/PauseHandler.js';
+import { handleDialogueKeydown, handleDialogueMousedown } from './handlers/DialogueHandler.js';
 
 export const InputManager = {
     setup() {
@@ -19,6 +20,12 @@ export const InputManager = {
             // 死亡状态
             if (GameState.gameOver) {
                 handleDeathKeydown(e, key);
+                return;
+            }
+
+            // 对话演出打开（空格/回车推进，吞噬其余键；世界保持冻结）
+            if (GameState.dialogueOpen || GameState.dialogueAnimDirection === 'closing') {
+                handleDialogueKeydown(e, key);
                 return;
             }
 
@@ -75,6 +82,12 @@ export const InputManager = {
             }
             if (e.button === 0) {
                 GameState.mouse.down = true;
+
+                // 对话演出点击（推进对话，优先于其它面板）
+                if (GameState.dialogueOpen || GameState.dialogueAnimDirection === 'closing') {
+                    handleDialogueMousedown(e, canvas);
+                    return;
+                }
 
                 // 设置面板点击（优先于暂停菜单，设置叠在上层）
                 if (GameState.settingsOpen || GameState.settingsAnimDirection === 'closing') {
