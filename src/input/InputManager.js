@@ -9,6 +9,13 @@ import { handleGameplayKeydown, handleGameplayKeyup } from './handlers/GameplayH
 import { handleMousemove, handleNormalMousedown, handleMouseup, handleBlur } from './handlers/MouseHandler.js';
 import { handlePauseKeydown, handlePauseMousedown, handleSettingsKeydown, handleSettingsMousedown } from './handlers/PauseHandler.js';
 import { handleDialogueKeydown, handleDialogueMousedown } from './handlers/DialogueHandler.js';
+import { handleMainMenuMousedown } from './handlers/MainMenuHandler.js';
+
+// 首次手势回调（presskey → menu），由 main.js 注入避免循环依赖
+let firstGestureHandler = null;
+export function setFirstGestureHandler(fn) {
+    firstGestureHandler = fn;
+}
 
 export const InputManager = {
     setup() {
@@ -16,6 +23,20 @@ export const InputManager = {
 
         document.addEventListener('keydown', (e) => {
             const key = e.key.toLowerCase();
+
+            // presskey / warming 阶段：任意键进入主菜单（忽略 autorepeat；按键顺带解锁音频）
+            // warming 时 onFirstGesture 自行 guard（phase!=='presskey' 直接 return），此处仅吞键防穿透
+            if (GameState.phase === 'presskey' || GameState.phase === 'warming') {
+                if (!e.repeat && firstGestureHandler) firstGestureHandler();
+                e.preventDefault();
+                return;
+            }
+
+            // menu 阶段：吞噬游戏操作键（设置打开时由下方 settingsOpen 分支处理）
+            if (GameState.phase === 'menu' && !GameState.settingsOpen && GameState.settingsAnimDirection !== 'closing') {
+                e.preventDefault();
+                return;
+            }
 
             // 死亡状态
             if (GameState.gameOver) {
@@ -82,6 +103,20 @@ export const InputManager = {
             }
             if (e.button === 0) {
                 GameState.mouse.down = true;
+
+                // presskey / warming 阶段：任意点击进入主菜单（warming 时 onFirstGesture 自行 guard）
+                if (GameState.phase === 'presskey' || GameState.phase === 'warming') {
+                    if (firstGestureHandler) firstGestureHandler();
+                    e.preventDefault();
+                    return;
+                }
+
+                // menu 阶段：主菜单按钮点击（命中则分发；无论命中与否都吞掉，防穿透开火）
+                if (GameState.phase === 'menu' && !GameState.settingsOpen && GameState.settingsAnimDirection !== 'closing') {
+                    handleMainMenuMousedown(e, canvas);
+                    e.preventDefault();
+                    return;
+                }
 
                 // 对话演出点击（推进对话，优先于其它面板）
                 if (GameState.dialogueOpen || GameState.dialogueAnimDirection === 'closing') {

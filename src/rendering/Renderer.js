@@ -20,6 +20,7 @@ import { drawCrosshair, isCrosshairActive } from './CrosshairRenderer.js';
 import { drawPauseMenu, updatePauseAnimation } from './PauseMenuUI.js';
 import { drawSettings, updateSettingsAnimation } from './SettingsUI.js';
 import { drawDialogue, updateDialogueAnimation } from './DialogueUI.js';
+import { drawLoadingScreen, drawPressKeyScreen, drawMainMenu, updateMenuAnimation } from './MainMenuUI.js';
 
 export const Renderer = {
     canvas: null,
@@ -502,17 +503,32 @@ export const Renderer = {
         updateSettingsAnimation();
         // 更新对话演出动画 + 打字机（世界冻结期仍每帧 tick）
         updateDialogueAnimation();
+        // 更新主菜单出现动画（menu 阶段单向淡入）
+        updateMenuAnimation();
 
         const menuOpen = GameState.inventoryOpen || GameState.arsenalOpen || GameState.radioOpen || GameState.debugOpen || GameState.paused || GameState.settingsOpen || GameState.dialogueOpen;
         const hud = document.getElementById('hud');
         if (hud) {
-            hud.style.display = (menuOpen || GameState.gameOver) ? 'none' : 'flex';
+            // 非游玩阶段（loading/presskey/menu）隐藏 DOM HUD（P1-11）
+            hud.style.display = (menuOpen || GameState.gameOver || GameState.phase !== 'playing') ? 'none' : 'flex';
         }
 
         // 准星显示时隐藏系统鼠标；准星不显示（菜单/死亡/医疗包/战利品）时恢复系统鼠标
         const canvas = document.getElementById("gameCanvas");
         if (canvas) {
             canvas.style.cursor = isCrosshairActive() ? "none" : "default";
+        }
+
+        // 阶段界面：loading / presskey（纯 2D 全屏，不渲染世界）—— 优先级最高
+        if (GameState.phase === 'loading') {
+            drawLoadingScreen(this.ctx, this);
+            PostProcess.apply(this._offscreenCanvas, this);
+            return;
+        }
+        if (GameState.phase === 'presskey' || GameState.phase === 'warming') {
+            drawPressKeyScreen(this.ctx, this);
+            PostProcess.apply(this._offscreenCanvas, this);
+            return;
         }
 
         // Game Over 优先级最高
@@ -567,6 +583,23 @@ export const Renderer = {
             this._drawBlurBackgroundAlpha(0.85 * blurP);
 
             drawDialogue(this.ctx, this);
+            this._updateShaderLighting();
+            this._renderDayNightOverlay();
+            PostProcess.apply(this._offscreenCanvas, this);
+            return;
+        }
+
+        // 主菜单：渲染背景战斗（世界+实体+天气）+ 菜单叠加（轻微压暗不模糊，看清战斗）
+        // 守卫 !settingsOpen：设置打开时落到下方 pause/settings 分支绘制（P1-8）
+        if (GameState.phase === 'menu' && !GameState.settingsOpen && GameState.settingsAnimDirection !== 'closing') {
+            this._renderWorld();
+            this._renderEntities();
+            WeatherSystem.drawCloudShadows(this.ctx, GameState.camera);
+            WeatherSystem.drawParticles(this.ctx);
+            WeatherSystem.drawOverlay(this.ctx, this);
+            WeatherSystem.drawWeatherEdgeEffects(this.ctx, this);
+
+            drawMainMenu(this.ctx, this);
             this._updateShaderLighting();
             this._renderDayNightOverlay();
             PostProcess.apply(this._offscreenCanvas, this);

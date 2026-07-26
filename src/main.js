@@ -25,10 +25,16 @@ import { Vehicle } from "./entities/Vehicle.js";
 import { VehicleRegistry } from "./core/VehicleRegistry.js";
 import { DialogueSystem } from './utils/DialogueSystem.js';
 import { generateBriefing } from './data/BriefingDialogues.js';
+// ─── 主菜单 / 加载流程 ───
+import { preloadAssets, getMenuMusicArrayBuffer } from './core/AssetLoader.js';
+import { startMenuMusic, stopMenuMusic, stopVehicleEngine, muteBattleSfx, setFocusMuted } from './utils/SoundManager.js';
+import { setMenuActions } from './input/handlers/MainMenuHandler.js';
+import { setQuitToMenu } from './input/handlers/PauseHandler.js';
+import { setFirstGestureHandler } from './input/InputManager.js';
 
 // ---------- 配置 ----------
 import { CONFIG, GAME_CONSTANTS } from './data/GameConfig.js';
-import { applyGraphics, applyAudio } from './data/Settings.js';
+import { Settings, applyGraphics, applyAudio } from './data/Settings.js';
 // ---------- 剧情系统 (TODO: 后续阶段集成) ----------
 // import { CampaignManager } from './campaign/CampaignManager.js';
 
@@ -349,6 +355,46 @@ function gameLoop() {
         GameState._fpsLastTime = now;
     }
 
+    // ─── 阶段门控（loading / presskey / menu / playing） ───
+    // loading / presskey：只渲染对应界面，绝不跑任何世界 update
+    // （天气/昼夜/支援等系统虽已 boot init，但此阶段无地图/实体，渲染纯 2D 界面即可）
+    if (GameState.phase === 'loading') {
+        Renderer.render();
+        requestAnimationFrame(gameLoop);
+        return;
+    }
+    if (GameState.phase === 'presskey') {
+        Renderer.render();
+        requestAnimationFrame(gameLoop);
+        return;
+    }
+    // warming：背景战斗分片预热（每帧跑一批 stepMenuSimulation，跑完进 menu）
+    // 界面沿用 presskey 屏（底部显示「正在生成战场…」），把原同步 900 帧循环拆到多帧，消除进菜单卡顿
+    if (GameState.phase === 'warming') {
+        for (let i = 0; i < MENU_WARMUP_BATCH && menuWarmupRemaining > 0; i++) {
+            stepMenuSimulation();
+            menuWarmupRemaining--;
+        }
+        if (menuWarmupRemaining <= 0) {
+            // 预热完成 → 进菜单（出现动画从头淡入；摄像机首帧由 updateMenuCamera 定位）
+            GameState.mainMenuAnimProgress = 0;
+            GameState._mainMenuAnimLastTime = null;
+            GameState.phase = 'menu';
+        }
+        Renderer.render();
+        requestAnimationFrame(gameLoop);
+        return;
+    }
+    // menu：背景 AI 战斗独立更新块（不含玩家逻辑）+ 渲染
+    // （小地图仅游玩阶段显示，Minimap.render 内部 guard phase!=='playing'，此分支无需调用）
+    if (GameState.phase === 'menu') {
+        updateMenuBattle();
+        Renderer.render();
+        requestAnimationFrame(gameLoop);
+        return;
+    }
+
+    // ─── playing 阶段 ───
     // 暂停/对话冻结：跳过所有世界 update（特效/天气/昼夜/环境音/支援/摄像机/实体/碰撞），
     // 但仍 render —— 暂停菜单/设置面板/对话框动画是渲染函数内自驱 deltaTime，照常推进
     if (GameState.paused || GameState.dialogueOpen) {
@@ -371,8 +417,8 @@ function gameLoop() {
     // 更新支援系统
     SupportSystem.update();
 
-    // G键长按检测（打开/关闭电台）
-    if (GameState.radioGKeyPressed && !GameState.radioGKeyConsumed && !GameState.gameOver) {
+    // G键长按检测（打开/关闭电台）—— 仅 playing 阶段（menu 阶段输入已被 InputManager 门控，此处显式守卫双保险）
+    if (GameState.phase === 'playing' && GameState.radioGKeyPressed && !GameState.radioGKeyConsumed && !GameState.gameOver) {
         GameState.radioGKeyTimer++;
         if (GameState.radioGKeyTimer >= 18) {
             if (GameState.radioOpen) {
@@ -422,8 +468,8 @@ function gameLoop() {
         }
     }
 
-    // 更新摄像机
-    if (GameState.player && !GameState.gameOver) {
+    // 更新摄像机（跟随玩家，仅 playing 阶段；menu 阶段的漂移摄像机在 updateMenuBattle 内独立驱动）
+    if (GameState.phase === 'playing' && GameState.player && !GameState.gameOver) {
         const player = GameState.player;
         const world = GameState.config.world;
         const canvasWidth = Renderer.width;
@@ -474,11 +520,125 @@ function gameLoop() {
     requestAnimationFrame(gameLoop);
 }
 
+// ─── 主菜单背景战斗调参 ───
+const MENU_CAMERA_ZOOM = 0.7;    // 菜单摄像机缩放（<1 放宽视野，看到更大战场）
+const MENU_WARMUP_FRAMES = 480;  // 进菜单预热模拟总帧数（~8s；两军贴脸接火，预热积累血迹/伤亡/战线，呈现「打了一阵」）
+const MENU_WARMUP_BATCH = 30;    // warming 阶段每帧跑的预热步数（分片到多帧，480/30≈16 帧≈0.27s，不冻主线程）
+const MENU_ENEMY_COUNT = 15;     // 背景战斗红队初始数量（匹配蓝队，打出像样的拉锯）
+// 旁观漫游镜头：纯 Lissajous 正弦漫游，中心锚定在战场（setupBackgroundBattle 记录的交火点）。
+// 位置是「时间」的纯函数 → 数学上连续可导：绝对平滑（不抖动/不乱动）、速度均匀、永不停留；
+// X/Y 频率不可公度 → 轨迹永不重复，看起来像随机漫游。不读任何逐帧游戏状态，杜绝抖动源。
+const MENU_CAM_FREQ_X = 0.050;   // X 正弦频率（弧度/秒，周期~126s）——缓慢横扫
+const MENU_CAM_FREQ_Y = 0.037;   // Y 正弦频率（弧度/秒，周期~170s，与 X 不可公度→不重复）
+const MENU_CAM_PHASE_Y = 1.7;    // Y 初相位（与 X 错开，轨迹不塌成直线）
+const MENU_CAM_DRIFT = 0.35;     // 漫游振幅（单位：可视宽度倍数）——极值时交火点恰在屏缘，战场始终大部分在画面内
+let menuBattleCenter = null;     // 背景战斗交火中心（setupBackgroundBattle 写入；摄像机漫游锚点）
+let menuWarmupRemaining = 0;     // warming 阶段剩余预热帧数（beginMenuWarmup 设置，gameLoop 分帧消费）
+
+// ---------- 菜单背景战斗：世界模拟一步（不含摄像机；预热与每帧共用） ----------
+// 关键差异（见计划 P0-2/P0-3）：
+//  - 不调 player.update()（dummy 玩家 alive=false，且 Player.update 死亡路径不 guard alive）
+//  - 必含 capturePoints[i].update()（驱动 AI 攻防角色，player-null-safe）
+//    与 updateTeammateRespawns()（蓝队阵亡后重生，否则战斗会熄火成纯红队）
+function stepMenuSimulation() {
+    // 环境系统（boot 阶段已 init，此处运行安全）
+    EffectsManager.update();
+    WeatherSystem.update();
+    DayNightSystem.update();
+    AmbientSoundManager.update();
+    SupportSystem.update();
+
+    // 据点推进（驱动 AI 攻防角色切换）
+    for (const point of GameState.capturePoints) {
+        point.update();
+    }
+
+    // 敌方补员：红队被全歼且已无红方据点（spawnEnemy 会返回 null）时，
+    // 在蓝队重心附近补一波，避免背景战斗彻底熄火（用户未要求循环，此为低强度维持）
+    if (GameState.enemies.length === 0) {
+        const hasEnemyPoint = GameState.capturePoints.some(p => p.owner === 'enemy');
+        if (!hasEnemyPoint && GameState.teammates.length > 0) {
+            let cx = 0, cy = 0;
+            for (const t of GameState.teammates) { cx += t.x; cy += t.y; }
+            cx /= GameState.teammates.length;
+            cy /= GameState.teammates.length;
+            SpawnSystem.spawnCustomWave({ count: 6, x: cx, y: cy, radius: 320 });
+        }
+    }
+
+    // 实体更新（不含玩家）
+    SpawnSystem.update();
+    for (const enemy of GameState.enemies) enemy.update();
+    for (const teammate of GameState.teammates) teammate.update();
+    for (const bullet of GameState.bullets) bullet.update();
+    for (const grenade of GameState.grenades) grenade.update();
+    for (const pickup of GameState.weaponPickups) pickup.update();
+    for (const loot of GameState.lootPickups) loot.update();
+    CollisionSystem.checkAll();
+
+    // 过滤死亡实体
+    GameState.enemies = GameState.enemies.filter(e => e.alive);
+    GameState.bullets = GameState.bullets.filter(b => b.alive);
+    GameState.grenades = GameState.grenades.filter(g => g.alive);
+    GameState.weaponPickups = GameState.weaponPickups.filter(p => p.alive);
+    GameState.lootPickups = GameState.lootPickups.filter(p => p.alive);
+    GameState.teammates = GameState.teammates.filter(t => t.alive);
+
+    // 蓝队重生（防熄火）
+    updateTeammateRespawns();
+}
+
+// ---------- 菜单摄像机：纯 Lissajous 平滑漫游（锚定战场，连续不停、绝不抖动） ----------
+// 位置 = 战场中心 + 两组不同频率正弦偏移，是时间的纯函数：平滑、匀速、不停、轨迹永不重复。
+// 不追逐任何逐帧变化的目标（旧版追「重心」会因单位阵亡/重生而跳 → 抖动），从根上消除乱动。
+// 几何：camera.x/y 是镜头左上角世界坐标 = 镜头中心 - 可视半宽；夹取边距按 zoom<1 推导。
+function updateMenuCamera() {
+    const world = GameState.config.world;
+    const vw = Renderer.width;
+    const vh = Renderer.height;
+    const zoom = MENU_CAMERA_ZOOM;
+    GameState.camera.zoom = zoom;
+    GameState.camera.targetZoom = zoom;
+
+    // zoom<1 的安全夹取边距（缩放绕屏幕中心）：保证缩小后边缘不露地图外空白
+    const marginLeft = vw * (1 - zoom) / (2 * zoom);
+    const marginRight = vw * (1 + zoom) / (2 * zoom);
+    const marginTop = vh * (1 - zoom) / (2 * zoom);
+    const marginBottom = vh * (1 + zoom) / (2 * zoom);
+    const minX = marginLeft, maxX = Math.max(marginLeft, world.width - marginRight);
+    const minY = marginTop, maxY = Math.max(marginTop, world.height - marginBottom);
+
+    // 漫游锚点：背景战斗的交火中心（无则回落地图中心）
+    const anchorX = menuBattleCenter ? menuBattleCenter.x : world.width / 2;
+    const anchorY = menuBattleCenter ? menuBattleCenter.y : world.height / 2;
+
+    // 振幅按可视尺寸自适应（zoom 越小可视越宽，漫游范围随之放大）
+    const ampX = (vw / zoom) * MENU_CAM_DRIFT;
+    const ampY = (vh / zoom) * MENU_CAM_DRIFT;
+
+    // 纯时间驱动正弦漫游：平滑、匀速、不停、永不重复
+    const t = performance.now() / 1000;
+    const centerX = anchorX + ampX * Math.sin(t * MENU_CAM_FREQ_X);
+    const centerY = anchorY + ampY * Math.sin(t * MENU_CAM_FREQ_Y + MENU_CAM_PHASE_Y);
+
+    // 镜头左上角 = 中心 - 可视半宽，夹取到地图内（安全兜底）
+    GameState.camera.x = Math.max(minX, Math.min(maxX, centerX - vw / 2));
+    GameState.camera.y = Math.max(minY, Math.min(maxY, centerY - vh / 2));
+    GameState.camera.offsetX = 0;
+    GameState.camera.offsetY = 0;
+}
+
+// ---------- 菜单阶段每帧：模拟一步 + 摄像机漂移 ----------
+function updateMenuBattle() {
+    stepMenuSimulation();
+    updateMenuCamera();
+}
 
 
-// ---------- 初始化 ----------
-function init() {
-    console.log('🚀 初始化游戏...');
+
+// ---------- 启动：系统引导（只跑一次；gameLoop 启动前完成所有系统 init —— P0-1） ----------
+function bootSystems() {
+    console.log('🚀 引导系统...');
     GameState.config = CONFIG;
     setListenerProvider(() => GameState.player);
 
@@ -488,13 +648,10 @@ function init() {
 
     InputManager.setup();
 
-    // 初始化地图和据点
-    initMap();
-    initCapturePoints();
-
-    resetGame();
-    initVehicles();
-    console.log('✅ 游戏重置完成，准备开始循环');
+    // 注入主菜单/暂停菜单/首次手势的动作回调（避免 main↔handler 循环依赖）
+    setMenuActions({ startMatch, quitGame });
+    setQuitToMenu(quitToMenu);
+    setFirstGestureHandler(onFirstGesture);
 
     // ---- 事件监听 ----
     EventBus.on('player_hurt', (data) => {
@@ -606,38 +763,174 @@ function init() {
         // 清除被炸死的敌人
         GameState.enemies = GameState.enemies.filter(e => e.alive);
 
-        // 如果玩家被炸死
-        if (GameState.player && !GameState.player.alive && !GameState.gameOver) {
+        // 如果玩家被炸死（仅游玩阶段；菜单的假玩家 alive=false，否则第一次爆炸就误判阵亡弹出死亡界面）
+        if (GameState.phase === 'playing' && GameState.player && !GameState.player.alive && !GameState.gameOver) {
             GameState.triggerDeath();
             EventBus.emit('game_over');
         }
     });
 
-    // 初始化天气系统
+    // 初始化所有世界系统（必须在 gameLoop 启动前完成：天气/昼夜/支援的 update 在各自 init 前会崩 —— P0-1）
     WeatherSystem.init();
-
-    // 初始化昼夜循环系统
     DayNightSystem.init();
-    // 初始化环境音效系统
     AmbientSoundManager.init();
-    // 初始化小地图
     Minimap.init();
-
-    // 初始化支援系统
+    Minimap.canvas.style.display = 'none'; // 初始隐藏，仅游玩阶段由 Minimap.render 显示
     SupportSystem.init();
 
     // 应用设置（把默认图形/音频参数写入运行系统；音频总线在 SoundManager.initAudio 后已就绪）
     applyGraphics();
     applyAudio();
 
-    console.log('🎮 游戏初始化完成！');
-    console.log(`📐 地图大小: ${CONFIG.world.width} x ${CONFIG.world.height}`);
-    console.log(`📍 据点数量: ${GameState.capturePoints.length}`);
+    // 失焦静音：切后台/最小化时静音全部音频（含菜单音乐），回前台恢复。由 Settings.audio.muteOnBlur 门控（默认开）。
+    // 回前台无条件 setFocusMuted(false)：即使设置已关，总闸本就为 1，淡入到 1 是无害空操作。
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            if (Settings.audio.muteOnBlur) setFocusMuted(true);
+        } else {
+            setFocusMuted(false);
+        }
+    });
 
-    // 开局任务简报：天气/地形/据点已就绪，弹出 galgame 式对话演出（世界冻结，逐句推进）
-    DialogueSystem.start(generateBriefing());
-
+    // 进入 loading 阶段，启动主循环（此后由 gameLoop 按 phase 门控）
+    GameState.phase = 'loading';
+    console.log('🎮 系统引导完成，进入加载阶段');
     gameLoop();
+}
+
+// ---------- 加载阶段：预加载资源 → 生成背景地图 → presskey ----------
+async function runLoading() {
+    try {
+        // 预加载资源（驱动进度条 + 预热浏览器缓存；单个失败不阻塞整体）
+        await preloadAssets(p => { GameState.loadProgress = p; });
+
+        // 生成背景战斗的地图 + 据点（同步耗时，进度条填满后执行）
+        initMap();
+        initCapturePoints();
+
+        // 加载完毕 → 等待任意键
+        GameState.phase = 'presskey';
+        console.log('✅ 资源加载完成，等待按键开始');
+    } catch (err) {
+        // 加载失败：写入 loadError，drawLoadingScreen 显示错误并停止转圈（避免永久卡在加载界面）
+        GameState.loadError = err && err.message ? err.message : String(err);
+        console.error('❌ 资源加载失败:', err);
+    }
+}
+
+// ---------- 主菜单音频：静音战斗/环境音，仅保留主总线上的菜单音乐 ----------
+// sfx 子总线（枪械/爆炸/载具）置 0、环境音主音量置 0；进入游玩时由 applyAudio() 依据 Settings 恢复。
+// 须在 warming 阶段的预热模拟之前调用，否则预热产生的枪声会漏出来。
+function enterMenuAudio() {
+    muteBattleSfx();
+    AmbientSoundManager.setMasterVolume(0);
+}
+
+// ---------- 首次手势：presskey → menu（按键顺带解锁浏览器音频锁） ----------
+function onFirstGesture() {
+    if (GameState.phase !== 'presskey') return;
+    enterMenuAudio();                          // 先静音战斗/环境音（预热模拟也在静音下进行）
+    setupBackgroundBattle();                   // 搭建两军（不含预热循环）
+    startMenuMusic(getMenuMusicArrayBuffer()); // 菜单背景音乐起
+    beginMenuWarmup();                         // 分片预热 → warming 阶段（跑完自动进 menu）
+    console.log('🎮 进入主菜单');
+}
+
+// ---------- 搭建背景 AI 战斗（首次进菜单 与 游戏内退出到主菜单 共用） ----------
+function setupBackgroundBattle() {
+    GameState.reset(); // 清实体/UI 状态（不重置 map/capturePoints/weather/camera/phase）
+
+    const config = GameState.config;
+    const world = config.world;
+
+    // 假玩家：alive=false → CollisionSystem.checkAll 不 bail（非空），但全代码库对其惰性，
+    // 敌人索敌/敌方子弹/载具撞击/医疗光环全跳过它，因此菜单里 gameOver 不可达（P1-5）。
+    const dummy = new Player(world.width / 2, world.height / 2, config.player);
+    dummy.alive = false;
+    GameState.player = dummy;
+
+    // 两军贴着「离地图中心最近的据点」分列两侧出生 → 开局即接火。
+    // 真实对局蓝队左半/红队右半相隔上万像素，预热帧数不够它们相遇，全程在赶路 → 看着像刚开局。
+    // 菜单只需「打了一阵」的观感：选一个居中据点当争夺焦点，两军贴脸出生，预热即打出交火/血迹/伤亡。
+    let anchor = null, bestD = Infinity;
+    for (const p of GameState.capturePoints) {
+        const d = Math.hypot(p.x - world.width / 2, p.y - world.height / 2);
+        if (d < bestD) { bestD = d; anchor = p; }
+    }
+    const ax = anchor ? anchor.x : world.width / 2;
+    const ay = anchor ? anchor.y : world.height / 2;
+    menuBattleCenter = { x: ax, y: ay }; // 记录交火中心，供菜单摄像机锚定漫游
+
+    // 蓝队（己方）：据点左侧出生，minDist 收小让队形贴紧、确保进感知范围即交火
+    const bluePoint = { x: ax - 220, y: ay };
+    for (let i = 0; i < GAME_CONSTANTS.INITIAL_TEAMMATES; i++) {
+        const t = spawnTeammate(bluePoint, 60);
+        if (t) {
+            SpawnSystem.equipTeammate(t);
+            GameState.teammates.push(t);
+        }
+    }
+
+    // 红队（敌方）：据点右侧出生。spawnCustomWave 不依赖敌方据点、自带 push，数量匹配蓝队
+    SpawnSystem.spawnCustomWave({ count: MENU_ENEMY_COUNT, x: ax + 220, y: ay, radius: 260 });
+
+    // 小地图 canvas 直接挂在 document.body 上（不在 #hud 内），Renderer 隐藏 #hud 不会连带隐藏它；
+    // playing→menu 经此函数，须显式隐藏，否则退出到主菜单后小地图残留（Minimap.render 仅 playing 调用）
+    Minimap.canvas.style.display = 'none';
+
+    // 预热模拟改由 warming 阶段分片执行（beginMenuWarmup + gameLoop），不在此同步跑，避免冻主线程
+}
+
+// ---------- 进入预热阶段：把背景战斗预热分片到多帧（消除进菜单卡顿） ----------
+// 仅设置余量 + 切 phase；实际模拟步由 gameLoop 的 warming 分支每帧跑 MENU_WARMUP_BATCH 步，跑完进 menu。
+function beginMenuWarmup() {
+    menuWarmupRemaining = MENU_WARMUP_FRAMES;
+    GameState.phase = 'warming';
+}
+
+// ---------- 战地模式：开一把干净的真游戏 ----------
+function startMatch() {
+    stopMenuMusic(); // 停菜单背景音乐
+    applyAudio();    // 恢复战斗/环境音量（菜单里被静音的 sfx/ambient，依据 Settings）
+
+    // 干净新图 + 据点（resetGame 不重置据点，需先重建）
+    initMap();
+    initCapturePoints();
+
+    resetGame();   // 真玩家 + 双方初始兵力
+    initVehicles();
+
+    // 复位摄像机缩放（菜单用 zoom<1 放宽视野，开局恢复默认 1，避免首帧缩放残留）
+    GameState.camera.zoom = 1;
+    GameState.camera.targetZoom = 1;
+
+    GameState.phase = 'playing';
+
+    // 开局任务简报（世界冻结，逐句推进）—— 与原始 init 行为一致
+    DialogueSystem.start(generateBriefing());
+    console.log('🎮 战地模式开始');
+}
+
+// ---------- 退出游戏（主菜单按钮） ----------
+function quitGame() {
+    // 浏览器通常拦截非脚本打开的标签页关闭；兜底提示手动关闭
+    window.close();
+    setTimeout(() => { alert('请手动关闭此标签页'); }, 100);
+}
+
+// ---------- 游戏内暂停菜单「退出到主菜单」 ----------
+function quitToMenu() {
+    // 停掉所有载具引擎音（engine voice 以 vehicle 引用为 key，reset() 只清数组不停音，
+    // 否则 mounted 状态下退出会让引擎声在菜单里无限循环）—— 须在 reset 清空 vehicles 前执行
+    for (const v of GameState.vehicles) stopVehicleEngine(v);
+
+    // setupBackgroundBattle 内的 reset() 已清 paused/settingsOpen/dialogueOpen，
+    // 避免冻结门把菜单背景战斗冻住（P1-7）
+    enterMenuAudio();                          // 静音战斗/环境音（预热模拟也在静音下进行）
+    setupBackgroundBattle();
+    startMenuMusic(getMenuMusicArrayBuffer());
+    beginMenuWarmup();                         // 分片预热 → warming 阶段（跑完自动进 menu）
+    console.log('🚪 退出到主菜单');
 }
 
 // ---------- 队友重生逻辑 ----------
@@ -684,8 +977,9 @@ function updateTeammateRespawns() {
 }
 
 // ---------- 重生逻辑 ----------
-// 启动游戏!
-init();
+// 启动游戏：引导系统 → 进入加载流程（唯一启动入口）
+bootSystems();
+runLoading();
 
 function respawnPlayer(pointIndex) {
     const config = GameState.config;

@@ -110,6 +110,7 @@ RwR/
     ├── core/                  # 核心系统
     │   ├── EventBus.js        # 事件总线
     │   ├── GameState.js       # 游戏状态管理
+    │   ├── AssetLoader.js     # 资源预加载器（进度条 + 缓存预热 + 菜单预览图/音乐）
     │   ├── Map.js             # 地图系统
     │   ├── Weapon.js          # 武器基类
     │   ├── WeaponRegistry.js  # 武器注册表
@@ -169,6 +170,7 @@ RwR/
     │   ├── RadioUI.js         # 电台呼叫支援界面
     │   ├── PauseMenuUI.js     # 暂停菜单界面
     │   ├── SettingsUI.js      # 设置面板界面（图像/声音/控制）
+    │   ├── MainMenuUI.js      # 主菜单流程界面（loading/presskey/menu + 模式预览卡片）
     │   ├── DialogueUI.js      # 全屏对话演出层（开局任务简报）
     │   ├── Minimap.js         # 小地图（含载具标记）
     │   ├── JeepRenderer.js    # 吉普车渲染器
@@ -182,6 +184,7 @@ RwR/
     │   └── handlers/          # 输入处理器
     │       ├── GameplayHandler.js  # 游戏逻辑输入
     │       ├── MenuHandler.js      # 菜单输入
+    │       ├── MainMenuHandler.js  # 主菜单按钮输入
     │       ├── PauseHandler.js     # 暂停菜单 + 设置面板输入
     │       ├── DialogueHandler.js  # 对话演出层输入（推进对话）
     │       ├── MouseHandler.js     # 鼠标输入
@@ -278,9 +281,9 @@ npx serve
   - main.js 整理（分区注释 + 剧情占位）
   - 剧情基础设施 → EventBus + CampaignManager + MissionData
 - [x] 对话
+- [x] 主菜单（加载进度条 → 按任意键 → 背景 AI 战斗实况菜单 + 模式预览卡片 + 菜单音乐；预热分片到多帧，进菜单不卡顿）
 
 ## 开发中功能
 
-- [ ] 主菜单
 - [ ] 剧情模式(未来)
 - [ ] 更多载具类型(未来)

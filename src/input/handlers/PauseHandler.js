@@ -8,6 +8,12 @@ import {
 } from '../../data/Settings.js';
 import { toCanvasCoords } from '../canvasCoords.js';
 
+// 退出到主菜单回调，由 main.js 注入避免循环依赖
+let quitToMenuFn = null;
+export function setQuitToMenu(fn) {
+    quitToMenuFn = fn;
+}
+
 // ─── 暂停菜单 keydown（ESC 恢复游戏，吞噬其余键） ───
 export function handlePauseKeydown(e, key) {
     if (key === 'escape') {
@@ -27,8 +33,8 @@ export function handlePauseMousedown(e, canvas) {
                 GameState.toggleSettings();
                 playUISound('click');
             } else if (area.id === 'quit') {
-                console.log('🚪 退出到主菜单（预留，暂未实现）');
                 playUISound('click');
+                if (quitToMenuFn) quitToMenuFn();
             }
             e.preventDefault();
             return true;
@@ -130,6 +136,9 @@ function handleToggle(id) {
             break;
         case 'damageNumbers':
             Settings.graphics.damageNumbers = !Settings.graphics.damageNumbers;
+            break;
+        case 'muteOnBlur':
+            Settings.audio.muteOnBlur = !Settings.audio.muteOnBlur;
             break;
     }
     playUISound('click');

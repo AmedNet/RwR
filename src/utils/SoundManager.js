@@ -3,6 +3,7 @@
 
 let actx = null;
 let masterGain = null;
+let focusGain = null;  // 失焦静音总闸（masterGain → focusGain → destination），置 0 静音全部音频含菜单音乐
 let sfxGain = null;   // 枪械/爆炸/战斗/载具子总线 → masterGain
 let uiGain = null;    // UI/电台音效子总线 → masterGain
 let audioUnlocked = false;
@@ -20,11 +21,15 @@ function initAudio() {
   try {
     actx = new (window.AudioContext || window.webkitAudioContext)();
     // 混音总线：master(主音量) ← sfx(枪械/爆炸) + ui(UI/电台)；环境音经 getMasterBus() 接入 master
+    // master → focusGain(失焦静音总闸) → destination；失焦时 focusGain 置 0 一次性静音全部音频（含菜单音乐）
     // ⚠️ 契约：此处硬编码默认值必须与 Settings.audio 一致（权威值由 main.js init() 的 applyAudio() 写入）。
     // 当前：master 1.0 / sfx 0.5 / ui 0.5。若修改 Settings.audio 默认值，此处同步修改或依赖 applyAudio 覆盖。
+    focusGain = actx.createGain();
+    focusGain.gain.value = 1.0; // 失焦静音总闸（默认 1=有声；失焦置 0 静音全部，含菜单音乐/环境音/UI）
+    focusGain.connect(actx.destination);
     masterGain = actx.createGain();
     masterGain.gain.value = 1.0; // 主音量（「主音量」滑块）
-    masterGain.connect(actx.destination);
+    masterGain.connect(focusGain);
     sfxGain = actx.createGain();
     sfxGain.gain.value = 0.5; // 枪械/爆炸音效（「枪械/爆炸」滑块）
     sfxGain.connect(masterGain);
@@ -84,6 +89,15 @@ export function setUIVolume(vol) {
 export function getMasterBus() {
   getCtx();
   return masterGain;
+}
+
+// 失焦静音总闸：muted=true 快速淡出到 0（静音全部音频含菜单音乐），false 淡入回 1。
+// 由 main.js 的 visibilitychange 监听依据 Settings.audio.muteOnBlur 调用，独立于四路音量滑块。
+export function setFocusMuted(muted) {
+  if (!focusGain) return;
+  const now = getCtx().currentTime;
+  focusGain.gain.cancelScheduledValues(now);
+  focusGain.gain.setTargetAtTime(muted ? 0 : 1, now, muted ? 0.05 : 0.12);
 }
 
 export function getAudioContext() {
@@ -184,6 +198,63 @@ export function stopVehicleEngine(vehicle = null) {
   voice.gain.gain.cancelScheduledValues(now);
   voice.gain.gain.setTargetAtTime(0, now, 0.1);
   voice.source.stop(now + 0.5);
+}
+
+// ─── 菜单背景音乐 ───
+// 走 masterGain（主音量总线），设置里的「主音量」滑块因此能管它。
+// 照抄 startVehicleEngine/stopVehicleEngine 的 looping BufferSource + token 守卫 + 淡入淡出模式。
+let menuMusicVoice = null;      // { source, gain }
+let menuMusicStartToken = null; // 防重入 token（stop 后置 null 使未完成的 decode 回调失效）
+
+/**
+ * 播放菜单背景音乐（循环、淡入）。
+ * @param {ArrayBuffer} arrayBuffer 预加载得到的 mp3 原始数据（AssetLoader.getMenuMusicArrayBuffer()）。
+ *   须在用户手势后调用（autoplay 策略）；「按任意键」那一步正好满足。
+ */
+export function startMenuMusic(arrayBuffer) {
+  if (!arrayBuffer || menuMusicVoice) return;
+  const c = getCtx();
+
+  const startToken = Symbol();
+  menuMusicStartToken = startToken;
+  // decodeAudioData 会消耗（detach）传入的 buffer，先拷贝一份，退出到主菜单重播时原 buffer 仍可用
+  const copy = arrayBuffer.slice(0);
+  c.decodeAudioData(copy).then(buffer => {
+    if (menuMusicStartToken !== startToken) return; // 已被 stop 取代
+    if (menuMusicVoice) return;
+
+    const now = c.currentTime;
+    const source = c.createBufferSource();
+    const gain = c.createGain();
+    source.buffer = buffer;
+    source.loop = true;
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.setTargetAtTime(0.5, now, 1.8); // 较长淡入（时间常数 1.8s，约 5s 渐起到目标音量，再经 masterGain 主控）
+    source.connect(gain).connect(masterGain);
+    source.start(now);
+    menuMusicVoice = { source, gain };
+  }).catch(err => {
+    console.warn('⚠️ 菜单音乐解码失败:', err);
+  });
+}
+
+/** 停止菜单背景音乐（淡出）。 */
+export function stopMenuMusic() {
+  menuMusicStartToken = null;
+  const voice = menuMusicVoice;
+  if (!voice) return;
+  const c = getCtx();
+  const now = c.currentTime;
+  menuMusicVoice = null;
+  voice.gain.gain.cancelScheduledValues(now);
+  voice.gain.gain.setTargetAtTime(0, now, 0.15);
+  voice.source.stop(now + 0.6);
+}
+
+// 菜单背景战斗静音：关闭战斗音效子总线（sfx：枪械/爆炸/载具），菜单音乐走主总线（masterGain）不受影响。
+// 进入游玩时由 applyAudio() 依据 Settings.audio.sfx 恢复。
+export function muteBattleSfx() {
+  if (sfxGain) sfxGain.gain.value = 0;
 }
 
 export function playVehicleHorn(source = 0) {

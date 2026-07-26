@@ -364,7 +364,8 @@ export function drawSettings(ctx, renderer) {
         cy = drawSlider(ctx, areas, '主音量', 'master', Settings.audio.master, cx, cy, cw) + rowGap;
         cy = drawSlider(ctx, areas, '环境音', 'ambient', Settings.audio.ambient, cx, cy, cw) + rowGap;
         cy = drawSlider(ctx, areas, '枪械 / 爆炸', 'sfx', Settings.audio.sfx, cx, cy, cw) + rowGap;
-        cy = drawSlider(ctx, areas, 'UI 音效', 'ui', Settings.audio.ui, cx, cy, cw);
+        cy = drawSlider(ctx, areas, 'UI 音效', 'ui', Settings.audio.ui, cx, cy, cw) + rowGap;
+        cy = drawToggle(ctx, areas, '失焦时静音', 'muteOnBlur', Settings.audio.muteOnBlur, cx, cy, cw);
     } else {
         // ─── 控制 ───
         for (const action of CONTROL_ORDER) {
@@ -390,6 +391,13 @@ export function drawSettings(ctx, renderer) {
         ctx.fillText('恢复默认', btnX + btnW / 2, cy + btnH / 2);
         areas.push({ type: 'button', id: 'resetControls', x: btnX, y: cy, w: btnW, h: btnH });
     }
+
+    // 左下角「ESC 返回」提示（所有 tab 常驻；设置面板统一由 ESC 关闭——游戏内退回暂停菜单，主菜单内关闭设置）
+    ctx.fillStyle = GLASS.textDim;
+    ctx.font = `12px ${FONT}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('ESC 返回', sideBarX + sideBarW / 2, cardY + cardH - innerPad - sideBarItemH / 2);
 
     GameState.settingsHitAreas = areas;
     ctx.restore();

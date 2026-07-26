@@ -58,7 +58,8 @@ export const Settings = {
     },
     // ⚠️ 契约：此处默认值必须与 SoundManager.initAudio() 的硬编码增益一致（首次加载 applyAudio 前的回退值）。
     // sfx 0.5×master 1.0 = 0.5（=原 masterGain）；ambient 0.3×1.0 = 0.3（=原直连）；ui 0.5×1.0 = 0.5
-    audio: { master: 1.0, ambient: 0.3, sfx: 0.5, ui: 0.5 },
+    // muteOnBlur: 失焦（切后台/最小化）时静音全部音频，默认开；由 main.js visibilitychange 监听读取
+    audio: { master: 1.0, ambient: 0.3, sfx: 0.5, ui: 0.5, muteOnBlur: true },
     controls: {
         moveUp: 'w', moveLeft: 'a', moveDown: 's', moveRight: 'd',
         shoot: ' ', reload: 'r', interact: 'f', inventory: 'q',

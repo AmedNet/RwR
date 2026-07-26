@@ -44,6 +44,10 @@ export const GameState = {
         lastMovingFrame: 0    // 上一帧是否在移动
     },
     config: null,
+    // 阶段状态机：loading(预加载) → presskey(按任意键) → menu(主菜单+背景战斗) → playing(游玩)
+    phase: 'loading',
+    loadProgress: 0, // 加载进度 0→1（由 AssetLoader 回调写入）
+    loadError: null, // 加载失败信息（runLoading 捕获异常时写入；drawLoadingScreen 显示，避免永久转圈）
     isEditing: false,
     respawnSelection: false, // 是否在选择复活据点
     selectedSpawnPoint: null, // 数字选择时临时存储
@@ -151,6 +155,16 @@ export const GameState = {
     dialogueAnimDirection: null,    // 'opening' | 'closing' | null（支持中途反向打断）
     _dialogueAnimLastTime: null,    // 动画计时基准（performance.now）
     dialogueHitAreas: [],           // 对话框点击热区 [{id,x,y,w,h}]（点击任意处推进）
+
+    // 主菜单系统（phase==='menu' 时叠在背景战斗上；动画为单向淡入，无中途反向）
+    mainMenuHitAreas: [],           // 主菜单按钮热区 [{id,x,y,w,h}]
+    mainMenuAnimProgress: 0,        // 主菜单出现动画进度 0→1
+    _mainMenuAnimLastTime: null,    // 动画计时基准（performance.now）
+    // 主菜单模式预览卡片（悬停某模式时右侧弹出，倒带式开/关动画，镜像 radio/settings 三件套）
+    menuPreviewId: null,            // 当前显示/渐出的模式 id（battle/quick/campaign），null=无
+    menuPreviewAnim: 0,             // 预览弹出进度 0→1（开/关共用，倒带式）
+    menuPreviewDirection: null,     // 'opening' | 'closing' | null
+    _menuPreviewLastTime: null,     // deltaTime 基准（performance.now）
 
     gameOverSelectedPoint: -1, // 死亡界面当前悬浮的据点索引
     respawnHitAreas: [], // 死亡界面据点点击热区 [{x, y, r, index}]
@@ -289,6 +303,7 @@ export const GameState = {
         this.enemies = [];
         this.teammates = [];
         this.bullets = [];
+        this.grenades = [];
         this.weaponPickups = [];
         this.lootPickups = [];
         this.vehicles = [];
@@ -395,5 +410,14 @@ this.inventoryHitAreas = [];
         this.dialogueAnimDirection = null;
         this._dialogueAnimLastTime = null;
         this.dialogueHitAreas = [];
+        // 主菜单重置（phase/loadProgress 不在此重置：phase 由流程控制，loadProgress 仅加载期使用）
+        this.mainMenuHitAreas = [];
+        this.mainMenuAnimProgress = 0;
+        this._mainMenuAnimLastTime = null;
+        // 预热分片余量不在此重置：仅 warming 阶段使用，由 beginMenuWarmup 设置、gameLoop 消费
+        this.menuPreviewId = null;
+        this.menuPreviewAnim = 0;
+        this.menuPreviewDirection = null;
+        this._menuPreviewLastTime = null;
     }
 };

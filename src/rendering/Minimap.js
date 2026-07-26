@@ -47,6 +47,11 @@ export const Minimap = {
 
     render() {
         if (!this.initialized) return;
+        // 仅游玩阶段显示小地图：主菜单/加载/按键阶段隐藏 DOM 并跳过绘制
+        if (GameState.phase !== 'playing') {
+            if (this.canvas.style.display !== 'none') this.canvas.style.display = 'none';
+            return;
+        }
         // 设置：小地图开关（隐藏独立 DOM canvas 并跳过绘制，比纯跳过 render 更省）
         if (!Settings.graphics.minimap) {
             if (this.canvas.style.display !== 'none') this.canvas.style.display = 'none';
