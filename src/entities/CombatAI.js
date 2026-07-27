@@ -483,7 +483,10 @@ export class CombatAI extends Entity {
         }
         // 天气感知倍率
         const weatherAwareness = WeatherSystem.getAwarenessMultiplier();
-        return base * weatherAwareness;
+        let range = base * weatherAwareness;
+        // 快速模式（死斗）：锁敌范围 ×1.3，加快接敌
+        if (GameState.mode === 'quick') range *= 1.3;
+        return range;
     }
 
     hasLineOfSight(target) {
@@ -513,6 +516,17 @@ export class CombatAI extends Entity {
     }
 
     getClosestTargetPoint() {
+        // 快速模式（死斗）：无据点，以最近敌方单位作为推进目标，让两军主动接敌
+        // （否则 ATTACK/WANDER 角色失去远距离目标，只在感知范围内接敌 → 两军隔图对峙不动）
+        if (GameState.mode === 'quick' && this.getTargetPoints().length === 0) {
+            let nearest = null, nd = Infinity;
+            for (const t of this.getTargets()) {
+                if (!t.alive) continue;
+                const d = Math.hypot(t.x - this.x, t.y - this.y);
+                if (d < nd) { nd = d; nearest = t; }
+            }
+            return { target: nearest, distance: nd };
+        }
         let target = null;
         let distance = Infinity;
         for (const point of this.getTargetPoints()) {
@@ -1351,7 +1365,9 @@ export class CombatAI extends Entity {
     }
 
     dropWeaponOnDeath() {
-        if (Math.random() > CombatAI.DROP_CHANCE) return;
+        // 快速模式（死斗）：武器掉落概率提升（0.05 → 0.30），鼓励击杀换装
+        const dropChance = GameState.mode === 'quick' ? 0.30 : CombatAI.DROP_CHANCE;
+        if (Math.random() > dropChance) return;
         const dropSlots = [];
         for (let i = 1; i <= 3; i++) {
             if (this.weapons[i]) dropSlots.push(i);

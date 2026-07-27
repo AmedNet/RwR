@@ -8,6 +8,7 @@ import { GLASS, drawGlassPanel, easeOutCubic, easeInOutCubic } from './GlassUI.j
 import { drawArsenalShop } from './ArsenalUI.js';
 import { drawDebug } from './DebugUI.js';
 import { drawGameOver } from './GameOverUI.js';
+import { drawQuickResult } from './QuickResultUI.js';
 import { drawRadioUI, updateRadioAnimation, updateRadioNoPermit, drawRadioNoPermit } from './RadioUI.js';
 import { drawSupportEffects } from './SupportEffectRenderer.js';
 import { drawVehicleChatBubbles, drawAIMonologues } from './BubbleRenderer.js';
@@ -527,6 +528,39 @@ export const Renderer = {
         }
         if (GameState.phase === 'presskey' || GameState.phase === 'warming') {
             drawPressKeyScreen(this.ctx, this);
+            PostProcess.apply(this._offscreenCanvas, this);
+            return;
+        }
+
+        // 快速模式结算界面（优先级高于普通死亡界面；世界继续模拟，仅胜负判定被门控，同 gameOver 分支）
+        if (GameState.mode === 'quick' && GameState.quickResult) {
+            this._renderWorld();
+            this._renderEntities();
+            WeatherSystem.drawCloudShadows(this.ctx, GameState.camera);
+            WeatherSystem.drawParticles(this.ctx);
+            WeatherSystem.drawOverlay(this.ctx, this);
+            WeatherSystem.drawWeatherEdgeEffects(this.ctx, this);
+
+            // 延迟渐黑 → easeOutCubic 弹出（自驱 deltaTime，镜像 gameOver 分支）
+            const tNow = performance.now();
+            if (GameState._quickResultAppearLastTime == null) GameState._quickResultAppearLastTime = tNow;
+            const dt = Math.min((tNow - GameState._quickResultAppearLastTime) / 1000, 0.05);
+            GameState._quickResultAppearLastTime = tNow;
+            if (GameState.quickResultDelay < 1) {
+                GameState.quickResultDelay = Math.min(1, GameState.quickResultDelay + dt);
+            } else if (GameState.quickResultAppearAnim < 1) {
+                GameState.quickResultAppearAnim = Math.min(1, GameState.quickResultAppearAnim + dt / 0.28);
+            }
+            const qEased = easeOutCubic(GameState.quickResultAppearAnim);
+
+            this._captureFrameForBlur();
+            this._drawBlurBackgroundAlpha(0.85 * qEased);
+            this.ctx.fillStyle = `rgba(0,0,0,${0.55 * GameState.quickResultDelay})`;
+            this.ctx.fillRect(0, 0, this.width, this.height);
+
+            this._updateShaderLighting();
+            drawQuickResult(this.ctx, this);
+            this._renderDayNightOverlay();
             PostProcess.apply(this._offscreenCanvas, this);
             return;
         }

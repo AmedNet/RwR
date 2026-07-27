@@ -2,136 +2,116 @@
 
 一个由我在暑假无聊开发的 2D 俯视角战术射击游戏，基于原生 JavaScript + Canvas 实现。
 
-## 游戏特性
+无框架、无构建工具、无外部依赖 —— 浏览器打开即玩。
 
-### 核心玩法
-- 🎮 俯视角 2D 战术射击
-- 🗺️ 随机生成的地图系统（草地、森林、河流、房屋、山地、道路、沙地）
-- 🚩 据点占领机制（3v3 攻防）
-- 🔫 丰富的武器系统（手枪、步枪、冲锋枪、霰弹枪、狙击枪、火箭筒、榴弹发射器）
-- 📡 **电台呼叫支援系统**：消耗 RP 呼叫空投、火炮、伞兵、烟雾、武器空投，以及 MQ-9 死神无人机、A-10 疣猪攻击机空中支援
-- 🤖 **敌方支援 AI**：军官/指挥官军衔的敌人会呼叫火炮、伞兵等支援（含 RP 经济）
-- 🤝 AI 队友协作系统（最多 50 人）
-- 💰 军械库购买/出售系统
-- 🎯 战术复活点选择
-- 💥 粒子特效系统（血迹、弹壳、muzzle flash）
-- 🎖️ 军衔系统（星数解锁高级支援权限）
-- 🎒 **战利品系统**：敌人掉落稀有度分级战利品（普通/优良/稀有/传说），支持拾取、背包管理、出售和丢弃
-- 🚙 **载具系统**：威利斯MB 军用吉普（3 座位、挡风玻璃破损、碰撞伤害、喇叭）+ BTR-80 装甲输送车（8 座位、2A72 30mm 机炮、PKT 7.62 同轴机枪、炮塔旋转、弹药装填）
-- 🪖 **头盔系统**：AI 装备钢盔/钛合金盔，提供减伤与概率跳弹
-- 🪟 **液态毛玻璃 UI**：背包/武器 HUD/电台/状态效果统一采用 roundRect 毛玻璃面板（背景模糊 + 渐变边框），含开合缓动动画、选中格子焦点滑动与脉动高光
+---
 
-### 环境系统
-- 🌤️ **18 种天气**：晴天、多云、阴天、小雨、中雨、大雨、雾天、雾雨、小雪、暴风雪、暴风、沙尘暴、暴风雨、冰雹、酸雨、血月、日食、龙卷风
-- 🌅 **昼夜循环**：20 分钟完整周期，黎明/黄昏暖色调，深夜深蓝暗调
-- 💡 **动态光照**：枪口火焰和爆炸在黑暗中照亮周围
-- 🔊 **环境音效**：三层混音（天气 + 昼夜 + 地形），无缝循环播放
-- ⚡ **闪电系统**：暴风雨时随机闪电 + 屏幕震动
-- 🌪️ **龙卷风**：Catmull-Rom 曲线路径移动，EF 等级与形态系统（绳索/漏斗/烟囱/楔/多涡旋），超级单体云体，碎屑云团
-- ✨ **后处理特效**：Bloom 辉光、积水反射、龙卷风浓雾（基于 WebGL 离屏渲染）
+## 🎮 三种模式
 
-### 地形音效
-- 🌊 靠近河流时听到水声
-- 🌲 进入森林时听到风吹树叶
-- 🐦 白天随机鸟叫
-- 🦗 夜晚蟋蟀声
-- 🦉 深夜猫头鹰叫
-- ⛈️ 暴风雨时随机雷声
+主菜单悬停任意模式会弹出右侧预览卡片，点击即进入。
 
-### 电台呼叫支援系统
+<table>
+  <tr>
+    <td align="center"><b>🚩 战地模式</b></td>
+    <td align="center"><b>⚡ 快速模式</b></td>
+    <td align="center"><b>🎬 战役模式</b></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="src/pkg/sounds/menu/Realtime_mode.png" width="250" alt="战地模式"></td>
+    <td align="center"><img src="src/pkg/sounds/menu/Fast_mode.png" width="250" alt="快速模式"></td>
+    <td align="center"><img src="src/pkg/sounds/menu/Level_mode.png" width="250" alt="战役模式"></td>
+  </tr>
+</table>
 
-长按 `G` 打开电台面板，呼叫各种战场支援（消耗 RP，并受军衔星数限制）。支援在鼠标标记的世界坐标点生效，敌方单位也会呼叫支援（拥有独立 RP 经济与呼叫范围）。
+| 模式 | 状态 | 玩法 |
+|------|:----:|------|
+| 🚩 **战地模式** | ✅ | 大地图据点攻防。占领据点、经营 RP、呼叫支援、推进战线，完整沙盒体验。 |
+| ⚡ **快速模式** | ✅ | 小地图遭遇战。随机武器开局，全歼敌人即胜利，阵亡即失败。结算后可「重试」（同配置）或「下一把」（重新随机）。 |
+| 🎬 **战役模式** | 🚧 | 多关卡剧情推进，关卡目标与过场演出。基础设施已就位，内容制作中，敬请期待。 |
 
-| 支援类型 | 解锁星数 | RP 消耗 | 说明 |
-|----------|----------|---------|------|
-| 📦 空投补给 | 2 | 80 | 空投医疗包和手雷到标记点 |
-| 💥 一轮火炮支援 | 2 | 180 | 500 范围内 18 发火炮覆盖轰炸 |
-| 💥💥 两轮火炮支援 | 2 | 280 | 两轮各 18 发火炮覆盖，中间装填 |
-| 🪂 伞兵支援 | 2 | 150 | 8 名伞兵空降增援战场 |
-| ⭐ 精英小队 | 3 | 300 | 4 名精英伞兵（含 3 星狙击手） |
-| 🌫️ 烟雾掩护 | 3 | 60 | 在标记区域生成烟雾遮蔽视线 |
-| 🔫 武器空投 | 4 | 200 | 空投一把高级武器到标记点 |
-| 🛩️ 死神支援 (MQ-9) | 3 | 400 | MQ-9 无人机投下重磅炸弹（带音效） |
-| ✈️ 疣猪支援 (A-10) | 3 | 350 | A-10 攻击机机炮扫射（带音效） |
-| 🚛 BTR-80 空投 | 3 | 1000 | 空投一辆 BTR-80 装甲输送车到标记点 |
+---
 
-## 操作说明
+## ✨ 特性
+
+**战斗**
+- 🔫 多类武器：手枪 / 步枪 / 冲锋枪 / 霰弹枪 / 狙击枪 / 火箭筒 / 榴弹发射器
+- 📡 电台呼叫支援：空投、火炮、伞兵、烟雾、武器空投，以及 MQ-9 死神、A-10 疣猪空中支援
+- 🤖 敌方支援 AI：军官 / 指挥官会消耗 RP 呼叫火炮与伞兵
+- 🚙 载具：威利斯 MB 吉普 + BTR-80 装甲车（机炮 / 同轴机枪 / 炮塔旋转）
+- 🪖 头盔系统：减伤 + 概率跳弹
+- 🎖️ 军衔 / 兵种系统，星数解锁高级支援
+
+**世界**
+- 🗺️ 随机地图：草地、森林、河流、房屋、山地、道路、沙地
+- 🌤️ 18 种天气 + 🌅 昼夜循环（动态光照）
+- 🌪️ 龙卷风：Catmull-Rom 路径、EF 等级与形态系统、超级单体
+- ✨ WebGL 后处理：Bloom 辉光、积水反射
+- 🔊 三层环境混音（天气 + 昼夜 + 地形），无缝循环
+
+**系统**
+- 🎒 战利品：4 稀有度（普通 / 优良 / 稀有 / 传说），掉落 / 拾取 / 背包 / 出售 / 丢弃
+- 🤝 AI 队友协作（最多 50 人）+ AI 闲聊
+- 🪟 液态毛玻璃 UI：背包 / 武器 HUD / 电台 / 状态效果统一风格，含缓动动画
+
+---
+
+## 🕹️ 操作
 
 | 按键 | 功能 |
 |------|------|
-| WASD | 移动 |
-| 鼠标左键/空格 | 射击 |
-| 1-7 | 切换武器/战利品；在车内切换座位 |
-| Q | 打开/关闭背包 |
-| E | 打开/关闭军械库（需在军械库附近） |
-| F | 拾取地面武器/战利品；上下车 |
-| G | 短按投掷手雷；长按打开/关闭电台 |
-| R | 换弹 |
-| K | 自杀 |
-| H | 载具喇叭（在车内时） |
-| 9+1 | 打开 Debug 面板 |
-| D | 丢弃选中物品（背包内） |
-| 1（驾驶 BTR 时） | 切换 2A72 30mm 机炮 |
-| 2（驾驶 BTR 时） | 切换 PKT 7.62 同轴机枪 |
-| 右键 | 射击同轴机枪 / 丢弃选中物品（背包内） |
+| `WASD` | 移动 |
+| 鼠标左键 / `空格` | 射击 |
+| `1`–`7` | 切换武器 / 战利品；车内切换座位 |
+| `Q` | 背包 |
+| `E` | 军械库（需靠近） |
+| `F` | 拾取 / 上下车 |
+| `G` | 短按投手雷，长按开电台 |
+| `R` | 换弹 |
+| `H` | 载具喇叭 |
+| `K` | 自杀 |
+| `9`+`1` | Debug 面板 |
 
-### 电台面板操作
-- ↑/↓：选择支援类型
-- ⏎ 回车 或 左键点击支援项：在标记点呼叫该支援
-- 🖱️ 左键点击地图：设置支援目标点（屏幕显示标记与坐标）
-- ⎋ ESC / 右键 / 长按 G：关闭电台
-- 🐛 Debug 面板新增「提升军衔」按钮（解锁更高星数支援）
+---
 
-### Debug 面板功能
-- 💰 增加 RP（100/500/1000）
-- ❤️ 满血
-- 🎖️ 提升军衔（增加星数，解锁高级支援）
-- 🌤️ 切换 18 种天气
-- 🌅 昼夜时间滑块（拖拽调整）
-- ⏸️ 暂停/继续昼夜循环
-- 🌪️ 龙卷风雷达开关（小地图显示龙卷风位置）
-- 🔊 环境音效音量滑块
-- 🎁 战利品调试（按稀有度刷出/刷出所有）
-
-## 项目结构
+## 📁 项目结构
 
 ```
 RwR/
-├── index.html                 # 游戏入口页面
-├── README.md                  # 项目说明文档
+├── index.html                 # 游戏入口
+├── README.md
 │
 └── src/
-    ├── main.js                # 游戏主循环和初始化
+    ├── main.js                # 主循环与初始化
     │
     ├── campaign/              # 剧情系统（骨架）
     │   ├── CampaignManager.js # 剧情状态机
-    │   └── MissionData.js     # 关卡数据定义
+    │   └── MissionData.js     # 关卡数据
     │
     ├── core/                  # 核心系统
     │   ├── EventBus.js        # 事件总线
-    │   ├── GameState.js       # 游戏状态管理
-    │   ├── AssetLoader.js     # 资源预加载器（进度条 + 缓存预热 + 菜单预览图/音乐）
+    │   ├── GameState.js       # 全局状态
+    │   ├── AssetLoader.js     # 资源预加载（进度条 + 菜单预览图/音乐）
     │   ├── Map.js             # 地图系统
     │   ├── Weapon.js          # 武器基类
     │   ├── WeaponRegistry.js  # 武器注册表
-    │   ├── SupportSystem.js   # 电台呼叫支援系统
+    │   ├── SupportSystem.js   # 电台支援系统
     │   ├── RankSystem.js      # 军衔系统
     │   ├── ClassSystem.js     # 兵种系统
-    │   ├── WeatherSystem.js   # 天气系统核心
+    │   ├── WeatherSystem.js   # 天气核心
     │   ├── WeatherDefs.js     # 18 种天气定义
-    │   ├── TornadoSystem.js   # 龙卷风系统（EF 等级/形态/路径/渲染）
-    │   ├── DayNightSystem.js  # 昼夜循环系统
-    │   ├── LootRegistry.js    # 战利品注册表（120+ 物品，4 稀有度）
-    │   ├── LootItem.js        # 背包战利品包装类
+    │   ├── TornadoSystem.js   # 龙卷风系统
+    │   ├── DayNightSystem.js  # 昼夜循环
+    │   ├── LootRegistry.js    # 战利品注册表（120+ 物品）
+    │   ├── LootItem.js        # 背包战利品包装
     │   ├── VehicleRegistry.js # 载具注册表
-    │   └── HelmetSystem.js    # AI 头盔系统（减伤/跳弹）
+    │   └── HelmetSystem.js    # 头盔系统（减伤/跳弹）
     │
     ├── data/                  # 配置数据
-    │   ├── GameConfig.js      # 游戏核心配置（玩家/敌人/地图等）
-    │   ├── SupportConfig.js   # 支援系统配置（类型/费用/冷却）
-    │   ├── Settings.js        # 设置数据模型（图形/音频/键位）+ apply 函数
+    │   ├── GameConfig.js      # 核心配置
+    │   ├── SupportConfig.js   # 支援配置
+    │   ├── Settings.js        # 设置模型 + apply
     │   ├── AIMonologues.js    # AI 闲聊文本
-    │   ├── BriefingDialogues.js # 开局任务简报台词模板 + 随机组装
+    │   ├── BriefingDialogues.js # 开局简报台词
     │   └── VehicleDialogues.js # 载具对话文本
     │
     ├── entities/              # 游戏实体
@@ -140,150 +120,98 @@ RwR/
     │   ├── Enemy.js           # 敌人
     │   ├── Teammate.js        # AI 队友
     │   ├── CombatAI.js        # 战斗 AI 基类
-    │   ├── VehicleAI.js       # 载具 AI（驾驶/炮塔/座位）
+    │   ├── VehicleAI.js       # 载具 AI
     │   ├── Bullet.js          # 子弹
     │   ├── Grenade.js         # 手雷
-    │   ├── GrenadeBullet.js   # 榴弹（XM320 抛物线弹道）
+    │   ├── GrenadeBullet.js   # 榴弹
     │   ├── CapturePoint.js    # 据点
     │   ├── Arsenal.js         # 军械库
-    │   ├── WeaponPickup.js    # 地面武器掉落物
-    │   ├── LootPickup.js      # 地面战利品掉落物
-    │   └── Vehicle.js         # 载具实体（座位/挡风玻璃/碰撞）
+    │   ├── WeaponPickup.js    # 地面武器
+    │   ├── LootPickup.js      # 地面战利品
+    │   └── Vehicle.js         # 载具实体
     │
     ├── systems/               # 游戏系统
-    │   ├── SpawnSystem.js     # 敌人生成系统
-    │   └── CollisionSystem.js # 碰撞检测系统
+    │   ├── SpawnSystem.js     # 敌人生成
+    │   └── CollisionSystem.js # 碰撞检测
     │
     ├── rendering/             # 渲染系统
     │   ├── Renderer.js        # 主渲染器
-    │   ├── CrosshairRenderer.js # 动态准星（散布/后坐力/命中标记/连杀光晕）
-    │   ├── SupportEffectRenderer.js # 支援效果渲染（火炮/空投/烟雾等）
-    │   ├── BubbleRenderer.js  # 气泡/对话框渲染
-    │   ├── WeatherRenderer.js # 天气渲染逻辑（云影/粒子/闪电）
+    │   ├── CrosshairRenderer.js # 动态准星
+    │   ├── SupportEffectRenderer.js # 支援效果渲染
+    │   ├── BubbleRenderer.js  # 气泡/对话框
+    │   ├── WeatherRenderer.js # 天气渲染
     │   ├── UIManager.js       # UI 管理器
-    │   ├── GlassUI.js         # 液态毛玻璃 UI 共享样式与缓动函数
+    │   ├── GlassUI.js         # 毛玻璃共享样式
     │   ├── WeaponHUD.js       # 武器 HUD
-    │   ├── InventoryUI.js     # 背包界面（含战利品渲染）
-    │   ├── ArsenalUI.js       # 军械库界面（含战利品出售）
+    │   ├── InventoryUI.js     # 背包界面
+    │   ├── ArsenalUI.js       # 军械库界面
     │   ├── GameOverUI.js      # 阵亡/战败界面
-    │   ├── DebugUI.js         # Debug 面板（标签页 + 战利品调试）
-    │   ├── RadioUI.js         # 电台呼叫支援界面
-    │   ├── PauseMenuUI.js     # 暂停菜单界面
-    │   ├── SettingsUI.js      # 设置面板界面（图像/声音/控制）
-    │   ├── MainMenuUI.js      # 主菜单流程界面（loading/presskey/menu + 模式预览卡片）
-    │   ├── DialogueUI.js      # 全屏对话演出层（开局任务简报）
-    │   ├── Minimap.js         # 小地图（含载具标记）
-    │   ├── JeepRenderer.js    # 吉普车渲染器
-    │   ├── BTR80Renderer.js   # BTR-80 装甲车渲染器
-    │   ├── HelmetRenderer.js  # 头盔渲染（玩家/AI 头部钢盔，共享 drawHelmet）
-    │   └── PostProcess.js     # 后处理特效（Bloom/积水反射）
+    │   ├── QuickResultUI.js   # 快速模式结算界面
+    │   ├── DebugUI.js         # Debug 面板
+    │   ├── RadioUI.js         # 电台界面
+    │   ├── PauseMenuUI.js     # 暂停菜单
+    │   ├── SettingsUI.js      # 设置面板
+    │   ├── MainMenuUI.js      # 主菜单（loading/presskey/menu + 预览卡片）
+    │   ├── DialogueUI.js      # 全屏对话演出层
+    │   ├── Minimap.js         # 小地图
+    │   ├── JeepRenderer.js    # 吉普渲染器
+    │   ├── BTR80Renderer.js   # BTR-80 渲染器
+    │   ├── HelmetRenderer.js  # 头盔渲染
+    │   └── PostProcess.js     # 后处理（Bloom/反射）
     │
     ├── input/                 # 输入系统
-    │   ├── InputManager.js    # 输入分发层（薄控制器）
-    │   ├── canvasCoords.js    # 共享坐标换算（鼠标事件 → canvas 逻辑坐标）
+    │   ├── InputManager.js    # 输入分发层
+    │   ├── canvasCoords.js    # 坐标换算
     │   └── handlers/          # 输入处理器
     │       ├── GameplayHandler.js  # 游戏逻辑输入
     │       ├── MenuHandler.js      # 菜单输入
-    │       ├── MainMenuHandler.js  # 主菜单按钮输入
-    │       ├── PauseHandler.js     # 暂停菜单 + 设置面板输入
-    │       ├── DialogueHandler.js  # 对话演出层输入（推进对话）
+    │       ├── MainMenuHandler.js  # 主菜单按钮
+    │       ├── PauseHandler.js     # 暂停 + 设置
+    │       ├── DialogueHandler.js  # 对话推进
+    │       ├── QuickResultHandler.js # 快速结算输入
     │       ├── MouseHandler.js     # 鼠标输入
     │       ├── RadioHandler.js     # 电台输入
-    │       ├── DebugHandler.js     # Debug 面板输入
-    │       └── DeathHandler.js     # 死亡界面输入
+    │       ├── DebugHandler.js     # Debug 面板
+    │       └── DeathHandler.js     # 死亡界面
     │
     └── utils/                 # 工具类
-        ├── EffectsManager.js  # 特效管理器（粒子、血迹等）
-        ├── MovementSystem.js  # 移动系统（避障、卡住检测）
+        ├── EffectsManager.js  # 特效管理（粒子/血迹）
+        ├── MovementSystem.js  # 移动系统（避障）
         ├── MapGenerator.js    # 地图生成器
-        ├── SoundManager.js    # 音效管理（Web Audio API）
-        ├── AmbientSoundManager.js # 环境音效管理（三层混音）
-        ├── StatusEffects.js   # 状态效果（燃烧、减速等）
-        ├── WeaponAI.js        # AI 武器选择逻辑
+        ├── SoundManager.js    # 音效管理
+        ├── AmbientSoundManager.js # 环境音（三层混音）
+        ├── StatusEffects.js   # 状态效果
+        ├── WeaponAI.js        # AI 武器选择
         ├── AIMonologueSystem.js # AI 闲聊系统
-        ├── DialogueSystem.js  # 对话状态机（打字机/逐句推进）
-        └── VehicleChatSystem.js # 载具对话系统
+        ├── DialogueSystem.js  # 对话状态机
+        └── VehicleChatSystem.js # 载具对话
 ```
 
-## 运行方式
+---
 
-直接用浏览器打开 `index.html` 即可运行，无需构建工具或服务器。
-如果这个方法不行可以考虑 
+## 🚀 运行
+
+直接用浏览器打开 `index.html` 即可，无需构建工具或服务器。
+
+如果打不开，可起一个静态服务器：
+
 ```bash
 npx serve
 ```
 
-## 技术栈
+## 🛠️ 技术栈
 
-- 纯原生 JavaScript (ES6+)
-- HTML5 Canvas 2D
+- 纯原生 JavaScript（ES Modules）
+- HTML5 Canvas 2D + WebGL 后处理
 - Web Audio API（程序化合成音效 + 无缝循环环境音）
-- 无外部依赖
+- 零外部依赖
 
-## 战利品系统
+---
 
-### 稀有度分级
-- ⚪ **普通（灰色）**：列兵起掉，低价值消耗品（绷带、口粮、烟蒂等）
-- 🟢 **优良（绿色）**：军士起掉，中等价值战术物资（狗牌、弹药包、急救包等）
-- 🔵 **稀有（蓝色）**：军官起掉，高价值机密物品（军事文件、情报光盘、勋章等）
-- 🟠 **传说（橙色）**：指挥官起掉，极高价值独特物品（金条、密码本、将官佩刀等）
+## 🗺️ 路线图
 
-### 掉落机制
-- 敌人死亡时根据军衔概率掉落 1–3 件战利品
-- 高军衔保证掉落高稀有度物品（军官必掉稀有，指挥官必掉传说）
-- 地面战利品有 20–40 秒存在时间，即将消失时闪烁提示
-- 稀有/传说级战利品死亡时 100% 掉落到地面
-
-### 拾取与背包
-- 按 `F` 拾取最近的地面战利品或武器
-- 背包满时自动替换当前装备物品
-- 战利品在背包中显示稀有度颜色边框和 emoji
-- 按 `D` 或右键丢弃选中物品到脚下
-
-### 出售系统
-- 军械库中按 `X` 出售选中战利品获得 RP
-- 战利品按稀有度和价值定价，稀有物品价值更高
-
-## 已完成功能
-
-- [x] 基础射击系统
-- [x] 武器切换和拾取
-- [x] AI 敌人和队友
-- [x] 据点占领机制
-- [x] 军械库系统
-- [x] 特效系统（粒子、血迹、弹壳）
-- [x] 死亡动画
-- [x] 战术复活界面
-- [x] 天气系统（18 种天气 + 过渡动画）
-- [x] 昼夜循环系统（动态光照）
-- [x] 环境音效系统（三层混音）
-- [x] 龙卷风系统（Catmull-Rom 路径 + EF 等级/形态 + 超级单体）
-- [x] Debug 面板（天气/昼夜/音量控制）
-- [x] 电台呼叫支援系统（空投/火炮/伞兵/烟雾/武器空投 + MQ-9、A-10 空中支援）
-- [x] 敌方支援 AI（军衔呼叫 + RP 经济）
-- [x] 军衔系统与兵种系统
-- [x] XM320 榴弹发射器（抛物线弹道 + 落地爆炸）
-- [x] 电台界面与音效（打开/关闭音效、支援音轨）
-- [x] 战利品系统（120+ 物品，4 稀有度，掉落/拾取/背包/出售/丢弃）
-- [x] 战利品 Debug 面板（按稀有度刷出、出售、背包渲染）
-- [x] 载具系统（威利斯MB 吉普、3 座位、挡风玻璃、碰撞、喇叭）
-- [x] BTR-80 装甲输送车（8 座位、机炮 + 同轴机枪、炮塔旋转、弹药系统、空投支援）
-- [x] 头盔系统（钢盔/钛合金盔、减伤、跳弹）
-- [x] 小地图载具显示（青色三角标记）
-- [x] 液态毛玻璃 UI 重构与统一（背包/武器 HUD/电台/状态效果 + 选中焦点滑动动画）
-- [x] AI闲聊
-- [x] 更多动画
-- [x] **代码重构**（8 阶段，23 文件，+3089/-2764 行）
-  - Renderer 拆解 → SupportEffectRenderer + BubbleRenderer + WeatherRenderer
-  - CombatAI 拆解 → VehicleAI（载具 AI 独立）
-  - InputManager 拆解 → 6 个 handler 文件 + 薄分发层
-  - 配置数据分离 → GameConfig.js + SupportConfig.js
-  - main.js 整理（分区注释 + 剧情占位）
-  - 剧情基础设施 → EventBus + CampaignManager + MissionData
-- [x] 对话
-- [x] 主菜单（加载进度条 → 按任意键 → 背景 AI 战斗实况菜单 + 模式预览卡片 + 菜单音乐；预热分片到多帧，进菜单不卡顿）
-
-## 开发中功能
-
-- [ ] 剧情模式(未来)
-- [ ] 更多载具类型(未来)
+- [x] 战地模式（据点攻防 + 支援 + 载具 + 战利品）
+- [x] 快速模式（遭遇战 + 结算界面）
+- [x] 主菜单（加载进度 → 按键进入 → 实况背景菜单 + 模式预览 + 菜单音乐）
+- [ ] 战役模式（剧情关卡）
+- [ ] 更多载具

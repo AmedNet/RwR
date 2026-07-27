@@ -181,6 +181,15 @@ export const GameState = {
     gameOverAppearAnim: 0,            // 弹出动画进度 0→1
     _gameOverAppearLastTime: null,    // 弹出动画 deltaTime 计时基准（performance.now）
 
+    // 快速模式（死斗）：mode 区分模式；quickResult 结算状态；quickConfig 快照支持「重试=同配置」
+    mode: 'battle',                 // 'battle' | 'quick'
+    quickResult: null,              // null | 'victory' | 'defeat'
+    quickResultDelay: 0,            // 结算延迟渐黑 0→1
+    quickResultAppearAnim: 0,       // 结算卡片弹出 0→1
+    _quickResultAppearLastTime: null,
+    quickResultHitAreas: [],        // 结算按钮热区 [{id,x,y,w,h}]
+    quickConfig: null,              // 本局配置快照 { enemyCount, teammateCount, cols, rows, mapData }
+
     // 获取当前装备的武器
     getActiveWeapon() {
         return this.inventory[this.activeWeaponSlot];
@@ -363,6 +372,12 @@ this.inventoryHitAreas = [];
         this.gameOverDelay = 0;
         this.gameOverAppearAnim = 0;
         this._gameOverAppearLastTime = null;
+        // 快速模式结算重置（mode/quickConfig 不在此重置：mode 由启动函数控制，quickConfig 供重试复用）
+        this.quickResult = null;
+        this.quickResultDelay = 0;
+        this.quickResultAppearAnim = 0;
+        this._quickResultAppearLastTime = null;
+        this.quickResultHitAreas = [];
         this.radioOpen = false;
         this.radioSelectedIndex = 0;
         this.radioScrollOffset = 0;

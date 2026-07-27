@@ -130,10 +130,10 @@ export function drawMainMenu(ctx, renderer) {
     ctx.translate(-W / 2, -H / 2 + offsetY);
     ctx.globalAlpha = eased;
 
-    // 按钮定义（quick/campaign 未开放，disabled 灰显且点了无反应）
+    // 按钮定义（campaign 未开放，disabled 灰显且点了无反应）
     const buttons = [
         { id: 'battle',   label: '战地模式' },
-        { id: 'quick',    label: '快速开始', disabled: true },
+        { id: 'quick',    label: '快速开始' },
         { id: 'campaign', label: '战役模式', disabled: true },
         { id: 'settings', label: '设  置' },
         { id: 'quit',     label: '退出游戏' },

@@ -83,6 +83,9 @@ export const WeatherSystem = {
   _initClouds() {
     this.clouds = [];
     const world = GameState.config.world;
+    // 记录生成时的世界尺寸，供 _updateClouds 检测地图切换（快速模式小地图 ↔ 大战场）后重建
+    this._cloudsWorldW = world.width;
+    this._cloudsWorldH = world.height;
     // 增加云的数量，覆盖更大范围，避免云影太少太明显
     const cloudCount = Math.max(15, Math.floor(world.width * world.height / 300000));
     for (let i = 0; i < cloudCount; i++) {
@@ -185,6 +188,11 @@ export const WeatherSystem = {
   // ─── 云影更新 ───
   _updateClouds() {
     const world = GameState.config.world;
+    // 地图切换后世界尺寸变化 → 按新面积重建云。否则云数按大战场算（几百朵），
+    // 挤进快速模式小地图造成大面积重叠黑影 + 每帧巨额 overdraw（越玩越卡的主因）
+    if (world.width !== this._cloudsWorldW || world.height !== this._cloudsWorldH) {
+      this._initClouds();
+    }
     for (const cloud of this.clouds) {
       cloud.x += cloud.vx;
       cloud.y += cloud.vy;

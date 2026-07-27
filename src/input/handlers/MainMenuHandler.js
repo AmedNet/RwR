@@ -10,7 +10,7 @@ import { playUISound } from '../../utils/SoundManager.js';
 import { toCanvasCoords } from '../canvasCoords.js';
 
 // 由 main.js 在 boot 阶段注入的动作回调
-let actions = { startMatch: null, quitGame: null };
+let actions = { startMatch: null, startQuickMatch: null, quitGame: null };
 export function setMenuActions(a) {
     actions = { ...actions, ...a };
 }
@@ -30,6 +30,10 @@ export function handleMainMenuMousedown(e, canvas) {
                 case 'battle':
                     playUISound('click');
                     if (actions.startMatch) actions.startMatch();
+                    break;
+                case 'quick':
+                    playUISound('click');
+                    if (actions.startQuickMatch) actions.startQuickMatch();
                     break;
                 case 'settings':
                     playUISound('click');

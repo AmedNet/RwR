@@ -10,6 +10,7 @@ import { handleMousemove, handleNormalMousedown, handleMouseup, handleBlur } fro
 import { handlePauseKeydown, handlePauseMousedown, handleSettingsKeydown, handleSettingsMousedown } from './handlers/PauseHandler.js';
 import { handleDialogueKeydown, handleDialogueMousedown } from './handlers/DialogueHandler.js';
 import { handleMainMenuMousedown } from './handlers/MainMenuHandler.js';
+import { handleQuickResultKeydown, handleQuickResultMousedown } from './handlers/QuickResultHandler.js';
 
 // 首次手势回调（presskey → menu），由 main.js 注入避免循环依赖
 let firstGestureHandler = null;
@@ -35,6 +36,12 @@ export const InputManager = {
             // menu 阶段：吞噬游戏操作键（设置打开时由下方 settingsOpen 分支处理）
             if (GameState.phase === 'menu' && !GameState.settingsOpen && GameState.settingsAnimDirection !== 'closing') {
                 e.preventDefault();
+                return;
+            }
+
+            // 快速模式结算界面（优先于死亡处理：快速模式不可复活）
+            if (GameState.mode === 'quick' && GameState.quickResult) {
+                handleQuickResultKeydown(e, key);
                 return;
             }
 
@@ -139,6 +146,12 @@ export const InputManager = {
                 // 电台界面点击
                 if (GameState.radioOpen) {
                     handleRadioMousedown(e, canvas);
+                    return;
+                }
+
+                // 快速模式结算界面点击（优先于死亡界面）
+                if (GameState.mode === 'quick' && GameState.quickResult) {
+                    handleQuickResultMousedown(e, canvas);
                     return;
                 }
 
