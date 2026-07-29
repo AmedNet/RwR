@@ -47,10 +47,8 @@ export const InputManager = {
             }
 
             // 战地模式胜利战报（点击/按键关闭，优先于死亡处理；关闭后游戏继续）
-            if (GameState.battleReport) {
-                handleBattleReportKeydown(e);
-                return;
-            }
+            // 动画未完成时返回 false → 事件穿透，允许下层（如 ESC→暂停菜单）正常处理
+            if (GameState.battleReport && handleBattleReportKeydown(e)) return;
 
             // 死亡状态
             if (GameState.gameOver) {
@@ -164,8 +162,7 @@ export const InputManager = {
 
                 // 战地模式胜利战报点击（关闭，优先于死亡界面）
                 if (GameState.battleReport) {
-                    handleBattleReportMousedown(e);
-                    return;
+                    if (handleBattleReportMousedown(e)) return;
                 }
 
                 // 死亡界面点击
