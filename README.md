@@ -147,6 +147,7 @@ RwR/
     │   ├── ArsenalUI.js       # 军械库界面
     │   ├── GameOverUI.js      # 阵亡/战败界面
     │   ├── QuickResultUI.js   # 快速模式结算界面
+    │   ├── BattleReportUI.js  # 战地模式胜利战报
     │   ├── DebugUI.js         # Debug 面板
     │   ├── RadioUI.js         # 电台界面
     │   ├── PauseMenuUI.js     # 暂停菜单
@@ -169,6 +170,7 @@ RwR/
     │       ├── PauseHandler.js     # 暂停 + 设置
     │       ├── DialogueHandler.js  # 对话推进
     │       ├── QuickResultHandler.js # 快速结算输入
+    │       ├── BattleReportHandler.js # 战地战报输入
     │       ├── MouseHandler.js     # 鼠标输入
     │       ├── RadioHandler.js     # 电台输入
     │       ├── DebugHandler.js     # Debug 面板
