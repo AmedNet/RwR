@@ -209,6 +209,15 @@ function triggerQuickResult(result) {
     console.log(result === 'victory' ? '🏆 快速模式胜利' : '💀 快速模式失败');
 }
 
+// ---------- 战地模式：胜利战报（占领全部据点触发；可关闭，关闭后继续游玩） ----------
+function triggerBattleReport() {
+    GameState.battleReport = 'victory';
+    GameState.battleReportShown = true;   // 一局只触发一次，关闭后不再弹
+    GameState.battleReportAppearAnim = 0;
+    GameState._battleReportAppearLastTime = null;
+    console.log('🏆 战地模式胜利：占领全部据点');
+}
+
 // ---------- 初始化地图 ----------
 function initMap() {
     console.log('🗺️ 正在初始化地图...');
@@ -560,14 +569,17 @@ function gameLoop() {
     }
 
     // ─── playing 阶段 ───
-    // 暂停/对话冻结：跳过所有世界 update（特效/天气/昼夜/环境音/支援/摄像机/实体/碰撞），
-    // 但仍 render —— 暂停菜单/设置面板/对话框动画是渲染函数内自驱 deltaTime，照常推进
-    if (GameState.paused || GameState.dialogueOpen) {
+    // 暂停/对话/战报冻结：跳过所有世界 update（特效/天气/昼夜/环境音/支援/摄像机/实体/碰撞），
+    // 但仍 render —— 暂停菜单/设置面板/对话框/战报动画是渲染函数内自驱 deltaTime，照常推进
+    if (GameState.paused || GameState.dialogueOpen || GameState.battleReport) {
         Renderer.render();
         Minimap.render();
         requestAnimationFrame(gameLoop);
         return;
     }
+
+    // 本局游玩计时（冻结期不计入；战报「用时」统计用）
+    GameState.matchFrames++;
 
     // 更新特效（粒子、伤害数字等）
     EffectsManager.update();
@@ -686,6 +698,14 @@ function gameLoop() {
             triggerQuickResult('defeat');
         } else if (GameState.enemies.length === 0) {
             triggerQuickResult('victory');
+        }
+    }
+
+    // ---- 战地模式胜利判定（占领全部据点=胜利；一局一次，关闭战报后继续游玩） ----
+    if (GameState.mode === 'battle' && !GameState.battleReportShown && !GameState.battleReport) {
+        const hasEnemyPoint = GameState.capturePoints.some(p => p.owner === 'enemy');
+        if (GameState.capturePoints.length > 0 && !hasEnemyPoint) {
+            triggerBattleReport();
         }
     }
 

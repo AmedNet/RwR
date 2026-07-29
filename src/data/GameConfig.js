@@ -18,8 +18,8 @@ const CONFIG = {
         shootDelayMin: 40,
         shootDelayMax: 70,
         damage: 17,         // ×1.7
-        spawnBaseRate: 30,
-        maxEnemies: 30
+        spawnBaseRate: 34,
+        maxEnemies: 24
     },
     teammate: {
         health: 100,
@@ -29,7 +29,7 @@ const CONFIG = {
         damage: 26,         // ×1.7
         bulletSpeed: 6,
         maxCount: 50,
-        respawnDelay: 360 // 6秒后重生
+        respawnDelay: 300 // 5秒后重生
     },
     bullet: {
         radius: 5,

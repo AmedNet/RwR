@@ -190,6 +190,13 @@ export const GameState = {
     quickResultHitAreas: [],        // 结算按钮热区 [{id,x,y,w,h}]
     quickConfig: null,              // 本局配置快照 { enemyCount, teammateCount, cols, rows, mapData }
 
+    // 战地模式胜利战报（占领全部据点触发；可关闭继续游玩，一局只触发一次）
+    battleReport: null,              // null | 'victory'
+    battleReportShown: false,        // 一局只触发一次（关闭后不再弹）
+    battleReportAppearAnim: 0,       // 战报卡片弹出 0→1
+    _battleReportAppearLastTime: null,
+    matchFrames: 0,                  // 本局游玩帧数（战报「用时」统计，冻结期不计入）
+
     // 获取当前装备的武器
     getActiveWeapon() {
         return this.inventory[this.activeWeaponSlot];
@@ -378,6 +385,12 @@ this.inventoryHitAreas = [];
         this.quickResultAppearAnim = 0;
         this._quickResultAppearLastTime = null;
         this.quickResultHitAreas = [];
+        // 战地模式战报重置（新开局/退出到菜单时清零，允许下一局重新触发）
+        this.battleReport = null;
+        this.battleReportShown = false;
+        this.battleReportAppearAnim = 0;
+        this._battleReportAppearLastTime = null;
+        this.matchFrames = 0;
         this.radioOpen = false;
         this.radioSelectedIndex = 0;
         this.radioScrollOffset = 0;

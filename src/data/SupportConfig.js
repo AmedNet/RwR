@@ -163,8 +163,8 @@ export const SupportConfig = {
 export const EnemyRPEconomy = {
     initial: 100,
     perSecond: 1,
-    killPlayerReward: 50,
-    killTeammateReward: 20
+    killPlayerReward: 30,
+    killTeammateReward: 10
 };
 
 // AI呼叫支援范围配置（按军衔）

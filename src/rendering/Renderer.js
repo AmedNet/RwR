@@ -9,6 +9,7 @@ import { drawArsenalShop } from './ArsenalUI.js';
 import { drawDebug } from './DebugUI.js';
 import { drawGameOver } from './GameOverUI.js';
 import { drawQuickResult } from './QuickResultUI.js';
+import { drawBattleReport } from './BattleReportUI.js';
 import { drawRadioUI, updateRadioAnimation, updateRadioNoPermit, drawRadioNoPermit } from './RadioUI.js';
 import { drawSupportEffects } from './SupportEffectRenderer.js';
 import { drawVehicleChatBubbles, drawAIMonologues } from './BubbleRenderer.js';
@@ -511,7 +512,7 @@ export const Renderer = {
         const hud = document.getElementById('hud');
         if (hud) {
             // 非游玩阶段（loading/presskey/menu）隐藏 DOM HUD（P1-11）
-            hud.style.display = (menuOpen || GameState.gameOver || GameState.phase !== 'playing') ? 'none' : 'flex';
+            hud.style.display = (menuOpen || GameState.gameOver || GameState.battleReport || GameState.phase !== 'playing') ? 'none' : 'flex';
         }
 
         // 准星显示时隐藏系统鼠标；准星不显示（菜单/死亡/医疗包/战利品）时恢复系统鼠标
@@ -560,6 +561,38 @@ export const Renderer = {
 
             this._updateShaderLighting();
             drawQuickResult(this.ctx, this);
+            this._renderDayNightOverlay();
+            PostProcess.apply(this._offscreenCanvas, this);
+            return;
+        }
+
+        // 战地模式胜利战报（占领全部据点触发；可关闭继续游玩）
+        // 世界已在 gameLoop 冻结门冻结，此处渲染冻结战场 + 毛玻璃背板 + 战报卡片（镜像 quickResult 分支）
+        if (GameState.battleReport) {
+            this._renderWorld();
+            this._renderEntities();
+            WeatherSystem.drawCloudShadows(this.ctx, GameState.camera);
+            WeatherSystem.drawParticles(this.ctx);
+            WeatherSystem.drawOverlay(this.ctx, this);
+            WeatherSystem.drawWeatherEdgeEffects(this.ctx, this);
+
+            // easeOutCubic 弹出（自驱 deltaTime）
+            const tNow = performance.now();
+            if (GameState._battleReportAppearLastTime == null) GameState._battleReportAppearLastTime = tNow;
+            const dt = Math.min((tNow - GameState._battleReportAppearLastTime) / 1000, 0.05);
+            GameState._battleReportAppearLastTime = tNow;
+            if (GameState.battleReportAppearAnim < 1) {
+                GameState.battleReportAppearAnim = Math.min(1, GameState.battleReportAppearAnim + dt / 0.28);
+            }
+            const bEased = easeOutCubic(GameState.battleReportAppearAnim);
+
+            this._captureFrameForBlur();
+            this._drawBlurBackgroundAlpha(0.85 * bEased);
+            this.ctx.fillStyle = `rgba(0,0,0,${0.55 * bEased})`;
+            this.ctx.fillRect(0, 0, this.width, this.height);
+
+            this._updateShaderLighting();
+            drawBattleReport(this.ctx, this);
             this._renderDayNightOverlay();
             PostProcess.apply(this._offscreenCanvas, this);
             return;

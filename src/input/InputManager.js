@@ -11,6 +11,7 @@ import { handlePauseKeydown, handlePauseMousedown, handleSettingsKeydown, handle
 import { handleDialogueKeydown, handleDialogueMousedown } from './handlers/DialogueHandler.js';
 import { handleMainMenuMousedown } from './handlers/MainMenuHandler.js';
 import { handleQuickResultKeydown, handleQuickResultMousedown } from './handlers/QuickResultHandler.js';
+import { handleBattleReportKeydown, handleBattleReportMousedown } from './handlers/BattleReportHandler.js';
 
 // 首次手势回调（presskey → menu），由 main.js 注入避免循环依赖
 let firstGestureHandler = null;
@@ -42,6 +43,12 @@ export const InputManager = {
             // 快速模式结算界面（优先于死亡处理：快速模式不可复活）
             if (GameState.mode === 'quick' && GameState.quickResult) {
                 handleQuickResultKeydown(e, key);
+                return;
+            }
+
+            // 战地模式胜利战报（点击/按键关闭，优先于死亡处理；关闭后游戏继续）
+            if (GameState.battleReport) {
+                handleBattleReportKeydown(e);
                 return;
             }
 
@@ -152,6 +159,12 @@ export const InputManager = {
                 // 快速模式结算界面点击（优先于死亡界面）
                 if (GameState.mode === 'quick' && GameState.quickResult) {
                     handleQuickResultMousedown(e, canvas);
+                    return;
+                }
+
+                // 战地模式胜利战报点击（关闭，优先于死亡界面）
+                if (GameState.battleReport) {
+                    handleBattleReportMousedown(e);
                     return;
                 }
 

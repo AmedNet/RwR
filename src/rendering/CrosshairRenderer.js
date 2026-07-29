@@ -57,7 +57,7 @@ export function isCrosshairActive() {
     if (!player || !player.alive || player.dying) return false;
     if (GameState.gameOver || GameState.inventoryOpen || GameState.arsenalOpen ||
         GameState.radioOpen || GameState.debugOpen ||
-        GameState.paused || GameState.settingsOpen) return false;
+        GameState.paused || GameState.settingsOpen || GameState.battleReport) return false;
     const weapon = GameState.getActiveWeapon();
     if (!weapon || weapon.isLoot) return false;
     // 医疗包不显示射击准星

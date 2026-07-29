@@ -884,8 +884,8 @@ export const SupportSystem = {
     aiGlobalTimer: 0,
     aiShouldCallSupport() {
         this.aiGlobalTimer++;
-        if (this.aiGlobalTimer < 1800) return null;
-        if (Math.random() > 0.005) return null;
+        if (this.aiGlobalTimer < 2400) return null;
+        if (Math.random() > 0.003) return null;
 
         // 找到能呼叫支援的敌人（军官或指挥官）
         const callers = GameState.enemies.filter(e => {

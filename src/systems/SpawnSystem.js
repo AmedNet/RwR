@@ -252,7 +252,8 @@ export const SpawnSystem = {
 
         GameState.spawnTimer++;
         // 在战争激烈时，敌人刷新增加更快
-        const rate = Math.max(10, config.spawnBaseRate - Math.floor(GameState.kills / 5));
+        // 战地平衡：刷兵加速更平缓、下限更高，避免「越杀越多」压垮蓝方
+        const rate = Math.max(22, config.spawnBaseRate - Math.floor(GameState.kills / 12));
         if (GameState.spawnTimer >= rate) {
             const enemy = this.spawnEnemy();
             if (enemy) {
