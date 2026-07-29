@@ -75,7 +75,7 @@ export const MovementSystem = {
         }
 
         // 世界边界限制
-        const world = GameState.config.world;
+        const world = GameState.world;
         entity.x = Math.max(entity.radius, Math.min(world.width - entity.radius, entity.x));
         entity.y = Math.max(entity.radius, Math.min(world.height - entity.radius, entity.y));
 
@@ -166,7 +166,7 @@ export const MovementSystem = {
      */
     teleportToSafe(entity, state) {
         const map = GameState.map;
-        const world = GameState.config.world;
+        const world = GameState.world;
         
         // 如果有指定传送点，优先使用
         if (state.fallbackPoints && state.fallbackPoints.length > 0) {

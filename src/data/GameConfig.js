@@ -56,11 +56,7 @@ const CONFIG = {
     }
 };
 
-// 提前计算世界尺寸（在 initMap 之前设置）
-CONFIG.world = {
-    width: CONFIG.map.cols * CONFIG.map.tileSize,
-    height: CONFIG.map.rows * CONFIG.map.tileSize
-};
+// 世界尺寸已迁移至 GameState.world（运行时由 initMap/initQuickMap 写入），CONFIG 不再持有可变状态。
 
 const GAME_CONSTANTS = {
     INITIAL_TEAMMATES: 15,

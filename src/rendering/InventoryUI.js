@@ -19,42 +19,42 @@ inventoryThinkImg.onload = () => { inventoryThinkLoaded = true; };
 export function drawInventory(ctx, renderer) {
     // === 动画更新（基于时间） ===
     const now = performance.now();
-    if (!GameState._inventoryAnimLastTime) {
-        GameState._inventoryAnimLastTime = now;
+    if (!GameState.panels.inventory._lastTime) {
+        GameState.panels.inventory._lastTime = now;
     }
-    const deltaTime = (now - GameState._inventoryAnimLastTime) / 1000; // 秒
-    GameState._inventoryAnimLastTime = now;
+    const deltaTime = (now - GameState.panels.inventory._lastTime) / 1000; // 秒
+    GameState.panels.inventory._lastTime = now;
     // 限制 deltaTime，避免背包关闭期间 lastTime 未更新造成下一帧跳过整个动画
     const dt = Math.min(deltaTime, 0.05);
     
     // 动画速度：关闭比打开更快（约 230ms vs 280ms），关闭给“快速收回”的直觉
-    const isClosingDir = GameState.inventoryAnimDirection === 'closing';
+    const isClosingDir = GameState.panels.inventory.direction === 'closing';
     const ANIM_SPEED_PER_SEC = isClosingDir ? 4.4 : 3.6;
     
-    if (GameState.inventoryAnimDirection === 'opening') {
-        GameState.inventoryAnimProgress = Math.min(1, GameState.inventoryAnimProgress + ANIM_SPEED_PER_SEC * dt);
-        if (GameState.inventoryAnimProgress >= 1) {
-            GameState.inventoryAnimDirection = null;
+    if (GameState.panels.inventory.direction === 'opening') {
+        GameState.panels.inventory.progress = Math.min(1, GameState.panels.inventory.progress + ANIM_SPEED_PER_SEC * dt);
+        if (GameState.panels.inventory.progress >= 1) {
+            GameState.panels.inventory.direction = null;
         }
-    } else if (GameState.inventoryAnimDirection === 'closing') {
-        GameState.inventoryAnimProgress = Math.max(0, GameState.inventoryAnimProgress - ANIM_SPEED_PER_SEC * dt);
-        if (GameState.inventoryAnimProgress <= 0) {
-            GameState.inventoryOpen = false;
-            GameState.inventoryAnimDirection = null;
+    } else if (GameState.panels.inventory.direction === 'closing') {
+        GameState.panels.inventory.progress = Math.max(0, GameState.panels.inventory.progress - ANIM_SPEED_PER_SEC * dt);
+        if (GameState.panels.inventory.progress <= 0) {
+            GameState.panels.inventory.open = false;
+            GameState.panels.inventory.direction = null;
             GameState.inventorySelectedSlot = -1;
             // 重置焦点动画状态，避免下次打开从旧会话位置残留滑入
-            GameState.inventoryFocusX = null;
-            GameState.inventoryFocusY = null;
-            GameState.inventoryFocusSlot = -1;
-            GameState.inventoryFocusFromX = null;
-            GameState.inventoryFocusFromY = null;
-            GameState.inventoryFocusAnim = 0;
-            GameState._inventoryAnimLastTime = null;
+            GameState.focus.inventory.x = null;
+            GameState.focus.inventory.y = null;
+            GameState.focus.inventory.index = -1;
+            GameState.focus.inventory.fromX = null;
+            GameState.focus.inventory.fromY = null;
+            GameState.focus.inventory.anim = 0;
+            GameState.panels.inventory._lastTime = null;
             return;
         }
     }
 
-    const rawP = GameState.inventoryAnimProgress;
+    const rawP = GameState.panels.inventory.progress;
     // 倒带式回缩：打开与关闭共用同一条曲线 easeOutCubic(rawP)。
     // rawP 在关闭时由 1→0，p 随之由 1→0，即打开的精确倒放。
     const p = easeOutCubic(rawP);
@@ -255,32 +255,32 @@ export function drawInventory(ctx, renderer) {
     if (selSlot >= 0 && selSlot < slotCenters.length) {
         const target = slotCenters[selSlot];
         // 检测选中索引变化：切换瞬间记录滑动起点
-        if (GameState.inventoryFocusSlot !== selSlot) {
-            const hasFocus = (GameState.inventoryFocusX !== null && GameState.inventoryFocusY !== null);
+        if (GameState.focus.inventory.index !== selSlot) {
+            const hasFocus = (GameState.focus.inventory.x !== null && GameState.focus.inventory.y !== null);
             if (hasFocus) {
                 // 从旧焦点位置出发滑过去
-                GameState.inventoryFocusFromX = GameState.inventoryFocusX;
-                GameState.inventoryFocusFromY = GameState.inventoryFocusY;
+                GameState.focus.inventory.fromX = GameState.focus.inventory.x;
+                GameState.focus.inventory.fromY = GameState.focus.inventory.y;
             } else {
                 // 第一次出现焦点：直接定身在新格子，不滑动（起点=终点）
-                GameState.inventoryFocusFromX = target.x;
-                GameState.inventoryFocusFromY = target.y;
-                GameState.inventoryFocusX = target.x;
-                GameState.inventoryFocusY = target.y;
+                GameState.focus.inventory.fromX = target.x;
+                GameState.focus.inventory.fromY = target.y;
+                GameState.focus.inventory.x = target.x;
+                GameState.focus.inventory.y = target.y;
             }
-            GameState.inventoryFocusAnim = 0;
-            GameState.inventoryFocusSlot = selSlot;
+            GameState.focus.inventory.anim = 0;
+            GameState.focus.inventory.index = selSlot;
         }
         // 推进滑动进度（~220ms 落定），easeOutBack 让末端轻过冲再回弹，呼吸感
-        GameState.inventoryFocusAnim = Math.min(1, GameState.inventoryFocusAnim + dt / 0.22);
-        const t = easeOutBack(GameState.inventoryFocusAnim);
-        GameState.inventoryFocusX = GameState.inventoryFocusFromX + (target.x - GameState.inventoryFocusFromX) * t;
-        GameState.inventoryFocusY = GameState.inventoryFocusFromY + (target.y - GameState.inventoryFocusFromY) * t;
+        GameState.focus.inventory.anim = Math.min(1, GameState.focus.inventory.anim + dt / 0.22);
+        const t = easeOutBack(GameState.focus.inventory.anim);
+        GameState.focus.inventory.x = GameState.focus.inventory.fromX + (target.x - GameState.focus.inventory.fromX) * t;
+        GameState.focus.inventory.y = GameState.focus.inventory.fromY + (target.y - GameState.focus.inventory.fromY) * t;
 
         // 画复合高亮（发光描边 + 底部流光线），整体随背包淡入淡出
         const pulse = Math.sin(performance.now() * 0.004) * 0.05 + 0.95; // 对齐 RadioUI 频率/幅度
-        const fx = GameState.inventoryFocusX;
-        const fy = GameState.inventoryFocusY;
+        const fx = GameState.focus.inventory.x;
+        const fy = GameState.focus.inventory.y;
         const fs = (slotSize + 6) * target.scale; // 焦点框略大于格子，跟弹入缩放
         const half = fs / 2;
         const pad = GLASS.radiusSmall + 1; // 流光线左右内缩，避开圆角

@@ -1,5 +1,6 @@
 // src/entities/Grenade.js
 import { GameState } from '../core/GameState.js';
+import { EventBus } from '../core/EventBus.js';
 import { playExplosion } from '../utils/SoundManager.js';
 
 export class Grenade {
@@ -60,7 +61,7 @@ export class Grenade {
         }
 
         // 世界边界检查
-        const world = GameState.config.world;
+        const world = GameState.world;
         if (this.x < this.radius || this.x > world.width - this.radius ||
             this.y < this.radius || this.y > world.height - this.radius) {
             this.alive = false;
@@ -79,9 +80,7 @@ export class Grenade {
         this.alive = false;
         
         playExplosion(this);
-        window.dispatchEvent(new CustomEvent('grenade_explode', {
-            detail: { x: this.x, y: this.y, radius: this.explosionRadius, damage: this.damage }
-        }));
+        EventBus.emit('grenade_explode', { x: this.x, y: this.y, radius: this.explosionRadius, damage: this.damage });
     }
 
     draw(ctx) {

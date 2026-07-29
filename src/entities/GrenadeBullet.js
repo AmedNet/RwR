@@ -117,7 +117,7 @@ export class GrenadeBullet {
         }
 
         // 世界边界检查
-        const world = GameState.config.world;
+        const world = GameState.world;
         if (this.groundX < this.radius || this.groundX > world.width - this.radius ||
             this.groundY < this.radius || this.groundY > world.height - this.radius) {
             this.alive = false;

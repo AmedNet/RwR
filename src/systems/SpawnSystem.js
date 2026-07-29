@@ -86,7 +86,7 @@ export const SpawnSystem = {
     // config: { count, x, y, radius, rank?, unitClass?, weaponIds? }
     // rank/unitClass 未指定时随机；weaponIds 未指定时根据 rank/unitClass 随机生成
     spawnCustomWave(config) {
-        const world = GameState.config.world;
+        const world = GameState.world;
         const enemies = [];
         for (let i = 0; i < (config.count || 1); i++) {
             const angle = Math.random() * Math.PI * 2;
@@ -113,7 +113,7 @@ export const SpawnSystem = {
 
     spawnEnemy() {
         const config = GameState.config.enemy;
-        const world = GameState.config.world;
+        const world = GameState.world;
 
         // 只在敌方据点生成敌人
         const enemyPoints = GameState.capturePoints.filter(p => p.owner === 'enemy');

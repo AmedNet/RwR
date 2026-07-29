@@ -539,7 +539,7 @@ export class Player extends Entity {
         const windScale = currentWeather === 'windStorm' || currentWeather === 'sandstorm' ? 0.12 : 0.3;
         this.x += windForce.x * windScale + tornadoForce.x;
         this.y += windForce.y * windScale + tornadoForce.y;
-        const world = GameState.config.world;
+        const world = GameState.world;
         this.x = Math.max(this.radius, Math.min(world.width - this.radius, this.x));
         this.y = Math.max(this.radius, Math.min(world.height - this.radius, this.y));
         if (this.shootCooldown > 0) this.shootCooldown--;
@@ -648,7 +648,7 @@ export class Player extends Entity {
             shootY = seatPos.y;
         }
         // UI界面打开时禁止开火
-        if (GameState.arsenalOpen || GameState.inventoryOpen || GameState.debugOpen || GameState.radioOpen) return;
+        if (GameState.panels.arsenal.open || GameState.panels.inventory.open || GameState.debugOpen || GameState.panels.radio.open) return;
         const weapon = GameState.getActiveWeapon();
         if (!weapon || weapon.isLoot || !weapon.canShoot()) return;
 

@@ -20,20 +20,20 @@ const TABS = [
 // 设置面板动画推进（自驱 deltaTime，倒带式，镜像 RadioUI.updateRadioAnimation）
 export function updateSettingsAnimation() {
     const now = performance.now();
-    if (GameState._settingsAnimLastTime == null) GameState._settingsAnimLastTime = now;
-    const dt = Math.min((now - GameState._settingsAnimLastTime) / 1000, 0.05);
-    GameState._settingsAnimLastTime = now;
+    if (GameState.panels.settings._lastTime == null) GameState.panels.settings._lastTime = now;
+    const dt = Math.min((now - GameState.panels.settings._lastTime) / 1000, 0.05);
+    GameState.panels.settings._lastTime = now;
 
-    const speed = GameState.settingsAnimDirection === 'closing' ? 4.4 : 3.6;
-    if (GameState.settingsAnimDirection === 'opening') {
-        GameState.settingsAnimProgress = Math.min(1, GameState.settingsAnimProgress + speed * dt);
-        if (GameState.settingsAnimProgress >= 1) GameState.settingsAnimDirection = null;
-    } else if (GameState.settingsAnimDirection === 'closing') {
-        GameState.settingsAnimProgress = Math.max(0, GameState.settingsAnimProgress - speed * dt);
-        if (GameState.settingsAnimProgress <= 0) {
-            GameState.settingsOpen = false;
-            GameState.settingsAnimDirection = null;
-            GameState._settingsAnimLastTime = null;
+    const speed = GameState.panels.settings.direction === 'closing' ? 4.4 : 3.6;
+    if (GameState.panels.settings.direction === 'opening') {
+        GameState.panels.settings.progress = Math.min(1, GameState.panels.settings.progress + speed * dt);
+        if (GameState.panels.settings.progress >= 1) GameState.panels.settings.direction = null;
+    } else if (GameState.panels.settings.direction === 'closing') {
+        GameState.panels.settings.progress = Math.max(0, GameState.panels.settings.progress - speed * dt);
+        if (GameState.panels.settings.progress <= 0) {
+            GameState.panels.settings.open = false;
+            GameState.panels.settings.direction = null;
+            GameState.panels.settings._lastTime = null;
             GameState.keybindCapturing = null;
         }
     }
@@ -236,18 +236,18 @@ export function drawSettings(ctx, renderer) {
     const W = renderer.width;
     const H = renderer.height;
 
-    const rawP = GameState.settingsAnimProgress || 0;
+    const rawP = GameState.panels.settings.progress || 0;
     const eased = easeOutCubic(rawP);
     if (eased <= 0) { GameState.settingsHitAreas = []; return; }
 
     // 焦点滑动自驱 deltaTime（tab 指示器用）
     const time = performance.now();
-    if (GameState._settingsTabFocusLastTime == null) GameState._settingsTabFocusLastTime = time;
-    const dt = Math.min((time - GameState._settingsTabFocusLastTime) / 1000, 0.05);
-    GameState._settingsTabFocusLastTime = time;
+    if (GameState.focus.settingsTab._lastTime == null) GameState.focus.settingsTab._lastTime = time;
+    const dt = Math.min((time - GameState.focus.settingsTab._lastTime) / 1000, 0.05);
+    GameState.focus.settingsTab._lastTime = time;
 
     // 缩放 + 上浮 + 淡入
-    const scaleP = GameState.settingsAnimDirection === 'opening' ? easeOutBack(rawP) : rawP;
+    const scaleP = GameState.panels.settings.direction === 'opening' ? easeOutBack(rawP) : rawP;
     const scale = 0.94 + 0.06 * scaleP;
     const offsetY = (1 - scaleP) * 20;
 
@@ -307,22 +307,22 @@ export function drawSettings(ctx, renderer) {
 
     // tab 高亮条焦点滑动（easeOutBack，镜像 ArsenalUI 分类高亮）
     const tabTargetY = contentTop + GameState.settingsTab * (sideBarItemH + sideBarGap);
-    if (GameState.settingsTabFocusIndex !== GameState.settingsTab) {
-        if (GameState.settingsTabFocusY != null) {
-            GameState.settingsTabFocusFromY = GameState.settingsTabFocusY;
+    if (GameState.focus.settingsTab.index !== GameState.settingsTab) {
+        if (GameState.focus.settingsTab.y != null) {
+            GameState.focus.settingsTab.fromY = GameState.focus.settingsTab.y;
         } else {
-            GameState.settingsTabFocusFromY = tabTargetY;
-            GameState.settingsTabFocusY = tabTargetY;
+            GameState.focus.settingsTab.fromY = tabTargetY;
+            GameState.focus.settingsTab.y = tabTargetY;
         }
-        GameState.settingsTabFocusAnim = 0;
-        GameState.settingsTabFocusIndex = GameState.settingsTab;
+        GameState.focus.settingsTab.anim = 0;
+        GameState.focus.settingsTab.index = GameState.settingsTab;
     }
-    GameState.settingsTabFocusAnim = Math.min(1, GameState.settingsTabFocusAnim + dt / 0.22);
-    const tabT = easeOutBack(GameState.settingsTabFocusAnim);
-    GameState.settingsTabFocusY = GameState.settingsTabFocusFromY + (tabTargetY - GameState.settingsTabFocusFromY) * tabT;
+    GameState.focus.settingsTab.anim = Math.min(1, GameState.focus.settingsTab.anim + dt / 0.22);
+    const tabT = easeOutBack(GameState.focus.settingsTab.anim);
+    GameState.focus.settingsTab.y = GameState.focus.settingsTab.fromY + (tabTargetY - GameState.focus.settingsTab.fromY) * tabT;
 
     const activeTab = TABS[GameState.settingsTab];
-    const fy = GameState.settingsTabFocusY;
+    const fy = GameState.focus.settingsTab.y;
     ctx.save();
     ctx.fillStyle = activeTab.color + '29'; // ~16% alpha
     ctx.beginPath();

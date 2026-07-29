@@ -47,15 +47,15 @@ export function drawRadioUI(ctx, renderer) {
     const H = renderer.height;
     const time = performance.now();
 
-    const animProgress = GameState.radioAnimProgress || 0;
+    const animProgress = GameState.panels.radio.progress || 0;
     const eased = easeOutCubic(animProgress);
 
     if (eased <= 0) return;
 
     // === 焦点滑动自驱 deltaTime（与背包/军械库同取法） ===
-    if (GameState._radioFocusLastTime == null) GameState._radioFocusLastTime = time;
-    const deltaTime = (time - GameState._radioFocusLastTime) / 1000;
-    GameState._radioFocusLastTime = time;
+    if (GameState.focus.radioItem._lastTime == null) GameState.focus.radioItem._lastTime = time;
+    const deltaTime = (time - GameState.focus.radioItem._lastTime) / 1000;
+    GameState.focus.radioItem._lastTime = time;
     const dt = Math.min(deltaTime, 0.05);
 
     ctx.save();
@@ -158,7 +158,7 @@ export function drawRadioUI(ctx, renderer) {
         // 选中高亮画在焦点滑动后的 y（见循环后焦点推进），这里只画非选中项的内容
         if (isSelected) {
             const pulse = Math.sin(time * 0.004) * 0.05 + 0.95;
-            const fy = GameState.radioItemFocusY;
+            const fy = GameState.focus.radioItem.y;
             // 淡蓝选中底（电台专属蓝，脉动呼吸)
             ctx.fillStyle = `rgba(100,181,246,${0.12 * pulse})`;
             ctx.beginPath();
@@ -229,21 +229,21 @@ export function drawRadioUI(ctx, renderer) {
         const selCardProgress = easeOutCubic(Math.max(0, Math.min(1, (animProgress - selCardDelay) * 4)));
         const selCardSlide = (1 - selCardProgress) * 20;
         const itemTargetY = listTop + selectedIndex * (itemH + itemGap) + selCardSlide - currentScrollOffset;
-        if (GameState.radioItemFocusIndex !== selectedIndex) {
-            if (GameState.radioItemFocusY != null) {
+        if (GameState.focus.radioItem.index !== selectedIndex) {
+            if (GameState.focus.radioItem.y != null) {
                 // 从半路位置出发滑过去（天然支持打断：旧动画没播完就从当前显示位置接续）
-                GameState.radioItemFocusFromY = GameState.radioItemFocusY;
+                GameState.focus.radioItem.fromY = GameState.focus.radioItem.y;
             } else {
                 // 首次出现：直接定身，不滑动
-                GameState.radioItemFocusFromY = itemTargetY;
-                GameState.radioItemFocusY = itemTargetY;
+                GameState.focus.radioItem.fromY = itemTargetY;
+                GameState.focus.radioItem.y = itemTargetY;
             }
-            GameState.radioItemFocusAnim = 0;
-            GameState.radioItemFocusIndex = selectedIndex;
+            GameState.focus.radioItem.anim = 0;
+            GameState.focus.radioItem.index = selectedIndex;
         }
-        GameState.radioItemFocusAnim = Math.min(1, GameState.radioItemFocusAnim + dt / 0.22);
-        const t = easeOutBack(GameState.radioItemFocusAnim);
-        GameState.radioItemFocusY = GameState.radioItemFocusFromY + (itemTargetY - GameState.radioItemFocusFromY) * t;
+        GameState.focus.radioItem.anim = Math.min(1, GameState.focus.radioItem.anim + dt / 0.22);
+        const t = easeOutBack(GameState.focus.radioItem.anim);
+        GameState.focus.radioItem.y = GameState.focus.radioItem.fromY + (itemTargetY - GameState.focus.radioItem.fromY) * t;
     }
 
     // 恢复上下文（取消裁剪）
@@ -377,29 +377,29 @@ export function drawRadioUI(ctx, renderer) {
 
 export function updateRadioAnimation() {
     const now = performance.now();
-    if (GameState._radioAnimLastTime == null) GameState._radioAnimLastTime = now;
-    const deltaTime = (now - GameState._radioAnimLastTime) / 1000;
-    GameState._radioAnimLastTime = now;
+    if (GameState.panels.radio._lastTime == null) GameState.panels.radio._lastTime = now;
+    const deltaTime = (now - GameState.panels.radio._lastTime) / 1000;
+    GameState.panels.radio._lastTime = now;
     const dt = Math.min(deltaTime, 0.05); // 防停顿后跳变
 
-    const isClosingDir = GameState.radioAnimDirection === 'closing';
+    const isClosingDir = GameState.panels.radio.direction === 'closing';
     const ANIM_SPEED_PER_SEC = isClosingDir ? 4.4 : 3.6; // 关 ~0.23s / 开 ~0.28s
 
-    if (GameState.radioAnimDirection === 'opening') {
-        GameState.radioAnimProgress = Math.min(1, GameState.radioAnimProgress + ANIM_SPEED_PER_SEC * dt);
-        if (GameState.radioAnimProgress >= 1) GameState.radioAnimDirection = null;
-    } else if (GameState.radioAnimDirection === 'closing') {
-        GameState.radioAnimProgress = Math.max(0, GameState.radioAnimProgress - ANIM_SPEED_PER_SEC * dt);
-        if (GameState.radioAnimProgress <= 0) {
-            GameState.radioOpen = false;
-            GameState.radioAnimDirection = null;
-            GameState._radioAnimLastTime = null;
+    if (GameState.panels.radio.direction === 'opening') {
+        GameState.panels.radio.progress = Math.min(1, GameState.panels.radio.progress + ANIM_SPEED_PER_SEC * dt);
+        if (GameState.panels.radio.progress >= 1) GameState.panels.radio.direction = null;
+    } else if (GameState.panels.radio.direction === 'closing') {
+        GameState.panels.radio.progress = Math.max(0, GameState.panels.radio.progress - ANIM_SPEED_PER_SEC * dt);
+        if (GameState.panels.radio.progress <= 0) {
+            GameState.panels.radio.open = false;
+            GameState.panels.radio.direction = null;
+            GameState.panels.radio._lastTime = null;
             // 重置焦点滑动状态，避免下次开启从旧会话位置残留滑入（照背包 closing 收场）
-            GameState.radioItemFocusY = null;
-            GameState.radioItemFocusFromY = null;
-            GameState.radioItemFocusIndex = -1;
-            GameState.radioItemFocusAnim = 0;
-            GameState._radioFocusLastTime = null;
+            GameState.focus.radioItem.y = null;
+            GameState.focus.radioItem.fromY = null;
+            GameState.focus.radioItem.index = -1;
+            GameState.focus.radioItem.anim = 0;
+            GameState.focus.radioItem._lastTime = null;
         }
     }
 }
@@ -410,43 +410,43 @@ const NO_PERMIT_OPEN_SPEED = 4.0;  // ~0.25s 弹入
 const NO_PERMIT_CLOSE_SPEED = 4.4; // ~0.23s 收回
 
 export function updateRadioNoPermit() {
-    if (!GameState.radioNoPermitActive) return;
+    if (!GameState.panels.radioNoPermit.open) return;
 
     const now = performance.now();
-    if (GameState._radioNoPermitAnimLastTime == null) GameState._radioNoPermitAnimLastTime = now;
-    const deltaTime = (now - GameState._radioNoPermitAnimLastTime) / 1000;
-    GameState._radioNoPermitAnimLastTime = now;
+    if (GameState.panels.radioNoPermit._lastTime == null) GameState.panels.radioNoPermit._lastTime = now;
+    const deltaTime = (now - GameState.panels.radioNoPermit._lastTime) / 1000;
+    GameState.panels.radioNoPermit._lastTime = now;
     const dt = Math.min(deltaTime, 0.05);
 
-    const dir = GameState.radioNoPermitAnimDirection;
+    const dir = GameState.panels.radioNoPermit.direction;
     if (dir === 'opening') {
-        GameState.radioNoPermitAnimProgress = Math.min(1, GameState.radioNoPermitAnimProgress + NO_PERMIT_OPEN_SPEED * dt);
-        if (GameState.radioNoPermitAnimProgress >= 1) {
-            GameState.radioNoPermitAnimDirection = null; // 进入保持阶段
+        GameState.panels.radioNoPermit.progress = Math.min(1, GameState.panels.radioNoPermit.progress + NO_PERMIT_OPEN_SPEED * dt);
+        if (GameState.panels.radioNoPermit.progress >= 1) {
+            GameState.panels.radioNoPermit.direction = null; // 进入保持阶段
         }
     } else if (dir === 'closing') {
-        GameState.radioNoPermitAnimProgress = Math.max(0, GameState.radioNoPermitAnimProgress - NO_PERMIT_CLOSE_SPEED * dt);
-        if (GameState.radioNoPermitAnimProgress <= 0) {
+        GameState.panels.radioNoPermit.progress = Math.max(0, GameState.panels.radioNoPermit.progress - NO_PERMIT_CLOSE_SPEED * dt);
+        if (GameState.panels.radioNoPermit.progress <= 0) {
             // 完全收回，清场
-            GameState.radioNoPermitActive = false;
-            GameState.radioNoPermitAnimDirection = null;
-            GameState.radioNoPermitShowTimer = 0;
-            GameState._radioNoPermitAnimLastTime = null;
+            GameState.panels.radioNoPermit.open = false;
+            GameState.panels.radioNoPermit.direction = null;
+            GameState.panels.radioNoPermit.showTimer = 0;
+            GameState.panels.radioNoPermit._lastTime = null;
             return;
         }
     } else {
         // 保持阶段：计时到点后启动收回
-        GameState.radioNoPermitShowTimer += dt;
-        if (GameState.radioNoPermitShowTimer >= NO_PERMIT_HOLD_SECONDS) {
-            GameState.radioNoPermitAnimDirection = 'closing';
+        GameState.panels.radioNoPermit.showTimer += dt;
+        if (GameState.panels.radioNoPermit.showTimer >= NO_PERMIT_HOLD_SECONDS) {
+            GameState.panels.radioNoPermit.direction = 'closing';
         }
     }
 }
 
 // 绘制无权限提示图（左下角弹出；与电台面板完全独立，电台此时并未打开）
 export function drawRadioNoPermit(ctx, renderer) {
-    if (!GameState.radioNoPermitActive || !callNoPermitLoaded) return;
-    const p = GameState.radioNoPermitAnimProgress;
+    if (!GameState.panels.radioNoPermit.open || !callNoPermitLoaded) return;
+    const p = GameState.panels.radioNoPermit.progress;
     if (p <= 0) return;
 
     const H = renderer.height;

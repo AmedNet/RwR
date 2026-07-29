@@ -35,7 +35,7 @@ export const InputManager = {
             }
 
             // menu 阶段：吞噬游戏操作键（设置打开时由下方 settingsOpen 分支处理）
-            if (GameState.phase === 'menu' && !GameState.settingsOpen && GameState.settingsAnimDirection !== 'closing') {
+            if (GameState.phase === 'menu' && !GameState.panels.settings.open && GameState.panels.settings.direction !== 'closing') {
                 e.preventDefault();
                 return;
             }
@@ -57,32 +57,32 @@ export const InputManager = {
             }
 
             // 对话演出打开（空格/回车推进，吞噬其余键；世界保持冻结）
-            if (GameState.dialogueOpen || GameState.dialogueAnimDirection === 'closing') {
+            if (GameState.panels.dialogue.open || GameState.panels.dialogue.direction === 'closing') {
                 handleDialogueKeydown(e, key);
                 return;
             }
 
             // 设置面板打开（ESC 退回暂停菜单，吞噬其余键；世界保持冻结）
-            if (GameState.settingsOpen || GameState.settingsAnimDirection === 'closing') {
+            if (GameState.panels.settings.open || GameState.panels.settings.direction === 'closing') {
                 handleSettingsKeydown(e, key);
                 return;
             }
 
             // 暂停菜单打开（ESC 恢复游戏，吞噬其余键）
-            if (GameState.paused || GameState.pauseAnimDirection === 'closing') {
+            if (GameState.panels.pause.open || GameState.panels.pause.direction === 'closing') {
                 handlePauseKeydown(e, key);
                 return;
             }
 
             // 菜单打开
-            if (GameState.inventoryOpen || GameState.arsenalOpen) {
+            if (GameState.panels.inventory.open || GameState.panels.arsenal.open) {
                 const consumed = handleMenuKeydown(e, key);
                 if (consumed) return;
                 // F 键穿透到拾取逻辑
             }
 
             // 电台界面
-            if (GameState.radioOpen) {
+            if (GameState.panels.radio.open) {
                 handleRadioKeydown(e, key);
                 return;
             }
@@ -124,32 +124,32 @@ export const InputManager = {
                 }
 
                 // menu 阶段：主菜单按钮点击（命中则分发；无论命中与否都吞掉，防穿透开火）
-                if (GameState.phase === 'menu' && !GameState.settingsOpen && GameState.settingsAnimDirection !== 'closing') {
+                if (GameState.phase === 'menu' && !GameState.panels.settings.open && GameState.panels.settings.direction !== 'closing') {
                     handleMainMenuMousedown(e, canvas);
                     e.preventDefault();
                     return;
                 }
 
                 // 对话演出点击（推进对话，优先于其它面板）
-                if (GameState.dialogueOpen || GameState.dialogueAnimDirection === 'closing') {
+                if (GameState.panels.dialogue.open || GameState.panels.dialogue.direction === 'closing') {
                     handleDialogueMousedown(e, canvas);
                     return;
                 }
 
                 // 设置面板点击（优先于暂停菜单，设置叠在上层）
-                if (GameState.settingsOpen || GameState.settingsAnimDirection === 'closing') {
+                if (GameState.panels.settings.open || GameState.panels.settings.direction === 'closing') {
                     handleSettingsMousedown(e, canvas);
                     return;
                 }
 
                 // 暂停菜单点击
-                if (GameState.paused || GameState.pauseAnimDirection === 'closing') {
+                if (GameState.panels.pause.open || GameState.panels.pause.direction === 'closing') {
                     handlePauseMousedown(e, canvas);
                     return;
                 }
 
                 // 电台界面点击
-                if (GameState.radioOpen) {
+                if (GameState.panels.radio.open) {
                     handleRadioMousedown(e, canvas);
                     return;
                 }
@@ -196,7 +196,7 @@ export const InputManager = {
         // 右键菜单
         canvas.addEventListener('contextmenu', (e) => {
             e.preventDefault();
-            if (GameState.radioOpen) {
+            if (GameState.panels.radio.open) {
                 handleRadioContextmenu(e);
                 return;
             }

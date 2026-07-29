@@ -77,7 +77,7 @@ function dropSelectedInventoryItem() {
 export function handleMenuKeydown(e, key) {
     // 关闭菜单（支持中途可反向打断；与 GameplayHandler 开/关用同一绑定）
     if (key === Settings.controls.arsenal) {
-        if (GameState.arsenalOpen) {
+        if (GameState.panels.arsenal.open) {
             GameState.toggleArsenal();
             playUISound('click');
         }
@@ -85,7 +85,7 @@ export function handleMenuKeydown(e, key) {
         return true;
     }
     if (key === Settings.controls.inventory) {
-        if (GameState.inventoryOpen) {
+        if (GameState.panels.inventory.open) {
             GameState.toggleInventory();
             playUISound('click');
         }
@@ -94,7 +94,7 @@ export function handleMenuKeydown(e, key) {
     }
 
     // === 背包界面专属按键 ===
-    if (GameState.inventoryOpen && GameState.inventoryAnimDirection === null) {
+    if (GameState.panels.inventory.open && GameState.panels.inventory.direction === null) {
         if (key === 'd') {
             dropSelectedInventoryItem();
             e.preventDefault();
@@ -103,7 +103,7 @@ export function handleMenuKeydown(e, key) {
     }
 
     // === 军械库专属按键 ===
-    if (GameState.arsenalOpen && GameState.arsenalAnimDirection === null) {
+    if (GameState.panels.arsenal.open && GameState.panels.arsenal.direction === null) {
         if (key === 'arrowup') {
             GameState.arsenalCategory = (GameState.arsenalCategory + ARSENAL_CATEGORIES.length - 1) % ARSENAL_CATEGORIES.length;
             GameState.arsenalSelectedIndex = 0;
@@ -240,10 +240,10 @@ export function handleMenuKeydown(e, key) {
 
     // F键不拦截，让它穿透到拾取逻辑
     if (key === 'f') {
-        GameState.inventoryOpen = false;
-        GameState.arsenalOpen = false;
-        GameState.arsenalAnimDirection = null;
-        GameState.arsenalAnimProgress = 0;
+        GameState.panels.inventory.open = false;
+        GameState.panels.arsenal.open = false;
+        GameState.panels.arsenal.direction = null;
+        GameState.panels.arsenal.progress = 0;
         return false; // 不拦截，继续到 GameplayHandler
     }
 
@@ -253,7 +253,7 @@ export function handleMenuKeydown(e, key) {
 // ─── mousedown 处理（背包格子点击选中） ───
 
 export function handleMenuMousedown(e, canvas) {
-    if (GameState.inventoryOpen && GameState.inventoryAnimDirection === null && GameState.inventoryHitAreas) {
+    if (GameState.panels.inventory.open && GameState.panels.inventory.direction === null && GameState.inventoryHitAreas) {
         const rect = canvas.getBoundingClientRect();
         const scaleX = canvas.clientWidth / rect.width;
         const scaleY = canvas.clientHeight / rect.height;
@@ -276,7 +276,7 @@ export function handleMenuMousedown(e, canvas) {
 // ─── contextmenu 处理（右键丢弃） ───
 
 export function handleMenuContextmenu(e) {
-    if (GameState.inventoryOpen && GameState.inventoryAnimDirection === null) {
+    if (GameState.panels.inventory.open && GameState.panels.inventory.direction === null) {
         dropSelectedInventoryItem();
     }
 }
@@ -284,7 +284,7 @@ export function handleMenuContextmenu(e) {
 // ─── wheel 处理（军械库滚轮） ───
 
 export function handleMenuWheel(e) {
-    if (GameState.arsenalOpen) {
+    if (GameState.panels.arsenal.open) {
         const scrollStep = 40;
         GameState.arsenalScrollOffset = (GameState.arsenalScrollOffset || 0) + (e.deltaY > 0 ? scrollStep : -scrollStep);
         e.preventDefault();

@@ -508,7 +508,7 @@ export const Renderer = {
         // 更新主菜单出现动画（menu 阶段单向淡入）
         updateMenuAnimation();
 
-        const menuOpen = GameState.inventoryOpen || GameState.arsenalOpen || GameState.radioOpen || GameState.debugOpen || GameState.paused || GameState.settingsOpen || GameState.dialogueOpen;
+        const menuOpen = GameState.panels.inventory.open || GameState.panels.arsenal.open || GameState.panels.radio.open || GameState.debugOpen || GameState.panels.pause.open || GameState.panels.settings.open || GameState.panels.dialogue.open;
         const hud = document.getElementById('hud');
         if (hud) {
             // 非游玩阶段（loading/presskey/menu）隐藏 DOM HUD（P1-11）
@@ -544,19 +544,19 @@ export const Renderer = {
 
             // 延迟渐黑 → easeOutCubic 弹出（自驱 deltaTime，镜像 gameOver 分支）
             const tNow = performance.now();
-            if (GameState._quickResultAppearLastTime == null) GameState._quickResultAppearLastTime = tNow;
-            const dt = Math.min((tNow - GameState._quickResultAppearLastTime) / 1000, 0.05);
-            GameState._quickResultAppearLastTime = tNow;
-            if (GameState.quickResultDelay < 1) {
-                GameState.quickResultDelay = Math.min(1, GameState.quickResultDelay + dt);
-            } else if (GameState.quickResultAppearAnim < 1) {
-                GameState.quickResultAppearAnim = Math.min(1, GameState.quickResultAppearAnim + dt / 0.28);
+            if (GameState.appear.quickResult._lastTime == null) GameState.appear.quickResult._lastTime = tNow;
+            const dt = Math.min((tNow - GameState.appear.quickResult._lastTime) / 1000, 0.05);
+            GameState.appear.quickResult._lastTime = tNow;
+            if (GameState.appear.quickResult.delay < 1) {
+                GameState.appear.quickResult.delay = Math.min(1, GameState.appear.quickResult.delay + dt);
+            } else if (GameState.appear.quickResult.progress < 1) {
+                GameState.appear.quickResult.progress = Math.min(1, GameState.appear.quickResult.progress + dt / 0.28);
             }
-            const qEased = easeOutCubic(GameState.quickResultAppearAnim);
+            const qEased = easeOutCubic(GameState.appear.quickResult.progress);
 
             this._captureFrameForBlur();
             this._drawBlurBackgroundAlpha(0.85 * qEased);
-            this.ctx.fillStyle = `rgba(0,0,0,${0.55 * GameState.quickResultDelay})`;
+            this.ctx.fillStyle = `rgba(0,0,0,${0.55 * GameState.appear.quickResult.delay})`;
             this.ctx.fillRect(0, 0, this.width, this.height);
 
             this._updateShaderLighting();
@@ -578,13 +578,13 @@ export const Renderer = {
 
             // easeOutCubic 弹出（自驱 deltaTime）
             const tNow = performance.now();
-            if (GameState._battleReportAppearLastTime == null) GameState._battleReportAppearLastTime = tNow;
-            const dt = Math.min((tNow - GameState._battleReportAppearLastTime) / 1000, 0.05);
-            GameState._battleReportAppearLastTime = tNow;
-            if (GameState.battleReportAppearAnim < 1) {
-                GameState.battleReportAppearAnim = Math.min(1, GameState.battleReportAppearAnim + dt / 0.28);
+            if (GameState.appear.battleReport._lastTime == null) GameState.appear.battleReport._lastTime = tNow;
+            const dt = Math.min((tNow - GameState.appear.battleReport._lastTime) / 1000, 0.05);
+            GameState.appear.battleReport._lastTime = tNow;
+            if (GameState.appear.battleReport.progress < 1) {
+                GameState.appear.battleReport.progress = Math.min(1, GameState.appear.battleReport.progress + dt / 0.28);
             }
-            const bEased = easeOutCubic(GameState.battleReportAppearAnim);
+            const bEased = easeOutCubic(GameState.appear.battleReport.progress);
 
             this._captureFrameForBlur();
             this._drawBlurBackgroundAlpha(0.85 * bEased);
@@ -611,21 +611,21 @@ export const Renderer = {
             // === 死亡界面延迟+弹出动画推进（自驱 deltaTime） ===
             // 死亡瞬间先延迟 1s（此期间只渲染战场、遮罩渐黑），1s 后 easeOutCubic 弹出毛玻璃背板+卡片
             const tNow = performance.now();
-            if (GameState._gameOverAppearLastTime == null) GameState._gameOverAppearLastTime = tNow;
-            const dt = Math.min((tNow - GameState._gameOverAppearLastTime) / 1000, 0.05);
-            GameState._gameOverAppearLastTime = tNow;
-            if (GameState.gameOverDelay < 1) {
-                GameState.gameOverDelay = Math.min(1, GameState.gameOverDelay + dt);
-            } else if (GameState.gameOverAppearAnim < 1) {
-                GameState.gameOverAppearAnim = Math.min(1, GameState.gameOverAppearAnim + dt / 0.28); // ~280ms 弹出
+            if (GameState.appear.gameOver._lastTime == null) GameState.appear.gameOver._lastTime = tNow;
+            const dt = Math.min((tNow - GameState.appear.gameOver._lastTime) / 1000, 0.05);
+            GameState.appear.gameOver._lastTime = tNow;
+            if (GameState.appear.gameOver.delay < 1) {
+                GameState.appear.gameOver.delay = Math.min(1, GameState.appear.gameOver.delay + dt);
+            } else if (GameState.appear.gameOver.progress < 1) {
+                GameState.appear.gameOver.progress = Math.min(1, GameState.appear.gameOver.progress + dt / 0.28); // ~280ms 弹出
             }
-            const eased = easeOutCubic(GameState.gameOverAppearAnim);
+            const eased = easeOutCubic(GameState.appear.gameOver.progress);
 
             this._captureFrameForBlur();
             // 模糊背板随弹出动画渐入（弹出期才显形，延迟期为 0）
             this._drawBlurBackgroundAlpha(0.85 * eased);
             // 延迟期战场渐黑（0→0.55 随延迟 0→1 加深），弹出期保持 0.55
-            this.ctx.fillStyle = `rgba(0,0,0,${0.55 * GameState.gameOverDelay})`;
+            this.ctx.fillStyle = `rgba(0,0,0,${0.55 * GameState.appear.gameOver.delay})`;
             this.ctx.fillRect(0, 0, this.width, this.height);
 
             this._updateShaderLighting();
@@ -637,7 +637,7 @@ export const Renderer = {
 
         // 对话演出（开局简报等）：渲染冻结世界 + 毛玻璃模糊背景 + 全屏对话层（与暂停/电台同管线）
         // 优先级高于暂停菜单：简报期间世界冻结，逐句推进，看完关闭动画播完才解冻
-        if (GameState.dialogueOpen || GameState.dialogueAnimDirection === 'closing') {
+        if (GameState.panels.dialogue.open || GameState.panels.dialogue.direction === 'closing') {
             this._renderWorld();
             this._renderEntities();
             WeatherSystem.drawCloudShadows(this.ctx, GameState.camera);
@@ -646,7 +646,7 @@ export const Renderer = {
             WeatherSystem.drawWeatherEdgeEffects(this.ctx, this);
 
             this._captureFrameForBlur();
-            const blurP = easeOutCubic(GameState.dialogueAnimProgress);
+            const blurP = easeOutCubic(GameState.panels.dialogue.progress);
             this._drawBlurBackgroundAlpha(0.85 * blurP);
 
             drawDialogue(this.ctx, this);
@@ -658,7 +658,7 @@ export const Renderer = {
 
         // 主菜单：渲染背景战斗（世界+实体+天气）+ 菜单叠加（轻微压暗不模糊，看清战斗）
         // 守卫 !settingsOpen：设置打开时落到下方 pause/settings 分支绘制（P1-8）
-        if (GameState.phase === 'menu' && !GameState.settingsOpen && GameState.settingsAnimDirection !== 'closing') {
+        if (GameState.phase === 'menu' && !GameState.panels.settings.open && GameState.panels.settings.direction !== 'closing') {
             this._renderWorld();
             this._renderEntities();
             WeatherSystem.drawCloudShadows(this.ctx, GameState.camera);
@@ -675,8 +675,8 @@ export const Renderer = {
 
         // 暂停 + 设置：渲染冻结世界 + 毛玻璃模糊背景 + UI 叠加（与背包/军械库同管线）
         // 暂停菜单作底层（暂停期间始终绘制），设置面板从暂停菜单进入后叠在上层
-        if (GameState.paused || GameState.pauseAnimDirection === 'closing' ||
-            GameState.settingsOpen || GameState.settingsAnimDirection === 'closing') {
+        if (GameState.panels.pause.open || GameState.panels.pause.direction === 'closing' ||
+            GameState.panels.settings.open || GameState.panels.settings.direction === 'closing') {
             this._renderWorld();
             this._renderEntities();
             WeatherSystem.drawCloudShadows(this.ctx, GameState.camera);
@@ -687,16 +687,16 @@ export const Renderer = {
             this._captureFrameForBlur();
 
             // 模糊背板取暂停/设置两者进度的较大值，保证 暂停→设置 过渡时模糊不回落闪烁
-            const _pauseRaw = Math.max(GameState.pauseAnimProgress, GameState.settingsAnimProgress);
+            const _pauseRaw = Math.max(GameState.panels.pause.progress, GameState.panels.settings.progress);
             const blurP = easeOutCubic(_pauseRaw);
             this._drawBlurBackgroundAlpha(0.85 * blurP);
 
             // 设置打开时暂停菜单 cross-fade 淡出（设置淡入、暂停淡出，二者不同屏叠加）
-            const _settingsP = easeOutCubic(GameState.settingsAnimProgress || 0);
-            if (GameState.paused || GameState.pauseAnimDirection === 'closing') {
+            const _settingsP = easeOutCubic(GameState.panels.settings.progress || 0);
+            if (GameState.panels.pause.open || GameState.panels.pause.direction === 'closing') {
                 drawPauseMenu(this.ctx, this, 1 - _settingsP);
             }
-            if (GameState.settingsOpen || GameState.settingsAnimDirection === 'closing') {
+            if (GameState.panels.settings.open || GameState.panels.settings.direction === 'closing') {
                 drawSettings(this.ctx, this);
             }
 
@@ -716,7 +716,7 @@ export const Renderer = {
         }
 
         // 电台：渲染世界 + 毛玻璃模糊背景 + UI叠加（与背包/军械库同管线）
-        if (GameState.radioOpen || GameState.radioAnimDirection === 'closing') {
+        if (GameState.panels.radio.open || GameState.panels.radio.direction === 'closing') {
             this._renderWorld();
             this._renderEntities();
             WeatherSystem.drawCloudShadows(this.ctx, GameState.camera);
@@ -729,7 +729,7 @@ export const Renderer = {
 
             // 全屏毛玻璃背板：与电台动画进度同步（easeOutCubic，倒带式：关闭时 progress 1→0 模糊随之恢复清晰）
             // 电台模糊调淡（0.5 < 背包/军械库的 0.85），便于看清战场选投放点
-            const _radioRaw = GameState.radioAnimProgress;
+            const _radioRaw = GameState.panels.radio.progress;
             const blurP = easeOutCubic(_radioRaw);
             this._drawBlurBackgroundAlpha(0.5 * blurP);
 
@@ -741,7 +741,7 @@ export const Renderer = {
         }
 
         // 背包界面：渲染世界 + 模糊背景 + UI叠加
-        if (GameState.inventoryOpen || GameState.inventoryAnimDirection === 'closing') {
+        if (GameState.panels.inventory.open || GameState.panels.inventory.direction === 'closing') {
             // 先渲染世界到 offscreen canvas
             this._renderWorld();
             this._renderEntities();
@@ -755,7 +755,7 @@ export const Renderer = {
             
             // 应用高斯模糊背景：与 InventoryUI 动画同步（倒带式）
             // 打开/关闭共用 easeOutCubic(rawP)：rawP 关闭时 1→0，模糊随之从 0.85→0 恢复清晰
-            const _invRaw = GameState.inventoryAnimProgress;
+            const _invRaw = GameState.panels.inventory.progress;
             const blurP = easeOutCubic(_invRaw);
             this._drawBlurBackgroundAlpha(0.85 * blurP);
 
@@ -785,7 +785,7 @@ export const Renderer = {
         }
 
         // 军械库界面：渲染世界 + 毛玻璃模糊背景 + UI 叠加（与背包同管线、同语言）
-        if (GameState.arsenalOpen || GameState.arsenalAnimDirection === 'closing') {
+        if (GameState.panels.arsenal.open || GameState.panels.arsenal.direction === 'closing') {
             this._renderWorld();
             this._renderEntities();
             WeatherSystem.drawCloudShadows(this.ctx, GameState.camera);
@@ -798,7 +798,7 @@ export const Renderer = {
 
             // 全屏毛玻璃背板：与军械库动画进度同步（easeOutCubic，平滑无回弹；
             // arsen 无回弹，与 ArsenalUI 面板的 easeOutBack 回弹刻意解耦）
-            const _arRaw = GameState.arsenalAnimProgress;
+            const _arRaw = GameState.panels.arsenal.progress;
             const blurP = easeOutCubic(_arRaw);
             this._drawBlurBackgroundAlpha(0.85 * blurP);
 

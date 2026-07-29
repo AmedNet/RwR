@@ -89,7 +89,7 @@ export const TornadoSystem = {
 
   // ─── 初始化 ───
   init() {
-    const world = GameState.config.world;
+    const world = GameState.world;
     this.center = {
       x: world.width * 0.3 + Math.random() * world.width * 0.4,
       y: world.height * 0.3 + Math.random() * world.height * 0.4
@@ -161,7 +161,7 @@ export const TornadoSystem = {
 
   // ─── 生成 Catmull-Rom 路径 ───
   _generatePath() {
-    const world = GameState.config.world;
+    const world = GameState.world;
     const margin = Math.min(2000, Math.floor(world.width / 6), Math.floor(world.height / 6));
     const minX = margin, maxX = world.width - margin;
     const minY = margin, maxY = world.height - margin;
@@ -248,7 +248,7 @@ export const TornadoSystem = {
     }
 
     // 边界钳制（margin 自适应世界尺寸）
-    const world = GameState.config.world;
+    const world = GameState.world;
     const margin = Math.min(2000, Math.floor(world.width / 6), Math.floor(world.height / 6));
     this.center.x = Math.max(margin, Math.min(world.width - margin, this.center.x));
     this.center.y = Math.max(margin, Math.min(world.height - margin, this.center.y));

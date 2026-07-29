@@ -55,20 +55,20 @@ export function updateDialogueAnimation() {
     DialogueSystem.update();
 
     const now = performance.now();
-    if (GameState._dialogueAnimLastTime == null) GameState._dialogueAnimLastTime = now;
-    const dt = Math.min((now - GameState._dialogueAnimLastTime) / 1000, 0.05);
-    GameState._dialogueAnimLastTime = now;
+    if (GameState.panels.dialogue._lastTime == null) GameState.panels.dialogue._lastTime = now;
+    const dt = Math.min((now - GameState.panels.dialogue._lastTime) / 1000, 0.05);
+    GameState.panels.dialogue._lastTime = now;
 
-    const speed = GameState.dialogueAnimDirection === 'closing' ? 4.4 : 3.6; // 关 ~0.23s / 开 ~0.28s
-    if (GameState.dialogueAnimDirection === 'opening') {
-        GameState.dialogueAnimProgress = Math.min(1, GameState.dialogueAnimProgress + speed * dt);
-        if (GameState.dialogueAnimProgress >= 1) GameState.dialogueAnimDirection = null;
-    } else if (GameState.dialogueAnimDirection === 'closing') {
-        GameState.dialogueAnimProgress = Math.max(0, GameState.dialogueAnimProgress - speed * dt);
-        if (GameState.dialogueAnimProgress <= 0) {
-            GameState.dialogueOpen = false;           // 关闭动画播完才真正解冻世界
-            GameState.dialogueAnimDirection = null;
-            GameState._dialogueAnimLastTime = null;
+    const speed = GameState.panels.dialogue.direction === 'closing' ? 4.4 : 3.6; // 关 ~0.23s / 开 ~0.28s
+    if (GameState.panels.dialogue.direction === 'opening') {
+        GameState.panels.dialogue.progress = Math.min(1, GameState.panels.dialogue.progress + speed * dt);
+        if (GameState.panels.dialogue.progress >= 1) GameState.panels.dialogue.direction = null;
+    } else if (GameState.panels.dialogue.direction === 'closing') {
+        GameState.panels.dialogue.progress = Math.max(0, GameState.panels.dialogue.progress - speed * dt);
+        if (GameState.panels.dialogue.progress <= 0) {
+            GameState.panels.dialogue.open = false;           // 关闭动画播完才真正解冻世界
+            GameState.panels.dialogue.direction = null;
+            GameState.panels.dialogue._lastTime = null;
         }
     }
 }
@@ -78,7 +78,7 @@ export function drawDialogue(ctx, renderer) {
     const W = renderer.width;
     const H = renderer.height;
 
-    const rawP = GameState.dialogueAnimProgress || 0;
+    const rawP = GameState.panels.dialogue.progress || 0;
     const eased = easeOutCubic(rawP);
     if (eased <= 0) { GameState.dialogueHitAreas = []; return; }
 

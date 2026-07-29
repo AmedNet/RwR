@@ -542,7 +542,7 @@ export class Vehicle extends Entity {
             return;
         }
 
-        if (GameState.arsenalOpen || GameState.inventoryOpen || GameState.debugOpen || GameState.radioOpen) return;
+        if (GameState.panels.arsenal.open || GameState.panels.inventory.open || GameState.debugOpen || GameState.panels.radio.open) return;
         if (GameState.mouse.down && this.cannonCooldown === 0 && this.activeVehicleWeapon === 'cannon') this._fireCannon(target, turretBase);
         if (GameState.mouse.down && this.coaxCooldown === 0 && this.activeVehicleWeapon === 'coax') this._fireCoax(turretBase);
         if (GameState.mouse.rightDown && this.coaxCooldown === 0) this._fireCoax(turretBase);

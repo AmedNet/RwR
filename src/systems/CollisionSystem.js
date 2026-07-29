@@ -519,14 +519,12 @@ export const CollisionSystem = {
     _triggerBulletExplosion(bullet, directHitTarget = null) {
         if (!bullet.explosion) return;
         playExplosion(bullet);
-        window.dispatchEvent(new CustomEvent('grenade_explode', {
-            detail: {
-                x: bullet.x,
-                y: bullet.y,
-                radius: bullet.explosion.radius,
-                damage: bullet.explosion.damage,
-                directHitTarget
-            }
-        }));
+        EventBus.emit('grenade_explode', {
+            x: bullet.x,
+            y: bullet.y,
+            radius: bullet.explosion.radius,
+            damage: bullet.explosion.damage,
+            directHitTarget
+        });
     }
 };

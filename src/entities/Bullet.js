@@ -80,7 +80,7 @@ export class Bullet extends Entity {
             }
         }
 
-        const world = GameState.config.world;
+        const world = GameState.world;
         if (this.life <= 0 || this.x < -20 || this.x > world.width + 20 ||
             this.y < -20 || this.y > world.height + 20) {
             this.alive = false;

@@ -22,7 +22,7 @@ function activate(id) {
 // 命中与否都吞掉事件，防止穿透到 handleNormalMousedown 开火。
 export function handleQuickResultMousedown(e, canvas) {
     // 弹出动画未放完不响应（等动画）
-    if (GameState.quickResultAppearAnim < 1) {
+    if (GameState.appear.quickResult.progress < 1) {
         e.preventDefault();
         return true;
     }
@@ -40,7 +40,7 @@ export function handleQuickResultMousedown(e, canvas) {
 
 // ─── 结算界面 keydown（R 重试 / N 下一把 / ESC 主菜单，吞噬其余键） ───
 export function handleQuickResultKeydown(e, key) {
-    if (GameState.quickResultAppearAnim >= 1) {
+    if (GameState.appear.quickResult.progress >= 1) {
         if (key === 'r') activate('retry');
         else if (key === 'n') activate('next');
         else if (key === 'escape') activate('menu');

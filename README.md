@@ -90,6 +90,7 @@ RwR/
     ├── core/                  # 核心系统
     │   ├── EventBus.js        # 事件总线
     │   ├── GameState.js       # 全局状态
+    │   ├── AnimState.js       # UI 动画状态工厂（面板/焦点/弹出）
     │   ├── AssetLoader.js     # 资源预加载（进度条 + 菜单预览图/音乐）
     │   ├── Map.js             # 地图系统
     │   ├── Weapon.js          # 武器基类
@@ -132,7 +133,13 @@ RwR/
     │
     ├── systems/               # 游戏系统
     │   ├── SpawnSystem.js     # 敌人生成
-    │   └── CollisionSystem.js # 碰撞检测
+    │   ├── CollisionSystem.js # 碰撞检测
+    │   ├── WorldBuilder.js    # 世界构建（地图/据点/军械库/载具/队友）
+    │   └── WorldTick.js       # 世界 tick（实体更新 + 碰撞 + 死亡过滤）
+    │
+    ├── modes/                 # 游戏模式
+    │   ├── QuickMode.js       # 快速模式（死斗）
+    │   └── MenuBattle.js      # 菜单背景战斗 + 漫游摄像机 + 预热
     │
     ├── rendering/             # 渲染系统
     │   ├── Renderer.js        # 主渲染器

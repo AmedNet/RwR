@@ -24,10 +24,10 @@ export const DialogueSystem = {
         _lastTypeTime = null;
         active = true;
         // 打开对话层：世界冻结由 main.js 的 (paused || dialogueOpen) 门控
-        GameState.dialogueOpen = true;
-        GameState.dialogueAnimProgress = 0;
-        GameState.dialogueAnimDirection = 'opening';
-        GameState._dialogueAnimLastTime = null;
+        GameState.panels.dialogue.open = true;
+        GameState.panels.dialogue.progress = 0;
+        GameState.panels.dialogue.direction = 'opening';
+        GameState.panels.dialogue._lastTime = null;
     },
 
     // 每帧推进打字机（由 DialogueUI.updateDialogueAnimation 调用）
@@ -67,7 +67,7 @@ export const DialogueSystem = {
     // 关闭对话（播放关闭动画，动画播完后由 DialogueUI 复位 dialogueOpen）
     close() {
         active = false;
-        GameState.dialogueAnimDirection = 'closing';
+        GameState.panels.dialogue.direction = 'closing';
     },
 
     // ─── 查询接口（供 DialogueUI 绘制） ───

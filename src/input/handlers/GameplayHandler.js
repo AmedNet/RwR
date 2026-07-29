@@ -262,7 +262,7 @@ export function handleGameplayKeydown(e, key) {
     if (key === Settings.controls.inventory) {
         GameState.toggleInventory();
         playUISound('click');
-        console.log(GameState.inventoryOpen ? '🎒 打开背包' : '🎒 关闭背包');
+        console.log(GameState.panels.inventory.open ? '🎒 打开背包' : '🎒 关闭背包');
         e.preventDefault();
         return true;
     }
@@ -293,7 +293,7 @@ export function handleGameplayKeyup(e, key) {
         e.preventDefault();
     }
     if (key === Settings.controls.grenade && GameState.radioGKeyPressed) {
-        if (GameState.radioGKeyTimer < 18 && !GameState.radioOpen && !GameState.gameOver && !GameState.radioGKeyConsumed) {
+        if (GameState.radioGKeyTimer < 18 && !GameState.panels.radio.open && !GameState.gameOver && !GameState.radioGKeyConsumed) {
             if (GameState.player) { GameState.player.throwGrenade(); }
         }
         GameState.radioGKeyPressed = false;

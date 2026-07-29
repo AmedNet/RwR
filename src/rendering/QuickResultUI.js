@@ -13,8 +13,8 @@ export function drawQuickResult(ctx, renderer) {
     const H = renderer.height;
 
     // 延迟期（渐黑）不画卡片也不 push 热区
-    if (GameState.quickResultDelay < 1) { GameState.quickResultHitAreas = []; return; }
-    const rawP = GameState.quickResultAppearAnim;
+    if (GameState.appear.quickResult.delay < 1) { GameState.quickResultHitAreas = []; return; }
+    const rawP = GameState.appear.quickResult.progress;
     const eased = easeOutCubic(rawP);
     if (eased <= 0) { GameState.quickResultHitAreas = []; return; }
 

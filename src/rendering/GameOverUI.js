@@ -28,19 +28,19 @@ export function drawGameOver(ctx, renderer) {
 
     const playerPoints = GameState.capturePoints.filter(p => p.owner === 'player');
     const allPoints = GameState.capturePoints;
-    const worldW = GameState.config.world.width;
-    const worldH = GameState.config.world.height;
+    const worldW = GameState.world.width;
+    const worldH = GameState.world.height;
 
     // === 死亡界面延迟+弹出动画：延迟期（gameOverDelay < 1）不画卡片也不 push 热区 ===
-    if (GameState.gameOverDelay < 1) return;
-    const appearRaw = GameState.gameOverAppearAnim;
+    if (GameState.appear.gameOver.delay < 1) return;
+    const appearRaw = GameState.appear.gameOver.progress;
     const appear = easeOutCubic(appearRaw);
 
     // === 焦点滑动自驱 deltaTime（与背包/军械库/电台同取法） ===
     const now = performance.now();
-    if (GameState._gameOverFocusLastTime == null) GameState._gameOverFocusLastTime = now;
-    const deltaTime = (now - GameState._gameOverFocusLastTime) / 1000;
-    GameState._gameOverFocusLastTime = now;
+    if (GameState.focus.gameOver._lastTime == null) GameState.focus.gameOver._lastTime = now;
+    const deltaTime = (now - GameState.focus.gameOver._lastTime) / 1000;
+    GameState.focus.gameOver._lastTime = now;
     const dt = Math.min(deltaTime, 0.05);
 
     // === 卡片布局：固定尺寸绕屏幕几何中心居中 ===
@@ -119,24 +119,24 @@ export function drawGameOver(ctx, renderer) {
 
     // 据点焦点滑动推进（鼠标悬浮/数字键切选时据点高亮从旧据点滑到新据点）
     if (selectedTargetX != null) {
-        if (GameState.gameOverFocusIndex !== hoverIdx) {
-            const hasFocus = (GameState.gameOverFocusX != null && GameState.gameOverFocusY != null);
+        if (GameState.focus.gameOver.index !== hoverIdx) {
+            const hasFocus = (GameState.focus.gameOver.x != null && GameState.focus.gameOver.y != null);
             if (hasFocus) {
-                GameState.gameOverFocusFromX = GameState.gameOverFocusX;
-                GameState.gameOverFocusFromY = GameState.gameOverFocusY;
+                GameState.focus.gameOver.fromX = GameState.focus.gameOver.x;
+                GameState.focus.gameOver.fromY = GameState.focus.gameOver.y;
             } else {
-                GameState.gameOverFocusFromX = selectedTargetX;
-                GameState.gameOverFocusFromY = selectedTargetY;
-                GameState.gameOverFocusX = selectedTargetX;
-                GameState.gameOverFocusY = selectedTargetY;
+                GameState.focus.gameOver.fromX = selectedTargetX;
+                GameState.focus.gameOver.fromY = selectedTargetY;
+                GameState.focus.gameOver.x = selectedTargetX;
+                GameState.focus.gameOver.y = selectedTargetY;
             }
-            GameState.gameOverFocusAnim = 0;
-            GameState.gameOverFocusIndex = hoverIdx;
+            GameState.focus.gameOver.anim = 0;
+            GameState.focus.gameOver.index = hoverIdx;
         }
-        GameState.gameOverFocusAnim = Math.min(1, GameState.gameOverFocusAnim + dt / 0.22);
-        const t = easeOutBack(GameState.gameOverFocusAnim);
-        GameState.gameOverFocusX = GameState.gameOverFocusFromX + (selectedTargetX - GameState.gameOverFocusFromX) * t;
-        GameState.gameOverFocusY = GameState.gameOverFocusFromY + (selectedTargetY - GameState.gameOverFocusFromY) * t;
+        GameState.focus.gameOver.anim = Math.min(1, GameState.focus.gameOver.anim + dt / 0.22);
+        const t = easeOutBack(GameState.focus.gameOver.anim);
+        GameState.focus.gameOver.x = GameState.focus.gameOver.fromX + (selectedTargetX - GameState.focus.gameOver.fromX) * t;
+        GameState.focus.gameOver.y = GameState.focus.gameOver.fromY + (selectedTargetY - GameState.focus.gameOver.fromY) * t;
     }
 
     for (const pt of allPoints) {
@@ -164,8 +164,8 @@ export function drawGameOver(ctx, renderer) {
 
             // 选中据点高亮画在焦点滑动后的 (fx,fy)（脉动呼吸 + 发光描边）
             if (isHover) {
-                const fx = GameState.gameOverFocusX;
-                const fy = GameState.gameOverFocusY;
+                const fx = GameState.focus.gameOver.x;
+                const fy = GameState.focus.gameOver.y;
                 const pulse = Math.sin(now * 0.004) * 0.05 + 0.95;
                 ctx.save();
                 // 脉冲光圈
@@ -223,8 +223,8 @@ export function drawGameOver(ctx, renderer) {
     // 悬浮据点下方显示名称
     if (hoverIdx >= 0 && hoverIdx < playerPoints.length) {
         const hp = playerPoints[hoverIdx];
-        const fx = GameState.gameOverFocusX;
-        const fy = GameState.gameOverFocusY;
+        const fx = GameState.focus.gameOver.x;
+        const fy = GameState.focus.gameOver.y;
         ctx.fillStyle = GLASS.textPrimary;
         ctx.font = `12px ${FONT}`;
         ctx.textAlign = 'center';

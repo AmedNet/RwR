@@ -12,7 +12,7 @@ function close() {
 // 弹出动画未放完则不响应（不调用 preventDefault，让事件穿透回下层，避免卡住）
 // 放完后点击任意处关闭。
 export function handleBattleReportMousedown(e) {
-    if (GameState.battleReportAppearAnim >= 1) {
+    if (GameState.appear.battleReport.progress >= 1) {
         e.preventDefault();
         close();
         return true;
@@ -22,11 +22,10 @@ export function handleBattleReportMousedown(e) {
 
 // 弹出动画放完后按任意键关闭，其余情况不阻止事件（让下层正常处理）。
 export function handleBattleReportKeydown(e) {
-    if (GameState.battleReportAppearAnim >= 1) {
+    if (GameState.appear.battleReport.progress >= 1) {
         e.preventDefault();
         close();
         return true;
     }
     return false;
-}
 }

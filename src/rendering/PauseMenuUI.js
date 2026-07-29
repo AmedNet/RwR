@@ -9,20 +9,20 @@ const MONO = '"Courier New", monospace';
 // 暂停菜单动画推进（自驱 deltaTime，镜像 RadioUI.updateRadioAnimation 的倒带式结构）
 export function updatePauseAnimation() {
     const now = performance.now();
-    if (GameState._pauseAnimLastTime == null) GameState._pauseAnimLastTime = now;
-    const dt = Math.min((now - GameState._pauseAnimLastTime) / 1000, 0.05);
-    GameState._pauseAnimLastTime = now;
+    if (GameState.panels.pause._lastTime == null) GameState.panels.pause._lastTime = now;
+    const dt = Math.min((now - GameState.panels.pause._lastTime) / 1000, 0.05);
+    GameState.panels.pause._lastTime = now;
 
-    const speed = GameState.pauseAnimDirection === 'closing' ? 4.4 : 3.6; // 关 ~0.23s / 开 ~0.28s
-    if (GameState.pauseAnimDirection === 'opening') {
-        GameState.pauseAnimProgress = Math.min(1, GameState.pauseAnimProgress + speed * dt);
-        if (GameState.pauseAnimProgress >= 1) GameState.pauseAnimDirection = null;
-    } else if (GameState.pauseAnimDirection === 'closing') {
-        GameState.pauseAnimProgress = Math.max(0, GameState.pauseAnimProgress - speed * dt);
-        if (GameState.pauseAnimProgress <= 0) {
-            GameState.paused = false;
-            GameState.pauseAnimDirection = null;
-            GameState._pauseAnimLastTime = null;
+    const speed = GameState.panels.pause.direction === 'closing' ? 4.4 : 3.6; // 关 ~0.23s / 开 ~0.28s
+    if (GameState.panels.pause.direction === 'opening') {
+        GameState.panels.pause.progress = Math.min(1, GameState.panels.pause.progress + speed * dt);
+        if (GameState.panels.pause.progress >= 1) GameState.panels.pause.direction = null;
+    } else if (GameState.panels.pause.direction === 'closing') {
+        GameState.panels.pause.progress = Math.max(0, GameState.panels.pause.progress - speed * dt);
+        if (GameState.panels.pause.progress <= 0) {
+            GameState.panels.pause.open = false;
+            GameState.panels.pause.direction = null;
+            GameState.panels.pause._lastTime = null;
         }
     }
 }
@@ -31,12 +31,12 @@ export function drawPauseMenu(ctx, renderer, alphaScale = 1) {
     const W = renderer.width;
     const H = renderer.height;
 
-    const rawP = GameState.pauseAnimProgress || 0;
+    const rawP = GameState.panels.pause.progress || 0;
     const eased = easeOutCubic(rawP);
     if (eased <= 0) { GameState.pauseHitAreas = []; return; }
 
     // 缩放 + 上浮 + 淡入（打开用 easeOutBack 回弹，关闭用线性收落，对齐军械库）
-    const scaleP = GameState.pauseAnimDirection === 'opening' ? easeOutBack(rawP) : rawP;
+    const scaleP = GameState.panels.pause.direction === 'opening' ? easeOutBack(rawP) : rawP;
     const scale = 0.92 + 0.08 * scaleP;
     const offsetY = (1 - scaleP) * 24;
 

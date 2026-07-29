@@ -18,12 +18,12 @@ const DARK_BG = '#0d1017';
 // ─── 主菜单出现动画（单向淡入 0→1，无中途反向；进入 menu 时由 main.js 归零） ───
 export function updateMenuAnimation() {
     const now = performance.now();
-    if (GameState._mainMenuAnimLastTime == null) GameState._mainMenuAnimLastTime = now;
-    const dt = Math.min((now - GameState._mainMenuAnimLastTime) / 1000, 0.05);
-    GameState._mainMenuAnimLastTime = now;
+    if (GameState.appear.mainMenu._lastTime == null) GameState.appear.mainMenu._lastTime = now;
+    const dt = Math.min((now - GameState.appear.mainMenu._lastTime) / 1000, 0.05);
+    GameState.appear.mainMenu._lastTime = now;
 
-    if (GameState.mainMenuAnimProgress < 1) {
-        GameState.mainMenuAnimProgress = Math.min(1, GameState.mainMenuAnimProgress + 3.2 * dt); // ~0.31s
+    if (GameState.appear.mainMenu.progress < 1) {
+        GameState.appear.mainMenu.progress = Math.min(1, GameState.appear.mainMenu.progress + 3.2 * dt); // ~0.31s
     }
 }
 
@@ -108,7 +108,7 @@ export function drawMainMenu(ctx, renderer) {
     const W = renderer.width;
     const H = renderer.height;
 
-    const rawP = GameState.mainMenuAnimProgress || 0;
+    const rawP = GameState.appear.mainMenu.progress || 0;
     const eased = easeOutCubic(rawP);
     if (eased <= 0) { GameState.mainMenuHitAreas = []; return; }
 
@@ -210,35 +210,35 @@ export function drawMainMenu(ctx, renderer) {
 function drawModePreview(ctx, hoveredModeId, px, py, panelW, panelH, W, H, eased) {
     // 状态机推进（自驱 deltaTime，首帧 dt=0）
     const now = performance.now();
-    if (GameState._menuPreviewLastTime == null) GameState._menuPreviewLastTime = now;
-    const dt = Math.min((now - GameState._menuPreviewLastTime) / 1000, 0.05);
-    GameState._menuPreviewLastTime = now;
+    if (GameState.panels.menuPreview._lastTime == null) GameState.panels.menuPreview._lastTime = now;
+    const dt = Math.min((now - GameState.panels.menuPreview._lastTime) / 1000, 0.05);
+    GameState.panels.menuPreview._lastTime = now;
 
-    if (hoveredModeId && hoveredModeId !== GameState.menuPreviewId) {
+    if (hoveredModeId && hoveredModeId !== GameState.panels.menuPreview.id) {
         // 换图：重新弹出
-        GameState.menuPreviewId = hoveredModeId;
-        GameState.menuPreviewAnim = 0;
-        GameState.menuPreviewDirection = 'opening';
-    } else if (hoveredModeId && hoveredModeId === GameState.menuPreviewId) {
-        GameState.menuPreviewDirection = 'opening';
-    } else if (!hoveredModeId && GameState.menuPreviewId) {
-        GameState.menuPreviewDirection = 'closing';
+        GameState.panels.menuPreview.id = hoveredModeId;
+        GameState.panels.menuPreview.progress = 0;
+        GameState.panels.menuPreview.direction = 'opening';
+    } else if (hoveredModeId && hoveredModeId === GameState.panels.menuPreview.id) {
+        GameState.panels.menuPreview.direction = 'opening';
+    } else if (!hoveredModeId && GameState.panels.menuPreview.id) {
+        GameState.panels.menuPreview.direction = 'closing';
     }
 
     const speed = 6; // ~0.17s 弹出
-    if (GameState.menuPreviewDirection === 'opening') {
-        GameState.menuPreviewAnim = Math.min(1, GameState.menuPreviewAnim + speed * dt);
-        if (GameState.menuPreviewAnim >= 1) GameState.menuPreviewDirection = null;
-    } else if (GameState.menuPreviewDirection === 'closing') {
-        GameState.menuPreviewAnim = Math.max(0, GameState.menuPreviewAnim - speed * dt);
-        if (GameState.menuPreviewAnim <= 0) {
-            GameState.menuPreviewId = null;
-            GameState.menuPreviewDirection = null;
+    if (GameState.panels.menuPreview.direction === 'opening') {
+        GameState.panels.menuPreview.progress = Math.min(1, GameState.panels.menuPreview.progress + speed * dt);
+        if (GameState.panels.menuPreview.progress >= 1) GameState.panels.menuPreview.direction = null;
+    } else if (GameState.panels.menuPreview.direction === 'closing') {
+        GameState.panels.menuPreview.progress = Math.max(0, GameState.panels.menuPreview.progress - speed * dt);
+        if (GameState.panels.menuPreview.progress <= 0) {
+            GameState.panels.menuPreview.id = null;
+            GameState.panels.menuPreview.direction = null;
         }
     }
 
-    const id = GameState.menuPreviewId;
-    const anim = GameState.menuPreviewAnim;
+    const id = GameState.panels.menuPreview.id;
+    const anim = GameState.panels.menuPreview.progress;
     const img = id ? getModePreviewImage(id) : null;
     if (!img || anim <= 0 || !img.complete || !img.naturalWidth) return;
 

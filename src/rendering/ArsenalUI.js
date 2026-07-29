@@ -63,30 +63,30 @@ export function drawArsenalShop(ctx, renderer) {
 
     // === 动画进度推进（自驱， jederzeit 与背包同结构） ===
     const now = performance.now();
-    if (GameState._arsenalAnimLastTime == null) GameState._arsenalAnimLastTime = now;
-    const deltaTime = (now - GameState._arsenalAnimLastTime) / 1000;
-    GameState._arsenalAnimLastTime = now;
+    if (GameState.panels.arsenal._lastTime == null) GameState.panels.arsenal._lastTime = now;
+    const deltaTime = (now - GameState.panels.arsenal._lastTime) / 1000;
+    GameState.panels.arsenal._lastTime = now;
     const dt = Math.min(deltaTime, 0.05); // 防停顿后跳变
 
-    const isClosingDir = GameState.arsenalAnimDirection === 'closing';
+    const isClosingDir = GameState.panels.arsenal.direction === 'closing';
     const ANIM_SPEED_PER_SEC = isClosingDir ? 4.4 : 3.6; // 关包 ~0.23s / 开包 ~0.28s
 
-    if (GameState.arsenalAnimDirection === 'opening') {
-        GameState.arsenalAnimProgress = Math.min(1, GameState.arsenalAnimProgress + ANIM_SPEED_PER_SEC * dt);
-        if (GameState.arsenalAnimProgress >= 1) GameState.arsenalAnimDirection = null;
-    } else if (GameState.arsenalAnimDirection === 'closing') {
-        GameState.arsenalAnimProgress = Math.max(0, GameState.arsenalAnimProgress - ANIM_SPEED_PER_SEC * dt);
-        if (GameState.arsenalAnimProgress <= 0) {
-            GameState.arsenalOpen = false;
-            GameState.arsenalAnimDirection = null;
-            GameState._arsenalAnimLastTime = null;
+    if (GameState.panels.arsenal.direction === 'opening') {
+        GameState.panels.arsenal.progress = Math.min(1, GameState.panels.arsenal.progress + ANIM_SPEED_PER_SEC * dt);
+        if (GameState.panels.arsenal.progress >= 1) GameState.panels.arsenal.direction = null;
+    } else if (GameState.panels.arsenal.direction === 'closing') {
+        GameState.panels.arsenal.progress = Math.max(0, GameState.panels.arsenal.progress - ANIM_SPEED_PER_SEC * dt);
+        if (GameState.panels.arsenal.progress <= 0) {
+            GameState.panels.arsenal.open = false;
+            GameState.panels.arsenal.direction = null;
+            GameState.panels.arsenal._lastTime = null;
             return;
         }
     }
 
-    const rawP = GameState.arsenalAnimProgress;
+    const rawP = GameState.panels.arsenal.progress;
     // 打开含轻微回弹，关闭/静态用 easeOutCubic 干净收落
-    const p = GameState.arsenalAnimDirection === 'opening'
+    const p = GameState.panels.arsenal.direction === 'opening'
         ? easeOutBack(rawP)
         : easeOutCubic(rawP);
 
@@ -195,25 +195,25 @@ export function drawArsenalShop(ctx, renderer) {
 
     // === 分类高亮条焦点滑动（切换分类时从旧位置滑到新位置，easeOutBack 呼吸感）===
     const catTargetY = sideBarTopC + GameState.arsenalCategory * (sideBarItemH + sideBarGap);
-    if (GameState.arsenalCatFocusIndex !== GameState.arsenalCategory) {
-        if (GameState.arsenalCatFocusY != null) {
+    if (GameState.focus.arsenalCat.index !== GameState.arsenalCategory) {
+        if (GameState.focus.arsenalCat.y != null) {
             // 从半路位置出发滑过去（天然支持打断：旧动画没播完就从当前显示位置接续）
-            GameState.arsenalCatFocusFromY = GameState.arsenalCatFocusY;
+            GameState.focus.arsenalCat.fromY = GameState.focus.arsenalCat.y;
         } else {
             // 首次出现：直接定身，不滑动
-            GameState.arsenalCatFocusFromY = catTargetY;
-            GameState.arsenalCatFocusY = catTargetY;
+            GameState.focus.arsenalCat.fromY = catTargetY;
+            GameState.focus.arsenalCat.y = catTargetY;
         }
-        GameState.arsenalCatFocusAnim = 0;
-        GameState.arsenalCatFocusIndex = GameState.arsenalCategory;
+        GameState.focus.arsenalCat.anim = 0;
+        GameState.focus.arsenalCat.index = GameState.arsenalCategory;
     }
-    GameState.arsenalCatFocusAnim = Math.min(1, GameState.arsenalCatFocusAnim + dt / 0.22);
-    const catT = easeOutBack(GameState.arsenalCatFocusAnim);
-    GameState.arsenalCatFocusY = GameState.arsenalCatFocusFromY + (catTargetY - GameState.arsenalCatFocusFromY) * catT;
+    GameState.focus.arsenalCat.anim = Math.min(1, GameState.focus.arsenalCat.anim + dt / 0.22);
+    const catT = easeOutBack(GameState.focus.arsenalCat.anim);
+    GameState.focus.arsenalCat.y = GameState.focus.arsenalCat.fromY + (catTargetY - GameState.focus.arsenalCat.fromY) * catT;
 
     // 高亮条画在滑动后的 Y（分类色左侧指示条 + 淡背景 + 描边 + 发光）
     const activeCat = CATEGORIES[GameState.arsenalCategory];
-    const fy = GameState.arsenalCatFocusY;
+    const fy = GameState.focus.arsenalCat.y;
     ctx.save();
     // 淡色选中底
     ctx.fillStyle = hexToRgba(activeCat.color, 0.16);
@@ -260,21 +260,21 @@ export function drawArsenalShop(ctx, renderer) {
 
     // === 商品列表选中项焦点滑动（W/S 切选时高亮从旧项滑到新项，easeOutBack 呼吸感；随滚动实时跟随）===
     const itemTargetY = listTop + 6 + GameState.arsenalSelectedIndex * (itemH + rowGap) - scroll;
-    if (GameState.arsenalItemFocusIndex !== GameState.arsenalSelectedIndex) {
-        if (GameState.arsenalItemFocusY != null) {
+    if (GameState.focus.arsenalItem.index !== GameState.arsenalSelectedIndex) {
+        if (GameState.focus.arsenalItem.y != null) {
             // 从半路位置出发滑过去（天然支持打断：旧动画没播完就从当前显示位置接续）
-            GameState.arsenalItemFocusFromY = GameState.arsenalItemFocusY;
+            GameState.focus.arsenalItem.fromY = GameState.focus.arsenalItem.y;
         } else {
             // 首次出现：直接定身，不滑动
-            GameState.arsenalItemFocusFromY = itemTargetY;
-            GameState.arsenalItemFocusY = itemTargetY;
+            GameState.focus.arsenalItem.fromY = itemTargetY;
+            GameState.focus.arsenalItem.y = itemTargetY;
         }
-        GameState.arsenalItemFocusAnim = 0;
-        GameState.arsenalItemFocusIndex = GameState.arsenalSelectedIndex;
+        GameState.focus.arsenalItem.anim = 0;
+        GameState.focus.arsenalItem.index = GameState.arsenalSelectedIndex;
     }
-    GameState.arsenalItemFocusAnim = Math.min(1, GameState.arsenalItemFocusAnim + dt / 0.22);
-    const itemT = easeOutBack(GameState.arsenalItemFocusAnim);
-    GameState.arsenalItemFocusY = GameState.arsenalItemFocusFromY + (itemTargetY - GameState.arsenalItemFocusFromY) * itemT;
+    GameState.focus.arsenalItem.anim = Math.min(1, GameState.focus.arsenalItem.anim + dt / 0.22);
+    const itemT = easeOutBack(GameState.focus.arsenalItem.anim);
+    GameState.focus.arsenalItem.y = GameState.focus.arsenalItem.fromY + (itemTargetY - GameState.focus.arsenalItem.fromY) * itemT;
 
     // 限制选中索引（防御）
     // （上面已限制）
@@ -296,7 +296,7 @@ export function drawArsenalShop(ctx, renderer) {
 
         if (isSelected) {
             // 选中高亮画在焦点滑动后的 y（与分类侧边栏、背包槽同语言，easeOutBack 呼吸感 + 支持打断）
-            const fy = GameState.arsenalItemFocusY;
+            const fy = GameState.focus.arsenalItem.y;
             ctx.save();
             ctx.fillStyle = catColor;
             ctx.shadowColor = catColor;
@@ -485,24 +485,24 @@ export function drawArsenalShop(ctx, renderer) {
     // === 1-7 背包槽焦点滑动框（切换选中槽时从旧槽滑到新槽，easeOutBack 呼吸感）===
     const slotTargetX = slotStartX + GameState.arsenalSelectedSlot * (slotSize + slotGap) + slotSize / 2;
     const slotTargetYPos = slotY + slotSize / 2;
-    if (GameState.arsenalSlotFocusIndex !== GameState.arsenalSelectedSlot) {
-        const hasFocus = (GameState.arsenalSlotFocusX != null && GameState.arsenalSlotFocusY != null);
+    if (GameState.focus.arsenalSlot.index !== GameState.arsenalSelectedSlot) {
+        const hasFocus = (GameState.focus.arsenalSlot.x != null && GameState.focus.arsenalSlot.y != null);
         if (hasFocus) {
-            GameState.arsenalSlotFocusFromX = GameState.arsenalSlotFocusX;
-            GameState.arsenalSlotFocusFromY = GameState.arsenalSlotFocusY;
+            GameState.focus.arsenalSlot.fromX = GameState.focus.arsenalSlot.x;
+            GameState.focus.arsenalSlot.fromY = GameState.focus.arsenalSlot.y;
         } else {
-            GameState.arsenalSlotFocusFromX = slotTargetX;
-            GameState.arsenalSlotFocusFromY = slotTargetYPos;
-            GameState.arsenalSlotFocusX = slotTargetX;
-            GameState.arsenalSlotFocusY = slotTargetYPos;
+            GameState.focus.arsenalSlot.fromX = slotTargetX;
+            GameState.focus.arsenalSlot.fromY = slotTargetYPos;
+            GameState.focus.arsenalSlot.x = slotTargetX;
+            GameState.focus.arsenalSlot.y = slotTargetYPos;
         }
-        GameState.arsenalSlotFocusAnim = 0;
-        GameState.arsenalSlotFocusIndex = GameState.arsenalSelectedSlot;
+        GameState.focus.arsenalSlot.anim = 0;
+        GameState.focus.arsenalSlot.index = GameState.arsenalSelectedSlot;
     }
-    GameState.arsenalSlotFocusAnim = Math.min(1, GameState.arsenalSlotFocusAnim + dt / 0.22);
-    const slotT = easeOutBack(GameState.arsenalSlotFocusAnim);
-    GameState.arsenalSlotFocusX = GameState.arsenalSlotFocusFromX + (slotTargetX - GameState.arsenalSlotFocusFromX) * slotT;
-    GameState.arsenalSlotFocusY = GameState.arsenalSlotFocusFromY + (slotTargetYPos - GameState.arsenalSlotFocusFromY) * slotT;
+    GameState.focus.arsenalSlot.anim = Math.min(1, GameState.focus.arsenalSlot.anim + dt / 0.22);
+    const slotT = easeOutBack(GameState.focus.arsenalSlot.anim);
+    GameState.focus.arsenalSlot.x = GameState.focus.arsenalSlot.fromX + (slotTargetX - GameState.focus.arsenalSlot.fromX) * slotT;
+    GameState.focus.arsenalSlot.y = GameState.focus.arsenalSlot.fromY + (slotTargetYPos - GameState.focus.arsenalSlot.fromY) * slotT;
 
     // 焦点框（发光描边 + 轻微脉动），整体随主面板淡入淡出
     const selWeaponForColor = GameState.inventory[GameState.arsenalSelectedSlot];
@@ -518,7 +518,7 @@ export function drawArsenalShop(ctx, renderer) {
     ctx.strokeStyle = focusColor;
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.roundRect(GameState.arsenalSlotFocusX - fHalf, GameState.arsenalSlotFocusY - fHalf, fs, fs, GLASS.radiusSmall + 2);
+    ctx.roundRect(GameState.focus.arsenalSlot.x - fHalf, GameState.focus.arsenalSlot.y - fHalf, fs, fs, GLASS.radiusSmall + 2);
     ctx.stroke();
     ctx.restore();
 

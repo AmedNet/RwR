@@ -561,7 +561,7 @@ export class CombatAI extends Entity {
     }
 
     pickWanderTarget() {
-        const world = GameState.config.world;
+        const world = GameState.world;
         const map = GameState.map;
         for (let i = 0; i < CombatAI.WANDER_SEARCH_ATTEMPTS; i++) {
             const x = CombatAI.WANDER_MARGIN + Math.random() * (world.width - CombatAI.WANDER_MARGIN * 2);

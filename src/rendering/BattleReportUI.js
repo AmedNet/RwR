@@ -12,7 +12,7 @@ export function drawBattleReport(ctx, renderer) {
     const W = renderer.width;
     const H = renderer.height;
 
-    const rawP = GameState.battleReportAppearAnim;
+    const rawP = GameState.appear.battleReport.progress;
     const eased = easeOutCubic(rawP);
     if (eased <= 0) return;
 
