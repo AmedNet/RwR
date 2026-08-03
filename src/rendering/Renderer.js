@@ -265,7 +265,8 @@ export const Renderer = {
             if (hasVisibilityEffect) {
                 const dx = entity.x - GameState.player.x;
                 const dy = entity.y - GameState.player.y;
-                const dist = Math.hypot(dx, dy);
+                const distSq = dx * dx + dy * dy;
+                const dist = Math.sqrt(distSq);
 
                 const baseVisibility = 400;
                 const effectiveVisibility = fogRadius > 0
@@ -474,7 +475,8 @@ export const Renderer = {
         if (WeatherSystem.current === 'tornado' && TornadoSystem.center && GameState.player) {
             const dx = GameState.player.x - TornadoSystem.center.x;
             const dy = GameState.player.y - TornadoSystem.center.y;
-            const dist = Math.hypot(dx, dy);
+            const distSq = dx * dx + dy * dy;
+            const dist = Math.sqrt(distSq);
             const fogRange = 4000; // 4000px 内开始起雾
             if (dist < fogRange) {
                 tornadoFogIntensity = 1.0 - (dist / fogRange);

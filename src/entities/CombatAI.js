@@ -19,6 +19,7 @@ import { LootPickup } from './LootPickup.js';
 import { rollHelmet, rollHelmetVariant, getHelmetConfig, getHelmetVariantImagePath, HelmetTier } from '../core/HelmetSystem.js';
 import { AIMonologueSystem } from '../utils/AIMonologueSystem.js';
 import { VehicleAI, VEHICLE_ENGAGE_RANGE, DRIVER_MIN_RANK, VEHICLE_SEARCH_RANGE, VEHICLE_BOARD_CHECK_INTERVAL, MIN_PASSENGERS_TO_DEPART } from './VehicleAI.js';
+import { distSq, isWithinDist, findNearest } from '../utils/MathUtils.js';
 
 export class CombatAI extends Entity {
     // AI 角色常量
@@ -170,18 +171,17 @@ export class CombatAI extends Entity {
         if (this.unitClass !== UnitClass.AMMO) return;
         const config = getClassConfig(UnitClass.AMMO);
         const auraRange = config.auraRange || 200;
+        const auraRangeSq = auraRange * auraRange;
         const allies = this.getAllies();
         for (const ally of allies) {
             if (ally === this || !ally.alive) continue;
-            const dist = Math.hypot(ally.x - this.x, ally.y - this.y);
-            if (dist <= auraRange) {
+            if (distSq(this.x, this.y, ally.x, ally.y) <= auraRangeSq) {
                 ally.addStatusEffect(new AmmoBuffEffect(30));
             }
         }
         // 友军弹药兵也给玩家施加增益
         if (this.faction === 'player' && GameState.player && GameState.player.alive) {
-            const dist = Math.hypot(GameState.player.x - this.x, GameState.player.y - this.y);
-            if (dist <= auraRange) {
+            if (distSq(this.x, this.y, GameState.player.x, GameState.player.y) <= auraRangeSq) {
                 GameState.player.addStatusEffect(new AmmoBuffEffect(30));
             }
         }
@@ -196,19 +196,18 @@ export class CombatAI extends Entity {
     applyHealAuraToAllies() {
         if (this.unitClass !== UnitClass.MEDIC) return;
         const config = getClassConfig(UnitClass.MEDIC);
-        const auraRange = config.healAuraRange || 200;
+        const auraRange = config.auraRange || 200;
+        const auraRangeSq = auraRange * auraRange;
         const allies = this.getAllies();
         for (const ally of allies) {
             if (ally === this || !ally.alive) continue;
-            const dist = Math.hypot(ally.x - this.x, ally.y - this.y);
-            if (dist <= auraRange) {
+            if (distSq(this.x, this.y, ally.x, ally.y) <= auraRangeSq) {
                 ally.addStatusEffect(new HealAuraEffect(30));
             }
         }
         // 友军医疗兵也给玩家施加光环
         if (this.faction === 'player' && GameState.player && GameState.player.alive) {
-            const dist = Math.hypot(GameState.player.x - this.x, GameState.player.y - this.y);
-            if (dist <= auraRange) {
+            if (distSq(this.x, this.y, GameState.player.x, GameState.player.y) <= auraRangeSq) {
                 GameState.player.addStatusEffect(new HealAuraEffect(30));
             }
         }
@@ -223,24 +222,25 @@ export class CombatAI extends Entity {
         }
         const allies = this.getAllies();
         let closestAlly = null;
-        let closestDist = Infinity;
+        let closestDistSq = Infinity;
+        const healRangeSq = config.healRange * config.healRange;
         for (const ally of allies) {
             if (ally === this || !ally.alive) continue;
             if (ally.health >= ally.maxHealth) continue;
-            const dist = Math.hypot(ally.x - this.x, ally.y - this.y);
-            if (dist > config.healRange) continue;
-            if (dist < closestDist) {
+            const dSq = distSq(this.x, this.y, ally.x, ally.y);
+            if (dSq > healRangeSq) continue;
+            if (dSq < closestDistSq) {
                 closestAlly = ally;
-                closestDist = dist;
+                closestDistSq = dSq;
             }
         }
         // 友军医疗兵也检查玩家
         if (this.faction === 'player' && GameState.player && GameState.player.alive) {
             if (GameState.player.health < GameState.player.maxHealth) {
-                const dist = Math.hypot(GameState.player.x - this.x, GameState.player.y - this.y);
-                if (dist <= config.healRange && dist < closestDist) {
+                const dSq = distSq(this.x, this.y, GameState.player.x, GameState.player.y);
+                if (dSq <= healRangeSq && dSq < closestDistSq) {
                     closestAlly = GameState.player;
-                    closestDist = dist;
+                    closestDistSq = dSq;
                 }
             }
         }
@@ -268,12 +268,12 @@ export class CombatAI extends Entity {
         if (this.recruitTimer < CombatAI.RECRUIT_CHECK_INTERVAL) return;
         this.recruitTimer = 0;
         const allies = this.getAllies();
+        const recruitRangeSq = CombatAI.RECRUIT_RANGE * CombatAI.RECRUIT_RANGE;
         for (const ally of allies) {
             if (this.subordinates.length >= config.maxSubordinates) break;
             if (ally === this || !ally.alive || ally.hasLeader()) continue;
             if (ally.rank >= this.rank) continue;
-            const dist = Math.hypot(ally.x - this.x, ally.y - this.y);
-            if (dist > CombatAI.RECRUIT_RANGE) continue;
+            if (distSq(this.x, this.y, ally.x, ally.y) > recruitRangeSq) continue;
             ally.setLeader(this);
             this.subordinates.push(ally);
         }
@@ -409,9 +409,10 @@ export class CombatAI extends Entity {
 
     isPointSafe() {
         if (!this.guardPoint) return false;
+        const safeRadiusSq = CombatAI.GUARD_SAFE_RADIUS * CombatAI.GUARD_SAFE_RADIUS;
         for (const target of this.getTargets()) {
             if (!target.alive) continue;
-            if (Math.hypot(target.x - this.guardPoint.x, target.y - this.guardPoint.y) < CombatAI.GUARD_SAFE_RADIUS) {
+            if (distSq(this.guardPoint.x, this.guardPoint.y, target.x, target.y) < safeRadiusSq) {
                 return false;
             }
         }
@@ -454,18 +455,19 @@ export class CombatAI extends Entity {
 
     getClosestTarget() {
         let target = null;
-        let distance = Infinity;
+        let distanceSq = Infinity;
         const awarenessRange = this.getAwarenessRange();
+        const awarenessRangeSq = awarenessRange * awarenessRange;
         for (const candidate of this.getTargets()) {
             if (!candidate.alive) continue;
-            const d = Math.hypot(candidate.x - this.x, candidate.y - this.y);
-            if (d > awarenessRange) continue;
-            if (d < distance) {
+            const dSq = distSq(this.x, this.y, candidate.x, candidate.y);
+            if (dSq > awarenessRangeSq) continue;
+            if (dSq < distanceSq) {
                 target = candidate;
-                distance = d;
+                distanceSq = dSq;
             }
         }
-        return { target, distance };
+        return { target, distance: Math.sqrt(distanceSq) };
     }
 
     getAwarenessRange() {
@@ -498,7 +500,8 @@ export class CombatAI extends Entity {
         if (!map || !from || !to) return true;
         const dx = to.x - from.x;
         const dy = to.y - from.y;
-        const dist = Math.hypot(dx, dy);
+        const distSqVal = dx * dx + dy * dy;
+        const dist = Math.sqrt(distSqVal);
         const step = Math.max(10, map.tileSize * 0.35);
         const steps = Math.max(1, Math.ceil(dist / step));
         for (let i = 1; i < steps; i++) {
@@ -519,30 +522,27 @@ export class CombatAI extends Entity {
         // 快速模式（死斗）：无据点，以最近敌方单位作为推进目标，让两军主动接敌
         // （否则 ATTACK/WANDER 角色失去远距离目标，只在感知范围内接敌 → 两军隔图对峙不动）
         if (GameState.mode === 'quick' && this.getTargetPoints().length === 0) {
-            let nearest = null, nd = Infinity;
-            for (const t of this.getTargets()) {
-                if (!t.alive) continue;
-                const d = Math.hypot(t.x - this.x, t.y - this.y);
-                if (d < nd) { nd = d; nearest = t; }
-            }
-            return { target: nearest, distance: nd };
+            const result = findNearest(this.getTargets(), this.x, this.y, t => t.alive ? t : null);
+            return { target: result ? result.target : null, distance: result ? result.dist : Infinity };
         }
         let target = null;
-        let distance = Infinity;
+        let minScore = Infinity;
         for (const point of this.getTargetPoints()) {
             let nearbyAllies = 0;
+            const allyCheckDistSq = 200 * 200;
             for (const ally of this.getAllies()) {
-                if (ally !== this && ally.alive && Math.hypot(ally.x - point.x, ally.y - point.y) < 200) {
+                if (ally !== this && ally.alive && distSq(ally.x, ally.y, point.x, point.y) < allyCheckDistSq) {
                     nearbyAllies++;
                 }
             }
-            const effectiveDist = Math.hypot(point.x - this.x, point.y - this.y) + nearbyAllies * 150;
-            if (effectiveDist < distance) {
+            const dSq = distSq(this.x, this.y, point.x, point.y);
+            const effectiveDist = Math.sqrt(dSq) + nearbyAllies * 150;
+            if (effectiveDist < minScore) {
                 target = point;
-                distance = effectiveDist;
+                minScore = effectiveDist;
             }
         }
-        return { target, distance };
+        return { target, distance: minScore };
     }
 
     getClosestEnemyPoint() {
@@ -551,9 +551,10 @@ export class CombatAI extends Entity {
 
     countNearbyEnemies(target, radius) {
         if (!target) return 0;
+        const radiusSq = radius * radius;
         let count = 0;
         for (const candidate of this.getTargets()) {
-            if (candidate.alive && Math.hypot(candidate.x - target.x, candidate.y - target.y) < radius) {
+            if (candidate.alive && distSq(candidate.x, candidate.y, target.x, target.y) < radiusSq) {
                 count++;
             }
         }
@@ -735,10 +736,16 @@ export class CombatAI extends Entity {
     stabilizeMoveTarget(target) {
         const cache = this.moveTargetCache;
         const cached = cache.point;
+        const dx = target.x - cached.x;
+        const dy = target.y - cached.y;
+        const distToTargetSq = dx * dx + dy * dy;
+        const dxCached = this.x - cached.x;
+        const dyCached = this.y - cached.y;
+        const distToCachedSq = dxCached * dxCached + dyCached * dyCached;
         const shouldRefresh = !cached ||
             cache.timer <= 0 ||
-            Math.hypot(target.x - cached.x, target.y - cached.y) > CombatAI.MOVE_TARGET_REPLAN_DISTANCE ||
-            Math.hypot(this.x - cached.x, this.y - cached.y) < CombatAI.MOVE_TARGET_REACHED_DISTANCE;
+            distToTargetSq > CombatAI.MOVE_TARGET_REPLAN_DISTANCE * CombatAI.MOVE_TARGET_REPLAN_DISTANCE ||
+            distToCachedSq < CombatAI.MOVE_TARGET_REACHED_DISTANCE * CombatAI.MOVE_TARGET_REACHED_DISTANCE;
 
         if (shouldRefresh) {
             cache.point = { x: target.x, y: target.y };
@@ -763,7 +770,10 @@ export class CombatAI extends Entity {
     chooseFollowLeaderTarget(closestTarget, closestDist) {
         const leaderPos = this.getLeaderTarget();
         if (!leaderPos) return null;
-        const distToLeader = Math.hypot(leaderPos.x - this.x, leaderPos.y - this.y);
+        const dxLeader = leaderPos.x - this.x;
+        const dyLeader = leaderPos.y - this.y;
+        const distToLeaderSq = dxLeader * dxLeader + dyLeader * dyLeader;
+        const distToLeader = Math.sqrt(distToLeaderSq);
         // 有近距离威胁，优先攻击
         if (closestTarget && closestDist < 200) {
             if (!this.hasLineOfSight(closestTarget)) return this.getFlankPosition(closestTarget);
@@ -791,7 +801,10 @@ export class CombatAI extends Entity {
             return null;
         }
         this.stuckState.fallbackPoints = [this.guardPoint];
-        const distToPoint = Math.hypot(this.guardPoint.x - this.x, this.guardPoint.y - this.y);
+        const dxGuard = this.guardPoint.x - this.x;
+        const dyGuard = this.guardPoint.y - this.y;
+        const distToPointSq = dxGuard * dxGuard + dyGuard * dyGuard;
+        const distToPoint = Math.sqrt(distToPointSq);
         const pointSafe = this.isPointSafe();
 
         // 近距离威胁：回撤到守卫点
@@ -886,14 +899,16 @@ export class CombatAI extends Entity {
             }
         }
         let best = null;
-        let bestScore = Infinity;
+        let bestScoreSq = Infinity;
         for (const point of candidates) {
             if (!map.isWalkable(point.x, point.y, this.radius)) continue;
             if (!this.hasLineBetween(point, target)) continue;
-            const score = Math.hypot(point.x - this.x, point.y - this.y);
-            if (score < bestScore) {
+            const pdx = point.x - this.x;
+            const pdy = point.y - this.y;
+            const scoreSq = pdx * pdx + pdy * pdy;
+            if (scoreSq < bestScoreSq) {
                 best = point;
-                bestScore = score;
+                bestScoreSq = scoreSq;
             }
         }
         return best || this.getCombatPosition(target, 260, true);
@@ -908,8 +923,14 @@ export class CombatAI extends Entity {
 
         const cache = this.obstacleTargetCache;
         if (cache.point && cache.original && cache.timer > 0) {
-            const targetShift = Math.hypot(target.x - cache.original.x, target.y - cache.original.y);
-            const cacheDist = Math.hypot(this.x - cache.point.x, this.y - cache.point.y);
+            const targetShiftDx = target.x - cache.original.x;
+            const targetShiftDy = target.y - cache.original.y;
+            const targetShiftSq = targetShiftDx * targetShiftDx + targetShiftDy * targetShiftDy;
+            const cacheDistDx = this.x - cache.point.x;
+            const cacheDistDy = this.y - cache.point.y;
+            const cacheDistSq = cacheDistDx * cacheDistDx + cacheDistDy * cacheDistDy;
+            const targetShift = Math.sqrt(targetShiftSq);
+            const cacheDist = Math.sqrt(cacheDistSq);
             if (targetShift < CombatAI.OBSTACLE_CACHE_REPLAN_DISTANCE &&
                 cacheDist > CombatAI.MOVE_TARGET_REACHED_DISTANCE &&
                 map.isWalkable(cache.point.x, cache.point.y, this.radius) &&
@@ -920,7 +941,10 @@ export class CombatAI extends Entity {
         }
 
         const angle = Math.atan2(target.y - this.y, target.x - this.x);
-        const dist = Math.min(CombatAI.OBSTACLE_DIST_MAX, Math.max(CombatAI.OBSTACLE_DIST_MIN, Math.hypot(target.x - this.x, target.y - this.y) * CombatAI.OBSTACLE_DIST_FACTOR));
+        const dx = target.x - this.x;
+        const dy = target.y - this.y;
+        const distSq = dx * dx + dy * dy;
+        const dist = Math.min(CombatAI.OBSTACLE_DIST_MAX, Math.max(CombatAI.OBSTACLE_DIST_MIN, Math.sqrt(distSq) * CombatAI.OBSTACLE_DIST_FACTOR));
         const candidates = [];
         for (const side of [1, -1]) {
             for (const offset of [Math.PI / 2, Math.PI / 3, Math.PI * 0.72]) {
@@ -930,14 +954,16 @@ export class CombatAI extends Entity {
         }
 
         let best = null;
-        let bestScore = Infinity;
+        let bestScoreSq = Infinity;
         for (const point of candidates) {
             if (!map.isWalkable(point.x, point.y, this.radius)) continue;
             if (!this.hasLineBetween(this, point)) continue;
-            const score = Math.hypot(point.x - target.x, point.y - target.y);
-            if (score < bestScore) {
+            const pdx = point.x - target.x;
+            const pdy = point.y - target.y;
+            const scoreSq = pdx * pdx + pdy * pdy;
+            if (scoreSq < bestScoreSq) {
                 best = point;
-                bestScore = score;
+                bestScoreSq = scoreSq;
             }
         }
         if (!best) {
@@ -973,7 +999,8 @@ export class CombatAI extends Entity {
     predictTargetPosition(target, bulletSpeed) {
         const dx = target.x - this.x;
         const dy = target.y - this.y;
-        const dist = Math.hypot(dx, dy);
+        const distSq = dx * dx + dy * dy;
+        const dist = Math.sqrt(distSq);
         const travelTime = dist / bulletSpeed;
         let tvx = 0, tvy = 0;
         if (target.prevX !== undefined && target.prevY !== undefined) {
@@ -989,11 +1016,14 @@ export class CombatAI extends Entity {
         let predictX = target.x + tvx * travelTime * predictionAccuracy;
         let predictY = target.y + tvy * travelTime * predictionAccuracy;
         const maxOffset = dist * 0.25;
-        const offsetDist = Math.hypot(predictX - target.x, predictY - target.y);
-        if (offsetDist > maxOffset) {
-            const scale = maxOffset / offsetDist;
-            predictX = target.x + (predictX - target.x) * scale;
-            predictY = target.y + (predictY - target.y) * scale;
+        const offsetDx = predictX - target.x;
+        const offsetDy = predictY - target.y;
+        const offsetDistSq = offsetDx * offsetDx + offsetDy * offsetDy;
+        const maxOffsetSq = maxOffset * maxOffset;
+        if (offsetDistSq > maxOffsetSq) {
+            const scale = maxOffset / Math.sqrt(offsetDistSq);
+            predictX = target.x + offsetDx * scale;
+            predictY = target.y + offsetDy * scale;
         }
 
         const errorRange = Math.min(6 + dist * 0.05, 35);
@@ -1332,7 +1362,8 @@ export class CombatAI extends Entity {
         // 受到伤害时添加缓慢效果（使用配置常量）
         const slowDuration = STATUS_EFFECT_CONFIG.SLOW.DEFAULT_DURATION;
         this.addStatusEffect(new SlowEffect(slowDuration));
-        const distance = GameState.player ? Math.hypot(this.x - GameState.player.x, this.y - GameState.player.y) : 0;
+        const distanceSq = GameState.player ? ((this.x - GameState.player.x) ** 2 + (this.y - GameState.player.y) ** 2) : 0;
+        const distance = GameState.player ? Math.sqrt(distanceSq) : 0;
         if (this.hasHelmet()) {
             SoundManager.playHelmetHit(distance);
         }

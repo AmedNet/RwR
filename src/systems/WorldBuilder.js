@@ -61,8 +61,11 @@ function generatePoints(xMin, xMax, yMin, yMax, count, radius, minDist) {
         if (!map || !map.isWalkable(x, y, radius)) continue;
         // 检查与已有据点距离
         let tooClose = false;
+        const minDistSq = minDist * minDist;
         for (const p of points) {
-            if (Math.hypot(p.x - x, p.y - y) < minDist) {
+            const dx = p.x - x;
+            const dy = p.y - y;
+            if (dx * dx + dy * dy < minDistSq) {
                 tooClose = true;
                 break;
             }
@@ -214,8 +217,13 @@ export function updateVehicleSpawns() {
     // 过滤掉距离玩家太近的据点（避免在视野内刷车）
     const player = GameState.player;
     const minSpawnDistance = 600; // 至少 600 像素外
+    const minSpawnDistSq = minSpawnDistance * minSpawnDistance;
     const safePoints = player && player.alive
-        ? points.filter(p => Math.hypot(p.x - player.x, p.y - player.y) > minSpawnDistance)
+        ? points.filter(p => {
+            const dx = p.x - player.x;
+            const dy = p.y - player.y;
+            return dx * dx + dy * dy > minSpawnDistSq;
+          })
         : points;
 
     if (safePoints.length === 0) {
