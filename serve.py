@@ -224,22 +224,24 @@ class GameLauncher:
             try:
                 os.chdir(game_dir)
                 self.httpd = HTTPServer(("localhost", self.port), SafeHandler)
-                self.root.after(0, lambda: self.open_browser(url))
-                self.root.after(0, lambda: self.log(f"浏览器已打开: {url}", "ok"))
-                self.root.after(0, lambda: self._set_status(f"运行中  {url}", GREEN))
-                self.root.after(0, lambda: self.start_btn.config(state="normal", text="停止服务器", bg=RED))
-                self.httpd.serve_forever()
             except Exception as e:
                 self.root.after(0, lambda: self.log(f"错误: {e}", "err"))
                 self.root.after(0, lambda: self._set_status("启动失败", RED))
                 self.root.after(0, lambda: self.start_btn.config(state="normal", text="启动游戏", bg=ACCENT))
-                if self.httpd:
-                    self.httpd.server_close()
-                    self.httpd = None
+                return
+
+            self.root.after(0, lambda: self.open_browser(url))
+            self.root.after(0, lambda: self.log(f"浏览器已打开: {url}", "ok"))
+            self.root.after(0, lambda: self._set_status(f"运行中  {url}", GREEN))
+            self.root.after(0, lambda: self.start_btn.config(state="normal", text="停止服务器", bg=RED))
+
+            try:
+                self.httpd.serve_forever()
+            except Exception as e:
+                self.root.after(0, lambda: self.log(f"服务器异常: {e}", "err"))
             finally:
-                if self.httpd:
-                    self.httpd.server_close()
-                    self.httpd = None
+                self.httpd.server_close()
+                self.httpd = None
                 self.root.after(0, lambda: self._set_status("已停止", FG_DIM))
                 self.root.after(0, lambda: self.start_btn.config(state="normal", text="启动游戏", bg=ACCENT))
                 self.root.after(0, lambda: self.footer_label.config(text="端口: --"))

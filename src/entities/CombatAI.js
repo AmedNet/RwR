@@ -734,18 +734,13 @@ export class CombatAI extends Entity {
     }
 
     stabilizeMoveTarget(target) {
+        if (!target) return null;
         const cache = this.moveTargetCache;
         const cached = cache.point;
-        const dx = target.x - cached.x;
-        const dy = target.y - cached.y;
-        const distToTargetSq = dx * dx + dy * dy;
-        const dxCached = this.x - cached.x;
-        const dyCached = this.y - cached.y;
-        const distToCachedSq = dxCached * dxCached + dyCached * dyCached;
         const shouldRefresh = !cached ||
             cache.timer <= 0 ||
-            distToTargetSq > CombatAI.MOVE_TARGET_REPLAN_DISTANCE * CombatAI.MOVE_TARGET_REPLAN_DISTANCE ||
-            distToCachedSq < CombatAI.MOVE_TARGET_REACHED_DISTANCE * CombatAI.MOVE_TARGET_REACHED_DISTANCE;
+            (target.x - cached.x) ** 2 + (target.y - cached.y) ** 2 > CombatAI.MOVE_TARGET_REPLAN_DISTANCE * CombatAI.MOVE_TARGET_REPLAN_DISTANCE ||
+            (this.x - cached.x) ** 2 + (this.y - cached.y) ** 2 < CombatAI.MOVE_TARGET_REACHED_DISTANCE * CombatAI.MOVE_TARGET_REACHED_DISTANCE;
 
         if (shouldRefresh) {
             cache.point = { x: target.x, y: target.y };
